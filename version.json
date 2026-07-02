@@ -1,6 +1,6 @@
 ﻿{
-    "sha256":  "6ed44d6f2a42fa73424e6f68d65db7dc3d0c5af5609cfe34e4514eb4d7fdace6",
+    "sha256":  "ce5c1d6b9de73a2608b9697963e001d35db1a879c176e111aaf5350d0defa533",
     "url":  "https://github.com/saliox/hasu-client/releases/latest/download/HasuLauncher-Setup.exe",
-    "version":  "1.11.0",
-    "notes":  "6 nouveaux mods (lot 1/2)."
+    "version":  "1.12.0",
+    "notes":  "Discord Rich Presence (statut Joue a Hasu Client), rapport de crash en 1 clic, corrections internes de portabilite."
 }

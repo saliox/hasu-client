@@ -11,7 +11,7 @@ Le produit se compose de **deux parties** :
 - **🎮 Le client en jeu** — le mod Forge 1.8.9 qui ajoute les HUDs, l'interface (ClickGUI), les thèmes
   et les optimisations une fois en partie.
 
-> **Version actuelle : 1.11.0**
+> **Version actuelle : 1.12.0**
 
 ---
 
