@@ -1,6 +1,6 @@
 ﻿{
-    "sha256":  "ce5c1d6b9de73a2608b9697963e001d35db1a879c176e111aaf5350d0defa533",
+    "sha256":  "8a362804c9ccf28e7f778c953fd34ea355b61206467bb9ad8238e383da86c596",
     "url":  "https://github.com/saliox/hasu-client/releases/latest/download/HasuLauncher-Setup.exe",
-    "version":  "1.12.0",
-    "notes":  "Discord Rich Presence (statut Joue a Hasu Client), rapport de crash en 1 clic, corrections internes de portabilite."
+    "version":  "1.14.0",
+    "notes":  "Section Beta testeur dans les Reglages (canal beta, presence Discord automatique, rapport de crash). Corrections internes de portabilite."
 }
