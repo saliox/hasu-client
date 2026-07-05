@@ -1,0 +1,53 @@
+# Normalise les manifestes de mise a jour (version.json / version-beta.json) en
+# retirant tout BOM UTF-8 (EF BB BF) qu'un pipeline de publication externe
+# (PowerShell ConvertTo-Json / Out-File sous Windows) reintroduit a chaque release.
+# Un BOM fait echouer un JSON.parse brut cote launcher -> les MAJ passent inapercues.
+# Ce workflow rend le correctif DURABLE : il s'execute a chaque push touchant ces
+# fichiers, retire le BOM sur place (sans reformater le contenu) et recommite si besoin.
+name: Normalize JSON (strip BOM)
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "**/version.json"
+      - "**/version-beta.json"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: normalize-bom-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  strip-bom:
+    # Ne pas boucler sur nos propres commits de normalisation.
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Strip UTF-8 BOM from update manifests
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          changed=0
+          for f in **/version.json **/version-beta.json; do
+            [ -f "$f" ] || continue
+            if [ "$(head -c3 "$f" | od -An -tx1 | tr -d ' \n')" = "efbbbf" ]; then
+              tail -c +4 "$f" > "$f.nobom" && mv "$f.nobom" "$f"
+              echo "stripped BOM: $f"
+              changed=1
+            fi
+          done
+          echo "changed=$changed" >> "$GITHUB_ENV"
+
+      - name: Commit normalized files
+        if: env.changed == '1'
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'chore: strip UTF-8 BOM from update manifests [skip ci]'
+          git push

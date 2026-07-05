@@ -1,6 +1,6 @@
-﻿{
-    "sha256":  "8a362804c9ccf28e7f778c953fd34ea355b61206467bb9ad8238e383da86c596",
-    "url":  "https://github.com/saliox/hasu-client/releases/latest/download/HasuLauncher-Setup.exe",
-    "version":  "1.14.0",
-    "notes":  "Section Beta testeur dans les Reglages (canal beta, presence Discord automatique, rapport de crash). Corrections internes de portabilite."
+{
+    "sha256": "8a362804c9ccf28e7f778c953fd34ea355b61206467bb9ad8238e383da86c596",
+    "url": "https://github.com/saliox/hasu-client/releases/latest/download/HasuLauncher-Setup.exe",
+    "version": "1.14.0",
+    "notes": "Section Beta testeur dans les Reglages (canal beta, presence Discord automatique, rapport de crash). Corrections internes de portabilite."
 }
