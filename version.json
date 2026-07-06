@@ -1,6 +1,6 @@
 {
-    "sha256": "8a362804c9ccf28e7f778c953fd34ea355b61206467bb9ad8238e383da86c596",
+    "sha256": "336fd93836bee2cb9bbf3eb591cd00ab7cb67a52a3102588963f30024aef34e1",
     "url": "https://github.com/saliox/hasu-client/releases/latest/download/HasuLauncher-Setup.exe",
-    "version": "1.14.0",
-    "notes": "Section Beta testeur dans les Reglages (canal beta, presence Discord automatique, rapport de crash). Corrections internes de portabilite."
+    "version": "1.57.0",
+    "notes": "Rejoindre un ami en 1 clic : le bouton Rejoindre lance directement la bonne version et te connecte au serveur de ton ami (fini le copier-coller d'adresse). Le statut des amis se rafraichit tout seul toutes les 18 s tant que l'onglet AMIS est ouvert."
 }
