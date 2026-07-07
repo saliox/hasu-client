@@ -1,0 +1,63 @@
+# Valide le manifeste de mise a jour et synchronise la version affichee du README.
+# Le README a deja derive deux fois de version.json (bloque a 1.14.0 pendant 43
+# releases) : ce workflow rend la ligne "Version actuelle" impossible a oublier.
+# Il verifie aussi que version.json contient bien les champs dont depend le
+# launcher (sha256 64 hex, url https, version semver) — un manifeste casse
+# fait echouer le run au lieu de casser silencieusement l'auto-update.
+name: Validate manifest & sync README
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "version.json"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-readme-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate-and-sync:
+    # Ne pas boucler sur nos propres commits de synchronisation.
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate version.json
+        shell: bash
+        run: |
+          jq -e '
+            (.version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+            (.sha256  | test("^[0-9a-fA-F]{64}$")) and
+            (.url     | test("^https://"))
+          ' version.json > /dev/null || {
+            echo "::error file=version.json::Manifeste invalide : version (X.Y.Z), sha256 (64 hex) et url (https) sont requis."
+            exit 1
+          }
+
+      - name: Sync README version line
+        shell: bash
+        run: |
+          VER=$(jq -r '.version' version.json)
+          sed -i -E "s/^> \*\*Version actuelle : [0-9]+\.[0-9]+\.[0-9]+\*\*/> **Version actuelle : ${VER}**/" README.md
+          if git diff --quiet README.md; then
+            echo "README deja a jour (${VER})."
+            echo "changed=0" >> "$GITHUB_ENV"
+          else
+            echo "README mis a jour -> ${VER}"
+            echo "changed=1" >> "$GITHUB_ENV"
+          fi
+
+      - name: Commit README update
+        if: env.changed == '1'
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add README.md
+          git commit -m 'chore: sync README version with version.json [skip ci]'
+          git push
