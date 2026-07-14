@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <!-- CSP stricte : aucune ressource distante, aucun eval. Tout est local + data:. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self';" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cap Hub</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="titlebar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <span class="brand-name">Cap&nbsp;Hub</span>
+      <span id="ver" class="ver"></span>
+    </div>
+    <div class="status-pills">
+      <span id="pill-proxy" class="pill off" title="Proxy de capes">● Proxy</span>
+      <span id="pill-hosts" class="pill off" title="Redirection OptiFine">● Redirection</span>
+      <span id="pill-game" class="pill off" title="Minecraft détecté">● Minecraft</span>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="capes">🎽 Mes capes</button>
+    <button class="tab" data-tab="players">👥 Joueurs</button>
+    <button class="tab" data-tab="status">🛰️ État</button>
+    <button class="tab" data-tab="settings">⚙️ Réglages</button>
+  </nav>
+
+  <main>
+    <!-- MES CAPES -->
+    <section id="tab-capes" class="panel active">
+      <div class="row between">
+        <div>
+          <h2>Ma bibliothèque de capes</h2>
+          <p class="muted">Choisis une cape et applique Cap Hub : elle s'affiche sur ton personnage dans tous les clients compatibles OptiFine.</p>
+        </div>
+        <div class="actions">
+          <button id="btn-import" class="btn">➕ Importer un PNG</button>
+          <button id="btn-apply" class="btn primary">⚡ Appliquer Cap Hub</button>
+        </div>
+      </div>
+      <div id="active-banner" class="banner hidden"></div>
+      <div id="capes-grid" class="grid"></div>
+    </section>
+
+    <!-- JOUEURS -->
+    <section id="tab-players" class="panel">
+      <div class="row between">
+        <div>
+          <h2>Joueurs Cap Hub</h2>
+          <p class="muted">Tout le monde dans cette liste voit les capes des autres, sur tous les serveurs. Publie la tienne pour y apparaître.</p>
+        </div>
+        <div class="actions">
+          <button id="btn-refresh-players" class="btn">🔄 Rafraîchir</button>
+          <button id="btn-publish" class="btn primary">☁️ Publier ma cape</button>
+        </div>
+      </div>
+      <div id="players-list" class="list"></div>
+    </section>
+
+    <!-- ÉTAT -->
+    <section id="tab-status" class="panel">
+      <h2>État du système</h2>
+      <div class="cards">
+        <div class="card">
+          <h3>Proxy de capes</h3>
+          <p class="muted">Sert tes capes et celles des joueurs Cap Hub sur <code>127.0.0.1:80</code>.</p>
+          <div class="card-actions">
+            <span id="st-proxy" class="pill off">arrêté</span>
+            <button id="btn-proxy-toggle" class="btn small">Démarrer</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Redirection OptiFine</h3>
+          <p class="muted">Redirige <code>s.optifine.net</code> vers Cap Hub (fichier hosts, admin requis une fois).</p>
+          <div class="card-actions">
+            <span id="st-hosts" class="pill off">inactive</span>
+            <button id="btn-hosts-toggle" class="btn small">Activer</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Détection Minecraft</h3>
+          <p class="muted">Cap Hub surveille le lancement de n'importe quel client et propose de s'appliquer.</p>
+          <div id="games-now" class="muted">Aucun jeu détecté.</div>
+        </div>
+      </div>
+      <h3>Journal</h3>
+      <div id="log" class="log"></div>
+    </section>
+
+    <!-- RÉGLAGES -->
+    <section id="tab-settings" class="panel">
+      <h2>Réglages</h2>
+      <div class="form">
+        <label>Ton pseudo Minecraft
+          <input id="in-username" type="text" maxlength="16" placeholder="Ex. Notch" autocomplete="off" />
+          <small class="muted">Le pseudo sur lequel ta cape locale s'affiche.</small>
+        </label>
+
+        <label class="check">
+          <input id="in-autoapply" type="checkbox" />
+          Proposer d'appliquer Cap Hub quand un Minecraft démarre
+        </label>
+        <label class="check">
+          <input id="in-autoproxy" type="checkbox" />
+          Démarrer le proxy automatiquement au lancement de l'app
+        </label>
+
+        <fieldset>
+          <legend>Publication (registre partagé)</legend>
+          <label>Token GitHub <span id="token-state" class="muted"></span>
+            <input id="in-token" type="password" placeholder="ghp_… (portée contents:write)" autocomplete="off" />
+            <small class="muted">Chiffré au repos. Nécessaire uniquement pour publier ta cape dans le registre commun.</small>
+          </label>
+          <div class="two">
+            <label>Dépôt du registre
+              <input id="in-repo" type="text" placeholder="saliox/hasu-client" autocomplete="off" />
+            </label>
+            <label>Branche
+              <input id="in-branch" type="text" placeholder="main" autocomplete="off" />
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="actions">
+          <button id="btn-save" class="btn primary">💾 Enregistrer</button>
+          <button id="btn-check-update" class="btn">⬆️ Vérifier les mises à jour</button>
+        </div>
+        <div id="save-msg" class="muted"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="app.js"></script>
+</body>
+</html>

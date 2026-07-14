@@ -1,0 +1,50 @@
+{
+  "name": "cap-hub",
+  "version": "0.1.0",
+  "description": "Cap Hub — capes Minecraft personnalisées sur tous les clients (canal OptiFine), registre partagé entre joueurs 100 % GitHub, détection automatique du lancement de Minecraft, auto-update",
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "icon": "node scripts/make-icon.mjs",
+    "dist": "electron-builder --win",
+    "pack": "electron-builder --win --dir",
+    "publish:update": "node scripts/publish-update.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "electron": "^31.3.1",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.saliox.caphub",
+    "productName": "Cap Hub",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.cjs",
+      "src/**/*",
+      "renderer/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Cap Hub"
+    }
+  }
+}
