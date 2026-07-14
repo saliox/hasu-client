@@ -1,0 +1,133 @@
+// Gestion des capes locales : validation des PNG importés, bibliothèque de capes
+// intégrées (générées en pur Node au premier lancement), et cape « active » servie
+// par le proxy pour TON pseudo.
+//
+// Formats acceptés (mêmes règles que les serveurs de capes existants) :
+// - disposition vanilla 64x32 et ses multiples HD (128x64, 256x128, 512x256…)
+// - disposition OptiFine 46x22 et ses multiples (92x44…)
+import fs from 'node:fs';
+import path from 'node:path';
+import { encodePNG, isPng, readPngSize } from './png.js';
+
+let DIR = null;          // userData/capes
+let BUILTIN_DIR = null;  // userData/capes/builtin
+
+export function initCapes(userDataDir) {
+  DIR = path.join(userDataDir, 'capes');
+  BUILTIN_DIR = path.join(DIR, 'builtin');
+  fs.mkdirSync(BUILTIN_DIR, { recursive: true });
+  ensureBuiltins();
+}
+
+// ---------- Validation ----------
+export function validateCape(buf) {
+  if (!isPng(buf)) return { ok: false, error: 'Le fichier n’est pas un PNG valide.' };
+  if (buf.length > 2 * 1024 * 1024) return { ok: false, error: 'PNG trop lourd (max 2 Mo).' };
+  const size = readPngSize(buf);
+  if (!size) return { ok: false, error: 'Impossible de lire la taille du PNG.' };
+  const { width: w, height: h } = size;
+  const vanillaScale = w / 64;
+  const optifineScale = w / 46;
+  const okVanilla = Number.isInteger(vanillaScale) && vanillaScale >= 1 && vanillaScale <= 32 && h === 32 * vanillaScale;
+  const okOptifine = Number.isInteger(optifineScale) && optifineScale >= 1 && optifineScale <= 32 && h === 22 * optifineScale;
+  if (!okVanilla && !okOptifine) {
+    return { ok: false, error: `Taille ${w}x${h} non reconnue. Attendu : 64x32 (ou multiple) ou 46x22 (ou multiple).` };
+  }
+  return { ok: true, width: w, height: h, layout: okVanilla ? 'vanilla' : 'optifine' };
+}
+
+// ---------- Import / liste ----------
+export function importCape(srcPath, name) {
+  const buf = fs.readFileSync(srcPath);
+  const v = validateCape(buf);
+  if (!v.ok) return v;
+  const safe = String(name || path.basename(srcPath, '.png'))
+    .replace(/[^A-Za-z0-9 _.-]/g, '_')
+    .replace(/\.{2,}/g, '_')      // pas de séquence ".." dans le nom de fichier
+    .replace(/^[.\s]+/, '')       // pas de point/espace en tête
+    .slice(0, 40) || 'cape';
+  let file = path.join(DIR, `${safe}.png`);
+  let i = 2;
+  while (fs.existsSync(file)) file = path.join(DIR, `${safe}-${i++}.png`);
+  fs.writeFileSync(file, buf);
+  return { ok: true, id: path.basename(file), file };
+}
+
+export function deleteCape(id) {
+  const file = resolveCape(id);
+  if (!file || file.startsWith(BUILTIN_DIR)) return { ok: false, error: 'Cape introuvable ou intégrée (non supprimable).' };
+  try { fs.unlinkSync(file); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
+}
+
+export function listCapes() {
+  const read = (dir, builtin) => {
+    try {
+      return fs.readdirSync(dir)
+        .filter((f) => f.toLowerCase().endsWith('.png'))
+        .map((f) => ({ id: builtin ? `builtin/${f}` : f, name: f.replace(/\.png$/i, ''), builtin }));
+    } catch { return []; }
+  };
+  return [...read(DIR, false), ...read(BUILTIN_DIR, true)];
+}
+
+// id -> chemin absolu (protège contre la traversée de dossier).
+export function resolveCape(id) {
+  if (!id) return null;
+  const file = path.normalize(path.join(DIR, String(id)));
+  if (!file.startsWith(DIR) || !file.toLowerCase().endsWith('.png')) return null;
+  return fs.existsSync(file) ? file : null;
+}
+
+export function readCape(id) {
+  const file = resolveCape(id);
+  return file ? fs.readFileSync(file) : null;
+}
+
+// ---------- Capes intégrées (générées, disposition vanilla 64x32) ----------
+// On texture toute la planche 64x32 : chaque face de la cape (et de l'élytra)
+// échantillonne sa zone, donc le motif couvre tout proprement.
+const W = 64, H = 32;
+
+function fill(fn) {
+  const px = Buffer.alloc(W * H * 4);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const [r, g, b] = fn(x, y);
+      const i = (y * W + x) * 4;
+      px[i] = r; px[i + 1] = g; px[i + 2] = b; px[i + 3] = 255;
+    }
+  }
+  return encodePNG(W, H, px);
+}
+
+const mix = (c1, c2, t) => [
+  Math.round(c1[0] + (c2[0] - c1[0]) * t),
+  Math.round(c1[1] + (c2[1] - c1[1]) * t),
+  Math.round(c1[2] + (c2[2] - c1[2]) * t),
+];
+
+// Assombrit légèrement les bords pour donner du relief même en uni.
+const shade = (fn) => (x, y) => {
+  const c = fn(x, y);
+  const edge = (x % 22 <= 1 || y <= 1 || y >= H - 2) ? 0.82 : 1;
+  return [Math.round(c[0] * edge), Math.round(c[1] * edge), Math.round(c[2] * edge)];
+};
+
+function ensureBuiltins() {
+  const defs = {
+    'Cramoisi': shade(() => [180, 40, 46]),
+    'Violet': shade(() => [116, 66, 200]),
+    'Cyan': shade(() => [38, 166, 184]),
+    'Or': shade(() => [214, 160, 38]),
+    'Emeraude': shade(() => [36, 158, 84]),
+    'Nuit': shade(() => [24, 28, 40]),
+    'Degrade crepuscule': shade((x, y) => mix([116, 66, 200], [214, 60, 90], y / (H - 1))),
+    'Degrade ocean': shade((x, y) => mix([16, 42, 88], [38, 196, 210], y / (H - 1))),
+    'Rayures': shade((x, y) => (Math.floor(y / 4) % 2 ? [230, 230, 235] : [180, 40, 46])),
+    'Damier': shade((x, y) => ((Math.floor(x / 4) + Math.floor(y / 4)) % 2 ? [30, 32, 44] : [214, 160, 38])),
+  };
+  for (const [name, fn] of Object.entries(defs)) {
+    const file = path.join(BUILTIN_DIR, `${name}.png`);
+    if (!fs.existsSync(file)) fs.writeFileSync(file, fill(fn));
+  }
+}

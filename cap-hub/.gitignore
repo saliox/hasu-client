@@ -1,0 +1,14 @@
+# Le .gitignore racine ignore src/ build/ dist/ *.exe (build du launcher).
+# Ici, src/ et build/icon.* sont le CODE de Cap Hub : on les ré-inclut,
+# et on n'ignore que les vrais artefacts de build.
+!src/
+!src/**
+!build/
+build/*
+!build/icon.png
+!build/icon.ico
+
+node_modules/
+dist/
+release/
+*.log
