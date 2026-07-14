@@ -1,18 +1,22 @@
 {
   "name": "cap-hub",
-  "version": "0.1.0",
-  "description": "Cap Hub — capes Minecraft personnalisées sur tous les clients (canal OptiFine), registre partagé entre joueurs 100 % GitHub, détection automatique du lancement de Minecraft, auto-update",
+  "version": "0.2.0",
+  "description": "Cap Hub — capes Minecraft personnalisées sur tous les clients (OptiFine + mods de capes HTTPS via CA locale), registre partagé entre joueurs 100 % GitHub, détection automatique du lancement de Minecraft, auto-update",
   "type": "module",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "icon": "node scripts/make-icon.mjs",
+    "test": "node scripts/test.mjs",
     "dist": "electron-builder --win",
     "pack": "electron-builder --win --dir",
     "publish:update": "node scripts/publish-update.mjs"
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "node-forge": "^1.3.1"
   },
   "devDependencies": {
     "electron": "^31.3.1",
@@ -30,6 +34,7 @@
       "src/**/*",
       "renderer/**/*",
       "build/icon.png",
+      "node_modules/node-forge/**/*",
       "package.json"
     ],
     "win": {

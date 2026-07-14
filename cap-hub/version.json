@@ -1,6 +1,6 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "url": "",
   "sha256": "",
-  "notes": "Première version de Cap Hub : capes Minecraft personnalisées sur tous les clients compatibles OptiFine, registre partagé entre joueurs, détection automatique du lancement de Minecraft."
+  "notes": "Moteur multi-canaux : les capes ne sont plus limitées à OptiFine. Cap Hub sert désormais aussi les mods de capes en HTTPS (MinecraftCapes) via une CA locale opt-in installée dans le truststore Java du jeu, avec relais transparent pour préserver skins et capes des autres joueurs."
 }

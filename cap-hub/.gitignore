@@ -9,6 +9,7 @@ build/*
 !build/icon.ico
 
 node_modules/
+package-lock.json
 dist/
 release/
 *.log
