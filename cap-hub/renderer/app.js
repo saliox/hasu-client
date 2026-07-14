@@ -20,6 +20,7 @@ $$('.tab').forEach((tab) => {
     tab.classList.add('active');
     $('#tab-' + tab.dataset.tab).classList.add('active');
     if (tab.dataset.tab === 'players') loadPlayers();
+    if (tab.dataset.tab === 'channels') loadProviders();
   });
 });
 
@@ -106,10 +107,8 @@ $('#btn-import').addEventListener('click', async () => {
 
 $('#btn-apply').addEventListener('click', async () => {
   toast('Application de Cap Hub… (une fenêtre admin peut apparaître)');
-  const p = await window.cap.proxy.start();
-  if (!p.ok) return toast(p.error, 'err');
-  const h = await window.cap.proxy.applyRedirect();
-  if (!h.ok) return toast(h.error, 'err');
+  const r = await window.cap.proxy.enableAll();
+  if (!r.ok) return toast(r.error, 'err');
   toast('Cap Hub appliqué ✔ Relance/rejoins un monde pour voir les capes.', 'ok');
   refreshStatus();
 });
@@ -147,6 +146,75 @@ $('#btn-publish').addEventListener('click', async () => {
   const r = await window.cap.capes.publish();
   toast(r.ok ? 'Ta cape est publiée dans le registre ✔' : r.error, r.ok ? 'ok' : 'err');
   if (r.ok) loadPlayers();
+});
+
+// ---------- Canaux (fournisseurs de capes) ----------
+async function loadProviders() {
+  const r = await window.cap.providers.list();
+  const enabled = new Set(r.enabled || []);
+  const box = $('#providers-list');
+  box.innerHTML = '';
+  for (const p of r.providers) {
+    const on = enabled.has(p.id);
+    const el = document.createElement('div');
+    el.className = 'player';
+    el.innerHTML = `
+      <label class="switch"><input type="checkbox" ${on ? 'checked' : ''} data-pid="${p.id}"><span></span></label>
+      <div style="flex:1">
+        <div class="pn">${esc(p.label)}
+          <span class="pill ${p.scheme === 'https' ? 'warn' : 'on'}" style="margin-left:6px">${p.scheme.toUpperCase()}</span>
+          ${p.requiresCA ? '<span class="muted" style="margin-left:6px">· certificat requis</span>' : ''}
+        </div>
+        <div class="pd">${p.hosts.map(esc).join(', ')}</div>
+      </div>`;
+    el.querySelector('input').addEventListener('change', onProviderToggle);
+    box.appendChild(el);
+  }
+  loadCA();
+}
+
+async function onProviderToggle() {
+  const ids = [...document.querySelectorAll('#providers-list input[data-pid]')]
+    .filter((i) => i.checked).map((i) => i.dataset.pid);
+  if (!ids.length) { toast('Garde au moins un canal actif.', 'err'); loadProviders(); return; }
+  const r = await window.cap.providers.set(ids);
+  toast(r.ok ? 'Canaux mis à jour.' : (r.error || 'Erreur'), r.ok ? 'ok' : 'err');
+  refreshStatus();
+  loadCA();
+}
+
+async function loadCA() {
+  const s = await window.cap.ca.status();
+  const st = $('#st-ca');
+  st.className = 'pill ' + (s.exists ? 'on' : 'off');
+  st.textContent = s.exists ? 'certificat généré' : 'non installé';
+  $('#ca-status').innerHTML = s.exists
+    ? `Certificat prêt : <code>${esc(s.path)}</code>`
+    : 'Aucun certificat généré pour l’instant (créé automatiquement à l’installation).';
+  const n = (s.javaStores || []).length;
+  $('#ca-java').textContent = n
+    ? `${n} runtime(s) Java détecté(s) — le certificat y sera installé.`
+    : 'Aucun runtime Java de launcher détecté pour l’instant (lance une fois ton launcher, puis reviens).';
+}
+
+$('#btn-ca-install').addEventListener('click', async () => {
+  toast('Installation du certificat Cap Hub…');
+  const r = await window.cap.ca.install();
+  if (!r.ok) return toast(r.error || 'Échec', 'err');
+  const j = (r.report.java || []);
+  const okJava = j.filter((x) => x.ok).length;
+  const win = r.report.windows?.ok;
+  toast(`Certificat installé (Windows: ${win ? '✔' : '—'}, Java: ${okJava}/${j.length}).`, 'ok');
+  loadCA();
+  refreshStatus();
+});
+
+$('#btn-ca-remove').addEventListener('click', async () => {
+  toast('Retrait du certificat…');
+  const r = await window.cap.ca.remove();
+  toast(r.ok ? 'Certificat retiré des magasins de confiance.' : (r.error || 'Erreur'), r.ok ? 'ok' : 'err');
+  loadCA();
+  refreshStatus();
 });
 
 // ---------- État : boutons ----------

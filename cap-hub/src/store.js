@@ -32,6 +32,8 @@ export function getSettings() {
     repo: s.repo || '',
     branch: s.branch || '',
     hasToken: !!s.tokenEnc,
+    // Fournisseurs de capes activés. OptiFine par défaut (canal HTTP, sans CA).
+    providers: Array.isArray(s.providers) ? s.providers : ['optifine'],
   };
 }
 
@@ -42,6 +44,9 @@ export function saveSettings(patch) {
   }
   for (const k of ['autoApply', 'autoProxy']) {
     if (typeof patch[k] === 'boolean') s[k] = patch[k];
+  }
+  if (Array.isArray(patch.providers)) {
+    s.providers = [...new Set(patch.providers.filter((x) => typeof x === 'string'))];
   }
   write(s);
   return getSettings();

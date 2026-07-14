@@ -9,11 +9,14 @@ import { fileURLToPath } from 'node:url';
 
 import { initCapes, listCapes, importCape, deleteCape, resolveCape, readCape } from './src/capes.js';
 import { initStore, getSettings, saveSettings, setToken, getToken } from './src/store.js';
-import { startProxy, stopProxy, isRunning, getStats, proxyEvents } from './src/proxy.js';
-import { isApplied, applyRedirect, removeRedirect } from './src/hosts.js';
+import { startProxy, stopProxy, isRunning, getStats, proxyEvents, redirectHosts } from './src/proxy.js';
+import { isApplied, applyRedirect, removeRedirect, appliedHosts } from './src/hosts.js';
 import { initRegistry, configureRegistry, refreshIndex, listPlayers, getRegistryCape, publishCape } from './src/registry.js';
 import { startWatcher, stopWatcher, currentGames, watcherEvents } from './src/watcher.js';
 import { checkForUpdates, applyUpdate } from './src/updater.js';
+import { PROVIDERS, needsCA } from './src/providers.js';
+import { initCA, ensureCA, caExists, caFilePath, installTrustEverywhere, removeTrustEverywhere, findJavaTrustStores } from './src/ca.js';
+import { initIdMap } from './src/idmap.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let win = null;
@@ -66,6 +69,7 @@ function proxyDeps() {
       return readCape(s.activeCape);
     },
     getRegistryCape: (nameLower) => getRegistryCape(nameLower),
+    enabledIds: () => getSettings().providers,
   };
 }
 
@@ -74,6 +78,8 @@ app.whenReady().then(async () => {
   const ud = app.getPath('userData');
   initStore(ud, safeStorage);
   initCapes(ud);
+  initCA(ud);
+  initIdMap(ud);
   const s0 = getSettings();
   initRegistry(ud, { repo: s0.repo, branch: s0.branch });
 
@@ -145,17 +151,53 @@ function wireWatcher() {
   watcherEvents.on('game-stop', () => send('game-stop', {}));
 }
 
-// Active proxy + redirection hosts en une fois (le « 1 clic »).
+// Domaines qu'on peut EFFECTIVEMENT servir : un canal HTTPS n'est redirigé que si la
+// CA existe (sinon on pointerait son domaine vers un port 443 muet -> on casserait le
+// mod du joueur au lieu de l'aider).
+function effectiveRedirectHosts() {
+  const caOk = caExists();
+  const ids = getSettings().providers.filter((id) => {
+    const p = PROVIDERS.find((x) => x.id === id);
+    return p && (!p.requiresCA || caOk);
+  });
+  return redirectHosts(ids);
+}
+
+// Active tout en une fois (le « 1 clic ») : CA si canaux HTTPS, proxy, redirection.
 async function enableEverything() {
-  const p = isRunning() ? { ok: true } : await startProxy(proxyDeps());
+  const enabled = getSettings().providers;
+  // Canaux HTTPS activés -> il faut la CA Cap Hub approuvée par le jeu (Java).
+  if (needsCA(enabled)) {
+    ensureCA();
+    if (findJavaTrustStores().length) await installTrustEverywhere().catch(() => {});
+  }
+  const p = await startProxy(proxyDeps());
   if (!p.ok) return { ok: false, error: 'Proxy : ' + p.error };
-  const h = await applyRedirect();
+  const h = await applyRedirect(effectiveRedirectHosts());
   if (!h.ok) return { ok: false, error: 'Redirection : ' + h.error };
   return { ok: true };
 }
 
+// Resynchronise la redirection hosts avec l'ensemble de fournisseurs servables
+// (appelé quand l'utilisateur change les canaux et que la redirection est déjà en place).
+async function resyncRedirect() {
+  if (!isApplied()) return { ok: true, skipped: true };
+  const want = effectiveRedirectHosts().sort();
+  const have = appliedHosts().sort();
+  if (JSON.stringify(want) === JSON.stringify(have)) return { ok: true, unchanged: true };
+  if (!want.length) return removeRedirect();
+  return applyRedirect(want);
+}
+
 async function proxyStatus() {
-  return { ...getStats(), hostsApplied: isApplied() };
+  const enabled = getSettings().providers;
+  return {
+    ...getStats(),
+    hostsApplied: isApplied(),
+    hostsList: appliedHosts(),
+    needsCA: needsCA(enabled),
+    caReady: caExists(),
+  };
 }
 
 // ---------- Mise à jour ----------
@@ -171,7 +213,7 @@ async function doUpdateCheck(silent) {
 ipcMain.handle('app:version', () => app.getVersion());
 
 ipcMain.handle('settings:get', () => ({ ok: true, settings: getSettings(), encryption: safeStorage.isEncryptionAvailable() }));
-ipcMain.handle('settings:save', (_e, patch) => {
+ipcMain.handle('settings:save', async (_e, patch) => {
   const s = saveSettings(patch || {});
   configureRegistry({ repo: s.repo, branch: s.branch });
   return { ok: true, settings: s };
@@ -227,7 +269,7 @@ ipcMain.handle('proxy:stop', async () => {
   return r;
 });
 ipcMain.handle('proxy:applyRedirect', async () => {
-  const r = await applyRedirect();
+  const r = await applyRedirect(effectiveRedirectHosts());
   send('proxy-changed', await proxyStatus());
   return r;
 });
@@ -235,6 +277,52 @@ ipcMain.handle('proxy:removeRedirect', async () => {
   const r = await removeRedirect();
   send('proxy-changed', await proxyStatus());
   return r;
+});
+// « Appliquer Cap Hub » complet (CA si besoin + proxy + redirection) en un appel.
+ipcMain.handle('proxy:enableAll', async () => {
+  const r = await enableEverything();
+  send('proxy-changed', await proxyStatus());
+  return r;
+});
+
+// ---------- Fournisseurs de capes (canaux) ----------
+ipcMain.handle('providers:list', () => ({
+  ok: true,
+  enabled: getSettings().providers,
+  providers: PROVIDERS.map((p) => ({ id: p.id, label: p.label, scheme: p.scheme, hosts: p.hosts, requiresCA: p.requiresCA })),
+}));
+ipcMain.handle('providers:set', async (_e, ids) => {
+  const s = saveSettings({ providers: Array.isArray(ids) ? ids : ['optifine'] });
+  // Le proxy lit enabledIds() dynamiquement ; on resynchronise juste la redirection
+  // et on (re)démarre le HTTPS si un canal chiffré vient d'être activé.
+  let restart = null;
+  if (isRunning()) { await stopProxy(); restart = await startProxy(proxyDeps()); }
+  const redir = await resyncRedirect();
+  send('proxy-changed', await proxyStatus());
+  return { ok: true, providers: s.providers, restart, redirect: redir };
+});
+
+// ---------- CA Cap Hub (confiance pour les canaux HTTPS) ----------
+ipcMain.handle('ca:status', () => ({
+  ok: true,
+  exists: caExists(),
+  path: caFilePath(),
+  javaStores: findJavaTrustStores(),
+}));
+ipcMain.handle('ca:install', async () => {
+  ensureCA();
+  const report = await installTrustEverywhere();
+  // (Re)démarre le proxy pour ouvrir le listener HTTPS, et redirige désormais les domaines HTTPS.
+  if (isRunning()) { await stopProxy(); await startProxy(proxyDeps()); }
+  await resyncRedirect();
+  send('proxy-changed', await proxyStatus());
+  return { ok: true, report };
+});
+ipcMain.handle('ca:remove', async () => {
+  const report = await removeTrustEverywhere();
+  await resyncRedirect();
+  send('proxy-changed', await proxyStatus());
+  return { ok: true, report };
 });
 
 ipcMain.handle('registry:refresh', async () => {

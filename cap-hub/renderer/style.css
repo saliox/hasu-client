@@ -174,4 +174,18 @@ code { background: var(--bg-3); padding: 1px 6px; border-radius: 6px; font-size:
 .toast.ok { border-color: rgba(59,165,93,.6); }
 .toast.err { border-color: rgba(214,60,90,.6); }
 
+/* Interrupteur (toggle) */
+.switch { position: relative; display: inline-block; width: 44px; height: 24px; flex: 0 0 auto; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch span {
+  position: absolute; inset: 0; cursor: pointer; border-radius: 999px;
+  background: var(--bg-3); border: 1px solid var(--line); transition: .18s;
+}
+.switch span::before {
+  content: ""; position: absolute; height: 16px; width: 16px; left: 3px; top: 3px;
+  background: var(--muted); border-radius: 50%; transition: .18s;
+}
+.switch input:checked + span { background: linear-gradient(135deg, var(--accent), var(--accent-2)); border-color: transparent; }
+.switch input:checked + span::before { transform: translateX(20px); background: #fff; }
+
 .hidden { display: none; }
