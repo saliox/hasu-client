@@ -25,6 +25,7 @@
 
   <nav class="tabs">
     <button class="tab active" data-tab="capes">🎽 Mes capes</button>
+    <button class="tab" data-tab="creator">🎨 Créateur</button>
     <button class="tab" data-tab="players">👥 Joueurs</button>
     <button class="tab" data-tab="status">🛰️ État</button>
     <button class="tab" data-tab="settings">⚙️ Réglages</button>
@@ -69,6 +70,50 @@
       </div>
 
       <div id="capes-grid" class="grid"></div>
+    </section>
+
+    <!-- CRÉATEUR -->
+    <section id="tab-creator" class="panel">
+      <div class="row between">
+        <div>
+          <h2>Créer ta cape</h2>
+          <p class="muted">Compose une cape et ajoute-la à ta bibliothèque. Choisis un motif et tes couleurs, l'aperçu 3D se met à jour en direct.</p>
+        </div>
+      </div>
+
+      <div class="creator">
+        <div class="creator-form form">
+          <label>Motif
+            <select id="cr-mode">
+              <option value="uni">Uni (1 couleur)</option>
+              <option value="degrade">Dégradé (2 couleurs)</option>
+              <option value="rayures">Rayures</option>
+              <option value="damier">Damier</option>
+              <option value="diagonale">Diagonales</option>
+            </select>
+          </label>
+          <div class="two">
+            <label>Couleur 1 <input id="cr-c1" type="color" value="#7c5cff" /></label>
+            <label id="cr-c2-wrap">Couleur 2 <input id="cr-c2" type="color" value="#d63c5a" /></label>
+          </div>
+          <label>Taille des bandes (rayures/damier/diagonales)
+            <input id="cr-band" type="range" min="2" max="16" step="2" value="4" />
+          </label>
+          <label>Nom de la cape
+            <input id="cr-name" type="text" maxlength="40" placeholder="Ma cape" autocomplete="off" />
+          </label>
+          <div class="actions">
+            <button id="cr-random" class="btn">🎲 Couleurs au hasard</button>
+            <button id="cr-create" class="btn primary">✨ Créer la cape</button>
+          </div>
+          <div id="cr-msg" class="muted"></div>
+        </div>
+        <div class="preview-box">
+          <canvas id="creator-preview" width="240" height="300"></canvas>
+          <div class="muted">Aperçu 3D</div>
+        </div>
+      </div>
+      <canvas id="cr-canvas" width="64" height="32" style="display:none"></canvas>
     </section>
 
     <!-- JOUEURS -->

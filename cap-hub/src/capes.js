@@ -37,20 +37,31 @@ export function validateCape(buf) {
 }
 
 // ---------- Import / liste ----------
-export function importCape(srcPath, name) {
-  const buf = fs.readFileSync(srcPath);
-  const v = validateCape(buf);
-  if (!v.ok) return v;
-  const safe = String(name || path.basename(srcPath, '.png'))
+// Nom de fichier sûr (anti-traversée, longueur bornée).
+function safeName(name, fallback) {
+  return String(name || fallback || 'cape')
     .replace(/[^A-Za-z0-9 _.-]/g, '_')
     .replace(/\.{2,}/g, '_')      // pas de séquence ".." dans le nom de fichier
     .replace(/^[.\s]+/, '')       // pas de point/espace en tête
     .slice(0, 40) || 'cape';
+}
+
+// Enregistre une cape depuis un buffer PNG (utilisé par l'import fichier ET le créateur).
+export function importCapeBuffer(buf, name) {
+  const v = validateCape(buf);
+  if (!v.ok) return v;
+  const safe = safeName(name, 'cape');
   let file = path.join(DIR, `${safe}.png`);
   let i = 2;
   while (fs.existsSync(file)) file = path.join(DIR, `${safe}-${i++}.png`);
   fs.writeFileSync(file, buf);
   return { ok: true, id: path.basename(file), file };
+}
+
+export function importCape(srcPath, name) {
+  let buf;
+  try { buf = fs.readFileSync(srcPath); } catch { return { ok: false, error: 'Fichier illisible.' }; }
+  return importCapeBuffer(buf, name || path.basename(srcPath, '.png'));
 }
 
 export function deleteCape(id) {
@@ -186,6 +197,28 @@ function ensureBuiltins() {
     'Foret': shade((x, y) => (Math.floor(x / 3) % 2 ? [24, 84, 48] : [34, 110, 62])),
     'Lave': shade((x, y) => (hash2(x, y) > 0.8 ? [255, 170, 40] : mix([60, 12, 8], [140, 30, 12], y / (H - 1)))),
   };
+
+  // Palette UNIE complète : tout le spectre (teintes) + neutres. Nom préfixé « Uni »
+  // pour les retrouver d'un coup dans la recherche.
+  const HUES = [
+    ['Rouge', 0], ['Vermillon', 14], ['Orange', 28], ['Ambre', 40], ['Or', 50],
+    ['Jaune', 58], ['Citron', 70], ['Lime', 84], ['Chartreuse', 96], ['Vert', 120],
+    ['Menthe', 148], ['Emeraude', 160], ['Turquoise', 172], ['Cyan', 186], ['Azur', 200],
+    ['Ciel', 210], ['Bleu', 222], ['Outremer', 236], ['Indigo', 250], ['Violet', 268],
+    ['Amethyste', 282], ['Magenta', 300], ['Orchidee', 312], ['Fuchsia', 324], ['Rose', 338],
+    ['Framboise', 350],
+  ];
+  for (const [name, h] of HUES) {
+    const [r, g, b] = hsl(h / 360, 0.68, 0.52);
+    defs[`Uni ${name}`] = shade(() => [r, g, b]);
+  }
+  const NEUTRALS = {
+    'Uni Blanc': [244, 246, 250], 'Uni Gris clair': [198, 204, 214], 'Uni Gris': [138, 145, 158],
+    'Uni Gris fonce': [78, 84, 96], 'Uni Anthracite': [44, 48, 58], 'Uni Noir': [18, 20, 26],
+    'Uni Marron': [120, 74, 44], 'Uni Beige': [214, 196, 160], 'Uni Creme': [238, 230, 208],
+  };
+  for (const [name, c] of Object.entries(NEUTRALS)) defs[name] = shade(() => c);
+
   for (const [name, fn] of Object.entries(defs)) {
     const file = path.join(BUILTIN_DIR, `${name}.png`);
     if (!fs.existsSync(file)) fs.writeFileSync(file, fill(fn));

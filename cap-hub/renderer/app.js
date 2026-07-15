@@ -20,8 +20,14 @@ $$('.tab').forEach((tab) => {
     tab.classList.add('active');
     $('#tab-' + tab.dataset.tab).classList.add('active');
     if (tab.dataset.tab === 'players') loadPlayers();
+    if (tab.dataset.tab === 'capes') { mountPreview('#cape-preview'); renderPreview(capeActive, (capeCache.find((c) => c.id === capeActive) || {}).name || ''); }
+    if (tab.dataset.tab === 'creator') { mountPreview('#creator-preview'); updateCreator(); }
   });
 });
+
+function mountPreview(sel) {
+  if (window.CapePreview) window.CapePreview.mount($(sel));
+}
 
 // ---------- État / pastilles ----------
 function setPill(id, on, label, warn) {
@@ -140,11 +146,10 @@ function startRename(card, c) {
 $('#cape-search').addEventListener('input', (e) => { capeSearch = e.target.value; renderCapeGrid(); });
 $('#cape-sort').addEventListener('change', (e) => { capeSort = e.target.value; renderCapeGrid(); });
 
-// Prévisualisation animée de la cape active.
-let previewMounted = false;
+// Prévisualisation animée de la cape active (onglet Mes capes).
 async function renderPreview(id, name) {
   if (!window.CapePreview) return;
-  if (!previewMounted) { window.CapePreview.mount($('#cape-preview')); previewMounted = true; }
+  mountPreview('#cape-preview');
   if (!id) {
     window.CapePreview.clear();
     $('#preview-label').textContent = 'Aucune cape active';
@@ -187,6 +192,59 @@ $('#btn-apply').addEventListener('click', async () => {
   if (!r.ok) return toast(r.error, 'err');
   toast('Cap Hub appliqué ✔ Relance/rejoins un monde pour voir les capes.', 'ok');
   refreshStatus();
+});
+
+// ---------- Créateur de capes ----------
+// Dessine la cape sur le canvas 64x32 selon le motif choisi, renvoie un data URL PNG.
+function drawCreator() {
+  const cv = $('#cr-canvas'), c = cv.getContext('2d');
+  const mode = $('#cr-mode').value;
+  const c1 = $('#cr-c1').value, c2 = $('#cr-c2').value;
+  const band = Math.max(2, +$('#cr-band').value || 4);
+  c.clearRect(0, 0, 64, 32);
+  if (mode === 'uni') { c.fillStyle = c1; c.fillRect(0, 0, 64, 32); }
+  else if (mode === 'degrade') {
+    const g = c.createLinearGradient(0, 0, 0, 32); g.addColorStop(0, c1); g.addColorStop(1, c2);
+    c.fillStyle = g; c.fillRect(0, 0, 64, 32);
+  } else if (mode === 'rayures') {
+    for (let y = 0; y < 32; y++) { c.fillStyle = (Math.floor(y / band) % 2) ? c2 : c1; c.fillRect(0, y, 64, 1); }
+  } else if (mode === 'damier') {
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 64; x++) { c.fillStyle = ((Math.floor(x / band) + Math.floor(y / band)) % 2) ? c2 : c1; c.fillRect(x, y, 1, 1); }
+  } else if (mode === 'diagonale') {
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 64; x++) { c.fillStyle = (Math.floor((x + y) / band) % 2) ? c2 : c1; c.fillRect(x, y, 1, 1); }
+  }
+  return cv.toDataURL('image/png');
+}
+
+function updateCreator() {
+  // La 2e couleur ne sert pas au motif uni.
+  $('#cr-c2-wrap').style.display = $('#cr-mode').value === 'uni' ? 'none' : '';
+  const url = drawCreator();
+  mountPreview('#creator-preview');
+  if (window.CapePreview) window.CapePreview.setCape(url);
+}
+
+['#cr-mode', '#cr-c1', '#cr-c2', '#cr-band'].forEach((sel) => {
+  const el = $(sel);
+  el.addEventListener('input', updateCreator);
+  el.addEventListener('change', updateCreator);
+});
+
+$('#cr-random').addEventListener('click', () => {
+  const rnd = () => '#' + Array.from({ length: 3 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0')).join('');
+  $('#cr-c1').value = rnd(); $('#cr-c2').value = rnd();
+  updateCreator();
+});
+
+$('#cr-create').addEventListener('click', async () => {
+  const name = $('#cr-name').value.trim() || 'Ma cape';
+  const url = drawCreator();
+  const r = await window.cap.capes.create(name, url);
+  if (!r.ok) { $('#cr-msg').textContent = ''; return toast(r.error || 'Création impossible', 'err'); }
+  $('#cr-msg').textContent = `Cape « ${name} » ajoutée à ta bibliothèque ✔`;
+  toast('Cape créée ✔', 'ok');
+  await loadCapes();          // met à jour la bibliothèque (rebind l'aperçu sur #cape-preview)
+  updateCreator();            // rebind l'aperçu du créateur
 });
 
 // ---------- Joueurs ----------

@@ -16,9 +16,13 @@
 
 ## ✨ Ce que ça fait
 
-- **🎨 Ta cape sur ton perso.** Importe un PNG (ou choisis parmi **27 capes intégrées**)
-  et Cap Hub l'affiche sur ton personnage dans **tous les clients compatibles OptiFine** :
-  vanilla+OptiFine, Forge+OptiFine, Lunar, Feather… Aucun client à modifier.
+- **🎨 Ta cape sur ton perso.** Importe un PNG (ou choisis parmi **62 capes intégrées**,
+  dont une **palette unie complète** — tout le spectre + neutres) et Cap Hub l'affiche
+  sur ton personnage dans **tous les clients compatibles OptiFine** : vanilla+OptiFine,
+  Forge+OptiFine, Lunar, Feather… Aucun client à modifier.
+- **✨ Créateur de capes.** Compose ta propre cape dans l'app : motif (uni, dégradé,
+  rayures, damier, diagonales) + tes couleurs, **aperçu 3D en direct**, puis ajoute-la
+  à ta bibliothèque.
 - **🗂️ Gestion multi-capes.** Importe **plusieurs PNG d'un coup**, mets tes capes en
   **favori** (★), **renomme**-les, et retrouve-les par **recherche** et **tri**.
 - **👥 Vous vous voyez entre vous.** Tous les joueurs Cap Hub partagent un **registre
@@ -86,8 +90,8 @@ npm start          # lance l'app (Windows)
 ```
 
 1. **Mes capes** → *Importer des PNG* (64×32 ou multiples HD, ou 46×22 OptiFine) puis
-   *Utiliser*. **27 capes** sont déjà fournies ; mets tes préférées en favori (★),
-   renomme-les, cherche/trie.
+   *Utiliser*. **62 capes** sont déjà fournies ; mets tes préférées en favori (★),
+   renomme-les, cherche/trie. Ou **Créateur** → compose la tienne.
 2. **Réglages** → renseigne **ton pseudo Minecraft**, choisis ton **thème**.
 3. Clique **⚡ Appliquer Cap Hub** (une fenêtre admin s'affiche la première fois pour
    la redirection `hosts`). Relance/rejoins un monde : ta cape apparaît.
@@ -123,7 +127,7 @@ npm start          # lance l'app (Windows)
 
 ```bash
 npm run icon               # (re)génère build/icon.png + .ico (pur Node)
-npm test                   # 24 tests : capes, renommage, fournisseur OptiFine, géométrie, proxy HTTP
+npm test                   # 27 tests : capes, création, renommage, fournisseur OptiFine, géométrie, proxy HTTP
 npm run dist               # installeur NSIS + portable (dist/)
 npm run publish:update     # SHA-256 + Release GitHub + maj cap-hub/version.json
 ```
@@ -139,7 +143,7 @@ installeur vérifié par SHA-256. Aucun serveur, aucune IP. **Zéro dépendance 
 cap-hub/
   main.js                processus principal : câble proxy + hosts + registre + watcher + update
   preload.cjs            pont IPC verrouillé
-  renderer/              UI (index.html, style.css, app.js, preview.js) — onglets Capes/Joueurs/État/Réglages
+  renderer/              UI (index.html, style.css, app.js, preview.js) — onglets Capes/Créateur/Joueurs/État/Réglages
   src/
     proxy.js             proxy local de capes (HTTP :80, own > registre > relais OptiFine)
     providers.js         fournisseur OptiFine (parse/render)

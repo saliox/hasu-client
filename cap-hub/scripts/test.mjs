@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const S = (f) => path.join(root, 'src', f);
 
-const { initCapes, listCapes, importCape, validateCape, readCape, resolveCape, renameCape } = await import(S('capes.js'));
+const { initCapes, listCapes, importCape, importCapeBuffer, validateCape, readCape, resolveCape, renameCape } = await import(S('capes.js'));
 const { isPng, readPngSize, encodePNG } = await import(S('png.js'));
 const providers = await import(S('providers.js'));
 const proxy = await import(S('proxy.js'));
@@ -25,7 +25,8 @@ initCapes(ud);
 
 console.log('\n# Capes');
 const capes = listCapes();
-ok('≥ 24 capes intégrées', capes.filter((c) => c.builtin).length >= 24);
+ok('≥ 60 capes intégrées', capes.filter((c) => c.builtin).length >= 60);
+ok('palette unie présente (Uni …)', capes.filter((c) => c.builtin && c.name.startsWith('Uni ')).length >= 30);
 ok('cape intégrée 64x32 PNG', (() => { const b = readCape(capes[0].id); return isPng(b) && readPngSize(b).width === 64; })());
 ok('valide 64x32 / 46x22, rejette 40x40',
   validateCape(mkPng(64, 32)).ok && validateCape(mkPng(46, 22)).ok && !validateCape(mkPng(40, 40)).ok);
@@ -37,6 +38,10 @@ ok('resolveCape bloque la traversée', resolveCape('../../etc/passwd') === null)
 const rn = renameCape(imp.id, 'Ma Belle Cape');
 ok('renomme une cape importée', rn.ok && rn.id === 'Ma Belle Cape.png' && !!resolveCape(rn.id));
 ok('refuse de renommer une intégrée', renameCape(capes.find((c) => c.builtin).id, 'X').ok === false);
+// Création depuis buffer (créateur)
+const cr = importCapeBuffer(mkPng(64, 32), 'Cape créée');
+ok('crée une cape depuis un buffer', cr.ok && !!resolveCape(cr.id));
+ok('rejette un buffer non-cape', importCapeBuffer(Buffer.from('nope'), 'X').ok === false);
 
 console.log('\n# Fournisseur OptiFine (seul canal)');
 ok('un seul fournisseur : optifine', providers.PROVIDERS.length === 1 && providers.PROVIDERS[0].id === 'optifine');
