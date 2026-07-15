@@ -34,6 +34,8 @@ export function getSettings() {
     hasToken: !!s.tokenEnc,
     theme: typeof s.theme === 'string' ? s.theme : 'nuit',
     favorites: Array.isArray(s.favorites) ? s.favorites.filter((x) => typeof x === 'string') : [],
+    // Catégorie (dossier) par cape : { id -> nom }. Surcharge la catégorie auto.
+    categories: (s.categories && typeof s.categories === 'object') ? s.categories : {},
   };
 }
 
@@ -47,6 +49,13 @@ export function saveSettings(patch) {
   }
   if (Array.isArray(patch.favorites)) {
     s.favorites = [...new Set(patch.favorites.filter((x) => typeof x === 'string'))].slice(0, 500);
+  }
+  if (patch.categories && typeof patch.categories === 'object') {
+    const clean = {};
+    for (const [k, v] of Object.entries(patch.categories)) {
+      if (typeof k === 'string' && typeof v === 'string' && v.trim()) clean[k] = v.slice(0, 30).trim();
+    }
+    s.categories = clean;
   }
   write(s);
   return getSettings();

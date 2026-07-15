@@ -43,6 +43,15 @@ const cr = importCapeBuffer(mkPng(64, 32), 'Cape créée');
 ok('crée une cape depuis un buffer', cr.ok && !!resolveCape(cr.id));
 ok('rejette un buffer non-cape', importCapeBuffer(Buffer.from('nope'), 'X').ok === false);
 
+console.log('\n# Réglages (favoris / catégories)');
+const store = await import(S('store.js'));
+store.initStore(ud, { isEncryptionAvailable: () => false });
+let ss = store.saveSettings({ favorites: ['a.png', 'a.png', 'b.png'] });
+ok('favoris dédupliqués + persistés', ss.favorites.length === 2 && store.getSettings().favorites.includes('b.png'));
+ss = store.saveSettings({ categories: { 'x.png': 'Cool', 'y.png': '  ' } });
+ok('catégories nettoyées (vide ignoré)', ss.categories['x.png'] === 'Cool' && !('y.png' in ss.categories));
+ok('thème par défaut = nuit', store.getSettings().theme === 'nuit');
+
 console.log('\n# Fournisseur OptiFine (seul canal)');
 ok('un seul fournisseur : optifine', providers.PROVIDERS.length === 1 && providers.PROVIDERS[0].id === 'optifine');
 ok('parse /capes/Notch.png', providers.byId('optifine').parse('/capes/Notch.png')?.key === 'Notch');

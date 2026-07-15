@@ -157,6 +157,29 @@ code { background: var(--bg-3); padding: 1px 6px; border-radius: 6px; font-size:
 .creator-form input[type=range] { width: 100%; accent-color: var(--accent); }
 .creator .preview-box { align-self: center; }
 
+/* Éditeur pixel */
+.px-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.px-tools label { flex-direction: row; align-items: center; gap: 6px; }
+.px-tools input[type=color] { width: 40px !important; height: 30px; padding: 2px; }
+#px-canvas {
+  width: 100%; max-width: 512px; height: auto; display: block; image-rendering: pixelated;
+  border: 1px solid var(--line); border-radius: 10px; cursor: crosshair; background: var(--bg);
+}
+#cr-image .actions { align-items: center; }
+
+/* Puce catégorie (dossier) sur les cartes */
+.catrow { margin-top: -4px; }
+.cat-chip {
+  display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  background: var(--bg-3); border: 1px solid var(--line); color: var(--muted); cursor: pointer;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cat-chip:hover { color: var(--txt); border-color: var(--accent); }
+.cat-input {
+  width: 100%; background: var(--bg-3); border: 1px solid var(--accent); color: var(--txt);
+  padding: 3px 8px; border-radius: 999px; font-size: 11px;
+}
+
 /* Barre d'outils bibliothèque (recherche + tri) */
 .lib-toolbar { display: flex; align-items: center; gap: 12px; margin: 14px 0 4px; flex-wrap: wrap; }
 .lib-toolbar input[type=search] {

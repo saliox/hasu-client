@@ -48,11 +48,15 @@
 
       <div class="lib-toolbar">
         <input id="cape-search" type="search" placeholder="🔍 Rechercher une cape…" autocomplete="off" />
+        <label class="sortby">Dossier
+          <select id="cape-cat"><option value="">Tous</option></select>
+        </label>
         <label class="sortby">Trier
           <select id="cape-sort">
             <option value="fav">Favoris d'abord</option>
             <option value="name">Nom (A→Z)</option>
             <option value="type">Type (importées d'abord)</option>
+            <option value="cat">Dossier</option>
           </select>
         </label>
         <span id="cape-count" class="muted"></span>
@@ -70,6 +74,7 @@
       </div>
 
       <div id="capes-grid" class="grid"></div>
+      <datalist id="cat-list"></datalist>
     </section>
 
     <!-- CRÉATEUR -->
@@ -90,15 +95,47 @@
               <option value="rayures">Rayures</option>
               <option value="damier">Damier</option>
               <option value="diagonale">Diagonales</option>
+              <option value="pixel">✏️ Éditeur pixel</option>
+              <option value="image">🖼️ Depuis une image</option>
             </select>
           </label>
-          <div class="two">
-            <label>Couleur 1 <input id="cr-c1" type="color" value="#7c5cff" /></label>
-            <label id="cr-c2-wrap">Couleur 2 <input id="cr-c2" type="color" value="#d63c5a" /></label>
+
+          <div id="cr-colors">
+            <div class="two">
+              <label>Couleur 1 <input id="cr-c1" type="color" value="#7c5cff" /></label>
+              <label id="cr-c2-wrap">Couleur 2 <input id="cr-c2" type="color" value="#d63c5a" /></label>
+            </div>
+            <label>Taille des bandes (rayures/damier/diagonales)
+              <input id="cr-band" type="range" min="2" max="16" step="2" value="4" />
+            </label>
           </div>
-          <label>Taille des bandes (rayures/damier/diagonales)
-            <input id="cr-band" type="range" min="2" max="16" step="2" value="4" />
-          </label>
+
+          <div id="cr-pixel" class="hidden">
+            <div class="px-tools">
+              <label>Pinceau <input id="px-color" type="color" value="#7c5cff" /></label>
+              <label>Fond <input id="px-bg" type="color" value="#1a2233" /></label>
+              <label class="check"><input id="px-erase" type="checkbox" /> Gomme (fond)</label>
+              <button id="px-fill" class="btn small">Remplir</button>
+              <button id="px-reset" class="btn small">Vider</button>
+            </div>
+            <canvas id="px-canvas" width="512" height="256"></canvas>
+            <div class="muted">Clique / glisse pour peindre la planche 64×32 (le devant de la cape est la zone centrale gauche).</div>
+          </div>
+
+          <div id="cr-image" class="hidden">
+            <div class="actions">
+              <button id="img-pick" class="btn">🖼️ Choisir une image</button>
+              <label class="sortby">Ajustement
+                <select id="img-fit">
+                  <option value="cover">Remplir (rogne)</option>
+                  <option value="contain">Contenir</option>
+                  <option value="stretch">Étirer</option>
+                </select>
+              </label>
+            </div>
+            <div id="img-info" class="muted">Aucune image choisie.</div>
+          </div>
+
           <label>Nom de la cape
             <input id="cr-name" type="text" maxlength="40" placeholder="Ma cape" autocomplete="off" />
           </label>

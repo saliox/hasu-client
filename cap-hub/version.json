@@ -1,6 +1,6 @@
 {
-  "version": "0.7.1",
+  "version": "0.8.0",
   "url": "",
   "sha256": "",
-  "notes": "Correctifs de thème : la barre de titre et le fond des miniatures s'adaptent maintenant aux thèmes clairs (fini le texte illisible et les blocs noirs). Le créateur peut activer directement la cape créée. Parcours d'interface entièrement vérifié (aucune erreur)."
+  "notes": "Créateur enrichi : éditeur pixel par pixel (pinceau, gomme, remplir/vider) et création d'une cape à partir de n'importe quelle image (recadrée : remplir/contenir/étirer). Bibliothèque en dossiers/catégories (auto pour les capes intégrées, éditables). Installeur .exe (NSIS) + portable configurés comme les autres apps."
 }
