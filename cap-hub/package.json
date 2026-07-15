@@ -1,6 +1,6 @@
 {
   "name": "cap-hub",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Cap Hub — capes Minecraft personnalisées sur tous les clients (OptiFine + mods de capes HTTPS via CA locale), registre partagé entre joueurs 100 % GitHub, détection automatique du lancement de Minecraft, auto-update",
   "type": "module",
   "main": "main.js",

@@ -45,6 +45,7 @@ rien d'autre n'est touché) et répond à leur place, sur **plusieurs canaux** :
 |---|---|---|---|
 | **OptiFine** | HTTP :80 | `GET s.optifine.net/capes/<pseudo>.png` → PNG | non |
 | **MinecraftCapes** (mod) | HTTPS :443 | `GET api.minecraftcapes.net/profile/<uuid>` → JSON | **oui** (CA Cap Hub) |
+| **LabyMod** *(expérimental)* | HTTPS :443 | `GET dl.labymod.net/capes/<uuid>` → PNG | **oui** (CA Cap Hub) |
 
 Pour **chaque** canal, le proxy résout dans le même ordre :
 

@@ -68,9 +68,31 @@ const minecraftcapes = {
   },
 };
 
+// --- LabyMod (expérimental) : https://dl.labymod.net/capes/<uuid> -> PNG brut.
+// Format à confirmer côté PC selon la version de LabyMod ; proposé mais désactivé par
+// défaut. Comme tout canal HTTPS, il nécessite la CA Cap Hub (interception TLS). ---
+const labymod = {
+  id: 'labymod',
+  label: 'LabyMod',
+  scheme: 'https',
+  hosts: ['dl.labymod.net'],
+  requiresCA: true,
+  experimental: true,
+  parse(url) {
+    const m = /^\/capes\/([0-9a-fA-F-]{32,36})/.exec(url);
+    return m ? { key: m[1].replace(/-/g, ''), keyType: 'uuid' } : null;
+  },
+  render({ capePng, upstream }) {
+    if (capePng) return { status: 200, headers: { ...PNG, 'Content-Length': capePng.length }, body: capePng };
+    if (upstream && upstream.status === 200 && upstream.body)
+      return { status: 200, headers: { ...PNG, 'Content-Length': upstream.body.length }, body: upstream.body };
+    return { status: 404, headers: {}, body: null };
+  },
+};
+
 // Fournisseurs livrés. `experimental` => proposé mais désactivé par défaut (format à
 // confirmer côté PC avec le vrai client). L'architecture rend l'ajout d'un canal trivial.
-export const PROVIDERS = [optifine, minecraftcapes];
+export const PROVIDERS = [optifine, minecraftcapes, labymod];
 
 export const byId = (id) => PROVIDERS.find((p) => p.id === id) || null;
 
