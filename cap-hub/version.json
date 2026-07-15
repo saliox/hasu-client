@@ -1,6 +1,6 @@
 {
-  "version": "0.6.0",
+  "version": "0.7.0",
   "url": "",
   "sha256": "",
-  "notes": "27 capes intégrées (dégradés, arc-en-ciel, galaxie, feu, glace…), 6 thèmes d'interface (Nuit, Clair, Cyber, Sang, Océan, Forêt), aperçu 3D repensé (maillage de tissu ondulant, rotation, éclairage), et gestion multi-capes : import multiple, favoris, renommage, recherche et tri."
+  "notes": "62 capes intégrées, dont une palette unie complète (tout le spectre + neutres), et un vrai CRÉATEUR de capes : choisis un motif (uni, dégradé, rayures, damier, diagonales) et tes couleurs, avec aperçu 3D en direct, puis ajoute la cape à ta bibliothèque."
 }

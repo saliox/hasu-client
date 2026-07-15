@@ -11,7 +11,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell, Notification, safeStorage }
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { initCapes, listCapes, importCape, deleteCape, renameCape, resolveCape, readCape } from './src/capes.js';
+import { initCapes, listCapes, importCape, importCapeBuffer, deleteCape, renameCape, resolveCape, readCape } from './src/capes.js';
 import { initStore, getSettings, saveSettings, setToken, getToken } from './src/store.js';
 import { startProxy, stopProxy, isRunning, getStats, proxyEvents, redirectHosts } from './src/proxy.js';
 import { isApplied, applyRedirect, removeRedirect, appliedHosts } from './src/hosts.js';
@@ -222,6 +222,15 @@ ipcMain.handle('capes:rename', (_e, id, name) => {
     if (Object.keys(patch).length) saveSettings(patch);
   }
   return res;
+});
+// Crée une cape depuis l'éditeur : dataUrl PNG (data:image/png;base64,...) -> buffer -> validée + sauvée.
+ipcMain.handle('capes:create', (_e, name, dataUrl) => {
+  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
+  if (!m) return { ok: false, error: 'Image invalide.' };
+  let buf;
+  try { buf = Buffer.from(m[1], 'base64'); } catch { return { ok: false, error: 'Décodage impossible.' }; }
+  if (buf.length > 2 * 1024 * 1024) return { ok: false, error: 'Image trop lourde.' };
+  return importCapeBuffer(buf, name || 'Ma cape');
 });
 ipcMain.handle('capes:favorite', (_e, id, on) => {
   const s = getSettings();
