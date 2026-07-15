@@ -131,7 +131,7 @@ npm start          # lance l'app (Windows)
 ```bash
 npm install               # dépendances de build (Electron) — sur ton PC Windows
 npm run icon              # (re)génère build/icon.png + .ico (pur Node)
-npm test                  # 30 tests : capes, création, renommage, réglages, fournisseur OptiFine, géométrie, proxy HTTP
+npm test                  # 33 tests : capes, réglages, registre (anti-écrasement), fournisseur OptiFine, géométrie, proxy HTTP
 npm run dist              # → dist/Cap Hub Setup <version>.exe (NSIS) + Cap Hub <version> portable.exe
 npm run publish:update    # SHA-256 + Release GitHub + maj cap-hub/version.json
 ```

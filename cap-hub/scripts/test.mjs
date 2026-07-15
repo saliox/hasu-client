@@ -99,6 +99,31 @@ const s2 = await get('s.optifine.net', '/caphub/status');
 ok('endpoint /caphub/status', s2.status === 200);
 
 await proxy.stopProxy();
+
+console.log('\n# Registre : publication sans écraser les autres joueurs');
+const reg = await import(S('registry.js'));
+reg.initRegistry(ud, {});
+const puts = [];
+const origFetch = global.fetch;
+// Stub réseau : le PNG n'existe pas encore ; capes.json distant contient déjà « other ».
+global.fetch = async (url, opts = {}) => {
+  url = String(url); const method = opts.method || 'GET';
+  const R = (status, obj) => ({ ok: status < 400, status, json: async () => obj, text: async () => JSON.stringify(obj) });
+  if (url.includes('/registry/capes/')) return method === 'PUT' ? R(200, {}) : R(404, null);
+  if (url.includes('/registry/capes.json')) {
+    if (method === 'PUT') { puts.push(JSON.parse(opts.body)); return R(200, {}); }
+    const content = Buffer.from(JSON.stringify({ format: 1, players: { other: { cape: 'capes/other.png', updated: '2026-01-01' } } })).toString('base64');
+    return R(200, { sha: 'abc', content });
+  }
+  return R(500, {});
+};
+const pr = await reg.publishCape('tok', 'newguy', mkPng(64, 32));
+global.fetch = origFetch;
+ok('publishCape réussit', pr.ok === true);
+const idxPut = puts.map((p) => { try { return JSON.parse(Buffer.from(p.content, 'base64').toString('utf8')).players; } catch { return null; } }).find(Boolean) || {};
+ok('fusionne « newguy » SANS effacer « other »', !!idxPut.other && !!idxPut.newguy);
+ok('réutilise le sha distant (pas d’écrasement aveugle)', puts.some((p) => p.sha === 'abc'));
+
 fs.rmSync(ud, { recursive: true, force: true });
 
 console.log(`\n${fail ? '\x1b[31m' : '\x1b[32m'}${pass} OK, ${fail} KO\x1b[0m`);

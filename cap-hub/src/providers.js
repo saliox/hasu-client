@@ -22,7 +22,8 @@ const optifine = {
   label: 'OptiFine',
   hosts: ['s.optifine.net'],
   parse(url) {
-    const m = /^\/capes\/([A-Za-z0-9_]{1,16})\.png$/.exec(url);
+    // Tolère une éventuelle query string (cache-busting de certains clients).
+    const m = /^\/capes\/([A-Za-z0-9_]{1,16})\.png(?:\?.*)?$/.exec(url);
     return m ? { key: m[1] } : null;
   },
   render({ capePng, upstream }) {
