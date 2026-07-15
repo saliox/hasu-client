@@ -1,6 +1,6 @@
 {
   "name": "cap-hub",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "Cap Hub — capes Minecraft personnalisées via le canal OptiFine (HTTP, sans certificat ni CA), registre partagé entre joueurs 100 % GitHub, aperçu animé, détection automatique du lancement de Minecraft, auto-update",
   "type": "module",
   "main": "main.js",
@@ -22,6 +22,7 @@
   "build": {
     "appId": "com.saliox.caphub",
     "productName": "Cap Hub",
+    "electronLanguages": ["fr", "en-US"],
     "directories": {
       "output": "dist"
     },
@@ -35,17 +36,27 @@
     ],
     "win": {
       "icon": "build/icon.ico",
+      "artifactName": "Cap Hub Setup ${version}.${ext}",
       "target": [
         { "target": "nsis", "arch": ["x64"] },
         { "target": "portable", "arch": ["x64"] }
       ]
+    },
+    "portable": {
+      "artifactName": "Cap Hub ${version} portable.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "Cap Hub"
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "shortcutName": "Cap Hub",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "deleteAppDataOnUninstall": false
     }
   }
 }

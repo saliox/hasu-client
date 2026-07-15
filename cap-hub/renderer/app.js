@@ -52,23 +52,54 @@ async function refreshStatus() {
 let capeCache = [];
 let capeActive = '';
 let capeFavs = new Set();
+let capeCats = {};       // id -> catégorie (surcharge)
 let capeSearch = '';
 let capeSort = 'fav';
+let capeCatFilter = '';
 
 async function loadCapes() {
   const r = await window.cap.capes.list();
   capeCache = r.capes || [];
   capeActive = r.active || '';
   capeFavs = new Set(r.favorites || []);
+  capeCats = r.categories || {};
+  updateCatFilter();
   renderCapeGrid();
+}
+
+// Catégorie effective d'une cape : surcharge utilisateur, sinon déduite (intégrées) ou « Mes créations ».
+function catOf(c) {
+  if (capeCats[c.id]) return capeCats[c.id];
+  if (c.builtin) {
+    if (c.name.startsWith('Uni ')) return 'Unis';
+    if (/Degrade|crepuscule|ocean|Feu|Glace|Sang|Aurore|Sakura|Bronze/i.test(c.name)) return 'Dégradés';
+    return 'Motifs';
+  }
+  return 'Mes créations';
+}
+
+function allCategories() {
+  return [...new Set(capeCache.map(catOf))].sort((a, b) => a.localeCompare(b));
+}
+
+function updateCatFilter() {
+  const sel = $('#cape-cat'), cur = sel.value;
+  const cats = allCategories();
+  sel.innerHTML = '<option value="">Tous</option>' + cats.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  sel.value = cats.includes(cur) ? cur : '';
+  capeCatFilter = sel.value;
+  // Datalist pour l'autocomplétion lors de l'édition de catégorie.
+  const dl = $('#cat-list');
+  if (dl) dl.innerHTML = cats.map((c) => `<option value="${esc(c)}"></option>`).join('');
 }
 
 function sortedFilteredCapes() {
   const q = capeSearch.trim().toLowerCase();
-  let list = capeCache.filter((c) => !q || c.name.toLowerCase().includes(q));
+  let list = capeCache.filter((c) => (!q || c.name.toLowerCase().includes(q)) && (!capeCatFilter || catOf(c) === capeCatFilter));
   const byName = (a, b) => a.name.localeCompare(b.name);
   if (capeSort === 'name') list.sort(byName);
   else if (capeSort === 'type') list.sort((a, b) => (a.builtin - b.builtin) || byName(a, b));
+  else if (capeSort === 'cat') list.sort((a, b) => catOf(a).localeCompare(catOf(b)) || byName(a, b));
   else list.sort((a, b) => (capeFavs.has(b.id) - capeFavs.has(a.id)) || byName(a, b)); // favoris d'abord
   return list;
 }
@@ -92,12 +123,14 @@ function renderCapeGrid() {
       <div class="thumb"></div>
       ${c.id === capeActive ? '<span class="badge">active</span>' : ''}
       <div class="name" title="${esc(c.name)}">${esc(c.name)}${c.builtin ? ' <span class="muted">· intégrée</span>' : ''}</div>
+      <div class="catrow"><span class="cat-chip" title="Changer de dossier">🗂️ ${esc(catOf(c))}</span></div>
       <div class="cape-actions">
         <button class="btn small act-use">${c.id === capeActive ? '✓ Active' : 'Utiliser'}</button>
         ${c.builtin ? '' : '<button class="btn small act-rename" title="Renommer">✎</button><button class="btn small danger act-del" title="Supprimer">🗑</button>'}
       </div>`;
     el.querySelector('.fav').addEventListener('click', () => toggleFav(c.id, !fav));
     el.querySelector('.act-use').addEventListener('click', () => setActive(c.id));
+    el.querySelector('.cat-chip').addEventListener('click', () => startCatEdit(el, c));
     const rn = el.querySelector('.act-rename');
     if (rn) rn.addEventListener('click', () => startRename(el, c));
     const del = el.querySelector('.act-del');
@@ -143,8 +176,31 @@ function startRename(card, c) {
   input.addEventListener('blur', () => commit(true));
 }
 
+// Édition inline de la catégorie (dossier) d'une cape.
+function startCatEdit(card, c) {
+  const chip = card.querySelector('.cat-chip');
+  const input = document.createElement('input');
+  input.type = 'text'; input.value = catOf(c); input.maxLength = 30; input.className = 'cat-input';
+  input.setAttribute('list', 'cat-list');
+  chip.replaceWith(input);
+  input.focus(); input.select();
+  let done = false;
+  const commit = async (save) => {
+    if (done) return; done = true;
+    if (save) {
+      const v = input.value.trim();
+      const r = await window.cap.capes.setCategory(c.id, v);
+      if (r.ok) capeCats = r.categories;
+    }
+    updateCatFilter(); renderCapeGrid();
+  };
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') commit(true); else if (e.key === 'Escape') commit(false); });
+  input.addEventListener('blur', () => commit(true));
+}
+
 $('#cape-search').addEventListener('input', (e) => { capeSearch = e.target.value; renderCapeGrid(); });
 $('#cape-sort').addEventListener('change', (e) => { capeSort = e.target.value; renderCapeGrid(); });
+$('#cape-cat').addEventListener('change', (e) => { capeCatFilter = e.target.value; renderCapeGrid(); });
 
 // Prévisualisation animée de la cape active (onglet Mes capes).
 async function renderPreview(id, name) {
@@ -195,39 +251,99 @@ $('#btn-apply').addEventListener('click', async () => {
 });
 
 // ---------- Créateur de capes ----------
-// Dessine la cape sur le canvas 64x32 selon le motif choisi, renvoie un data URL PNG.
+// État de l'éditeur pixel (planche 64x32) et de l'image importée.
+const PX_W = 64, PX_H = 32;
+let pxGrid = new Array(PX_W * PX_H).fill('#1a2233');
+let pxPainting = false;
+let creatorImg = null; // HTMLImageElement de l'image importée
+
+// Dessine la cape sur le canvas 64x32 selon le mode, renvoie un data URL PNG.
 function drawCreator() {
   const cv = $('#cr-canvas'), c = cv.getContext('2d');
   const mode = $('#cr-mode').value;
   const c1 = $('#cr-c1').value, c2 = $('#cr-c2').value;
   const band = Math.max(2, +$('#cr-band').value || 4);
-  c.clearRect(0, 0, 64, 32);
-  if (mode === 'uni') { c.fillStyle = c1; c.fillRect(0, 0, 64, 32); }
+  c.clearRect(0, 0, PX_W, PX_H);
+  if (mode === 'uni') { c.fillStyle = c1; c.fillRect(0, 0, PX_W, PX_H); }
   else if (mode === 'degrade') {
-    const g = c.createLinearGradient(0, 0, 0, 32); g.addColorStop(0, c1); g.addColorStop(1, c2);
-    c.fillStyle = g; c.fillRect(0, 0, 64, 32);
+    const g = c.createLinearGradient(0, 0, 0, PX_H); g.addColorStop(0, c1); g.addColorStop(1, c2);
+    c.fillStyle = g; c.fillRect(0, 0, PX_W, PX_H);
   } else if (mode === 'rayures') {
-    for (let y = 0; y < 32; y++) { c.fillStyle = (Math.floor(y / band) % 2) ? c2 : c1; c.fillRect(0, y, 64, 1); }
+    for (let y = 0; y < PX_H; y++) { c.fillStyle = (Math.floor(y / band) % 2) ? c2 : c1; c.fillRect(0, y, PX_W, 1); }
   } else if (mode === 'damier') {
-    for (let y = 0; y < 32; y++) for (let x = 0; x < 64; x++) { c.fillStyle = ((Math.floor(x / band) + Math.floor(y / band)) % 2) ? c2 : c1; c.fillRect(x, y, 1, 1); }
+    for (let y = 0; y < PX_H; y++) for (let x = 0; x < PX_W; x++) { c.fillStyle = ((Math.floor(x / band) + Math.floor(y / band)) % 2) ? c2 : c1; c.fillRect(x, y, 1, 1); }
   } else if (mode === 'diagonale') {
-    for (let y = 0; y < 32; y++) for (let x = 0; x < 64; x++) { c.fillStyle = (Math.floor((x + y) / band) % 2) ? c2 : c1; c.fillRect(x, y, 1, 1); }
+    for (let y = 0; y < PX_H; y++) for (let x = 0; x < PX_W; x++) { c.fillStyle = (Math.floor((x + y) / band) % 2) ? c2 : c1; c.fillRect(x, y, 1, 1); }
+  } else if (mode === 'pixel') {
+    for (let y = 0; y < PX_H; y++) for (let x = 0; x < PX_W; x++) { c.fillStyle = pxGrid[y * PX_W + x]; c.fillRect(x, y, 1, 1); }
+  } else if (mode === 'image') {
+    c.fillStyle = '#1a2233'; c.fillRect(0, 0, PX_W, PX_H);
+    if (creatorImg) {
+      const fit = $('#img-fit').value, iw = creatorImg.naturalWidth, ih = creatorImg.naturalHeight;
+      if (fit === 'stretch') c.drawImage(creatorImg, 0, 0, PX_W, PX_H);
+      else {
+        const s = fit === 'cover' ? Math.max(PX_W / iw, PX_H / ih) : Math.min(PX_W / iw, PX_H / ih);
+        const dw = iw * s, dh = ih * s;
+        c.drawImage(creatorImg, (PX_W - dw) / 2, (PX_H - dh) / 2, dw, dh);
+      }
+    }
   }
   return cv.toDataURL('image/png');
 }
 
+// Rend l'éditeur pixel (grille agrandie + lignes).
+function renderPxCanvas() {
+  const cv = $('#px-canvas'), c = cv.getContext('2d');
+  const sx = cv.width / PX_W, sy = cv.height / PX_H;
+  for (let y = 0; y < PX_H; y++) for (let x = 0; x < PX_W; x++) { c.fillStyle = pxGrid[y * PX_W + x]; c.fillRect(x * sx, y * sy, sx, sy); }
+  c.strokeStyle = 'rgba(255,255,255,0.06)'; c.lineWidth = 1;
+  for (let x = 0; x <= PX_W; x++) { c.beginPath(); c.moveTo(x * sx, 0); c.lineTo(x * sx, cv.height); c.stroke(); }
+  for (let y = 0; y <= PX_H; y++) { c.beginPath(); c.moveTo(0, y * sy); c.lineTo(cv.width, y * sy); c.stroke(); }
+}
+
+function paintPx(e) {
+  const cv = $('#px-canvas'), rect = cv.getBoundingClientRect();
+  const x = Math.floor((e.clientX - rect.left) / (rect.width / PX_W));
+  const y = Math.floor((e.clientY - rect.top) / (rect.height / PX_H));
+  if (x < 0 || y < 0 || x >= PX_W || y >= PX_H) return;
+  pxGrid[y * PX_W + x] = $('#px-erase').checked ? $('#px-bg').value : $('#px-color').value;
+  renderPxCanvas();
+  if (window.CapePreview) window.CapePreview.setCape(drawCreator());
+}
+
 function updateCreator() {
-  // La 2e couleur ne sert pas au motif uni.
-  $('#cr-c2-wrap').style.display = $('#cr-mode').value === 'uni' ? 'none' : '';
+  const mode = $('#cr-mode').value;
+  $('#cr-colors').classList.toggle('hidden', mode === 'pixel' || mode === 'image');
+  $('#cr-pixel').classList.toggle('hidden', mode !== 'pixel');
+  $('#cr-image').classList.toggle('hidden', mode !== 'image');
+  $('#cr-c2-wrap').style.display = mode === 'uni' ? 'none' : '';
+  if (mode === 'pixel') renderPxCanvas();
   const url = drawCreator();
   mountPreview('#creator-preview');
   if (window.CapePreview) window.CapePreview.setCape(url);
 }
 
-['#cr-mode', '#cr-c1', '#cr-c2', '#cr-band'].forEach((sel) => {
-  const el = $(sel);
-  el.addEventListener('input', updateCreator);
-  el.addEventListener('change', updateCreator);
+['#cr-mode', '#cr-c1', '#cr-c2', '#cr-band', '#img-fit'].forEach((sel) => {
+  const el = $(sel); el.addEventListener('input', updateCreator); el.addEventListener('change', updateCreator);
+});
+
+// Éditeur pixel : peinture à la souris.
+const pxCanvas = $('#px-canvas');
+pxCanvas.addEventListener('mousedown', (e) => { pxPainting = true; paintPx(e); });
+pxCanvas.addEventListener('mousemove', (e) => { if (pxPainting) paintPx(e); });
+window.addEventListener('mouseup', () => { pxPainting = false; });
+pxCanvas.addEventListener('mouseleave', () => { pxPainting = false; });
+$('#px-fill').addEventListener('click', () => { pxGrid.fill($('#px-color').value); renderPxCanvas(); updateCreator(); });
+$('#px-reset').addEventListener('click', () => { pxGrid.fill($('#px-bg').value); renderPxCanvas(); updateCreator(); });
+
+// Import d'image quelconque.
+$('#img-pick').addEventListener('click', async () => {
+  const r = await window.cap.capes.pickImage();
+  if (!r.ok) { if (!r.canceled) toast(r.error || 'Image invalide', 'err'); return; }
+  const img = new Image();
+  img.onload = () => { creatorImg = img; $('#img-info').textContent = `Image ${img.naturalWidth}×${img.naturalHeight} chargée.`; updateCreator(); };
+  img.onerror = () => toast('Image illisible', 'err');
+  img.src = r.dataUrl;
 });
 
 $('#cr-random').addEventListener('click', () => {
@@ -237,16 +353,16 @@ $('#cr-random').addEventListener('click', () => {
 });
 
 $('#cr-create').addEventListener('click', async () => {
+  if ($('#cr-mode').value === 'image' && !creatorImg) return toast('Choisis d’abord une image.', 'err');
   const name = $('#cr-name').value.trim() || 'Ma cape';
   const url = drawCreator();
   const r = await window.cap.capes.create(name, url);
   if (!r.ok) { $('#cr-msg').textContent = ''; return toast(r.error || 'Création impossible', 'err'); }
-  // Option : activer directement la cape créée.
   if ($('#cr-use').checked && r.id) { await window.cap.capes.setActive(r.id); refreshStatus(); }
   $('#cr-msg').textContent = `Cape « ${name} » ajoutée à ta bibliothèque ✔${$('#cr-use').checked ? ' (activée)' : ''}`;
   toast('Cape créée ✔', 'ok');
-  await loadCapes();          // met à jour la bibliothèque (rebind l'aperçu sur #cape-preview)
-  updateCreator();            // rebind l'aperçu du créateur
+  await loadCapes();
+  updateCreator();
 });
 
 // ---------- Joueurs ----------

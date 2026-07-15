@@ -8,6 +8,7 @@
 // aucune autorité de certification, aucune interception TLS, aucun magasin de
 // confiance modifié. Voir README (« Pourquoi OptiFine seulement »).
 import { app, BrowserWindow, ipcMain, dialog, shell, Notification, safeStorage } from 'electron';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -183,7 +184,31 @@ ipcMain.handle('settings:setToken', (_e, token) => setToken(token));
 
 ipcMain.handle('capes:list', () => {
   const s = getSettings();
-  return { ok: true, capes: listCapes(), active: s.activeCape, favorites: s.favorites };
+  return { ok: true, capes: listCapes(), active: s.activeCape, favorites: s.favorites, categories: s.categories };
+});
+// Assigne (ou retire si vide) la catégorie d'une cape.
+ipcMain.handle('capes:setCategory', (_e, id, cat) => {
+  const s = getSettings();
+  const cats = { ...s.categories };
+  const c = String(cat || '').slice(0, 30).trim();
+  if (c) cats[id] = c; else delete cats[id];
+  const saved = saveSettings({ categories: cats });
+  return { ok: true, categories: saved.categories };
+});
+// Ouvre une image quelconque et la renvoie en data URL (le renderer la recadre en cape).
+ipcMain.handle('capes:pickImage', async () => {
+  const r = await dialog.showOpenDialog(win, {
+    title: 'Choisir une image',
+    filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] }],
+    properties: ['openFile'],
+  });
+  if (r.canceled || !r.filePaths[0]) return { ok: false, canceled: true };
+  let buf;
+  try { buf = fs.readFileSync(r.filePaths[0]); } catch { return { ok: false, error: 'Image illisible.' }; }
+  if (buf.length > 8 * 1024 * 1024) return { ok: false, error: 'Image trop lourde (max 8 Mo).' };
+  const ext = path.extname(r.filePaths[0]).toLowerCase().replace('.', '');
+  const mime = ext === 'jpg' ? 'jpeg' : (ext || 'png');
+  return { ok: true, dataUrl: `data:image/${mime};base64,` + buf.toString('base64') };
 });
 ipcMain.handle('capes:import', async () => {
   const r = await dialog.showOpenDialog(win, {

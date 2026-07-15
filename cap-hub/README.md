@@ -20,11 +20,14 @@
   dont une **palette unie complète** — tout le spectre + neutres) et Cap Hub l'affiche
   sur ton personnage dans **tous les clients compatibles OptiFine** : vanilla+OptiFine,
   Forge+OptiFine, Lunar, Feather… Aucun client à modifier.
-- **✨ Créateur de capes.** Compose ta propre cape dans l'app : motif (uni, dégradé,
-  rayures, damier, diagonales) + tes couleurs, **aperçu 3D en direct**, puis ajoute-la
-  à ta bibliothèque.
-- **🗂️ Gestion multi-capes.** Importe **plusieurs PNG d'un coup**, mets tes capes en
-  **favori** (★), **renomme**-les, et retrouve-les par **recherche** et **tri**.
+- **✨ Créateur de capes.** Compose ta propre cape dans l'app : motifs (uni, dégradé,
+  rayures, damier, diagonales), **éditeur pixel par pixel** (pinceau/gomme/remplir), ou
+  **depuis n'importe quelle image** (recadrée : remplir/contenir/étirer) — **aperçu 3D en
+  direct**, puis ajoute-la à ta bibliothèque.
+- **🗂️ Bibliothèque en dossiers.** Range tes capes par **catégorie** (auto pour les
+  intégrées : Unis / Dégradés / Motifs, éditables), importe **plusieurs PNG d'un coup**,
+  mets-les en **favori** (★), **renomme**-les, et retrouve-les par **recherche**, **dossier**
+  et **tri**.
 - **👥 Vous vous voyez entre vous.** Tous les joueurs Cap Hub partagent un **registre
   commun** : leurs capes s'affichent chez toi, la tienne s'affiche chez eux — sur
   **tous les serveurs**, en même temps que les capes OptiFine officielles des autres.
@@ -126,11 +129,16 @@ npm start          # lance l'app (Windows)
 ## 🛠️ Build & release
 
 ```bash
-npm run icon               # (re)génère build/icon.png + .ico (pur Node)
-npm test                   # 27 tests : capes, création, renommage, fournisseur OptiFine, géométrie, proxy HTTP
-npm run dist               # installeur NSIS + portable (dist/)
-npm run publish:update     # SHA-256 + Release GitHub + maj cap-hub/version.json
+npm install               # dépendances de build (Electron) — sur ton PC Windows
+npm run icon              # (re)génère build/icon.png + .ico (pur Node)
+npm test                  # 30 tests : capes, création, renommage, réglages, fournisseur OptiFine, géométrie, proxy HTTP
+npm run dist              # → dist/Cap Hub Setup <version>.exe (NSIS) + Cap Hub <version> portable.exe
+npm run publish:update    # SHA-256 + Release GitHub + maj cap-hub/version.json
 ```
+
+**Installeur** : NSIS (assistant classique, choix du dossier, raccourcis Bureau + menu
+Démarrer, lancement à la fin) — exactement comme Hasu Panel / Snipe Hub — plus une
+version **portable**. L'`.exe` se construit sous **Windows** (`npm run dist`).
 
 Auto-update : manifeste `cap-hub/version.json` (lu en raw sur `saliox/hasu-client`),
 installeur vérifié par SHA-256. Aucun serveur, aucune IP. **Zéro dépendance runtime.**
