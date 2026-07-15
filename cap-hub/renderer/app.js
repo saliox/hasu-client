@@ -241,7 +241,9 @@ $('#cr-create').addEventListener('click', async () => {
   const url = drawCreator();
   const r = await window.cap.capes.create(name, url);
   if (!r.ok) { $('#cr-msg').textContent = ''; return toast(r.error || 'Création impossible', 'err'); }
-  $('#cr-msg').textContent = `Cape « ${name} » ajoutée à ta bibliothèque ✔`;
+  // Option : activer directement la cape créée.
+  if ($('#cr-use').checked && r.id) { await window.cap.capes.setActive(r.id); refreshStatus(); }
+  $('#cr-msg').textContent = `Cape « ${name} » ajoutée à ta bibliothèque ✔${$('#cr-use').checked ? ' (activée)' : ''}`;
   toast('Cape créée ✔', 'ok');
   await loadCapes();          // met à jour la bibliothèque (rebind l'aperçu sur #cape-preview)
   updateCreator();            // rebind l'aperçu du créateur
