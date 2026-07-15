@@ -62,6 +62,13 @@ ok('46x22 optifine = 1 frame', geom.frameCount(46, 22) === 1);
 ok('front rect 64x32 = 10x16 @ (1,1)', (() => { const r = geom.capeFrontRect(64, 32, 0); return r.x === 1 && r.y === 1 && r.w === 10 && r.h === 16; })());
 ok('front rect frame 1 décalé', (() => { const r = geom.capeFrontRect(64, 64, 1); return r.y === 33; })());
 
+console.log('\n# Canal LabyMod (expérimental)');
+const lm = providers.byId('labymod');
+ok('LabyMod présent + expérimental', !!lm && lm.experimental === true && lm.scheme === 'https');
+ok('LabyMod parse /capes/<uuid>', lm.parse('/capes/' + '1'.repeat(32))?.keyType === 'uuid');
+ok('LabyMod render sert PNG', (() => { const p = mkPng(64, 32); return lm.render({ capePng: p }).status === 200; })());
+ok('needsCA inclut labymod', providers.needsCA(['optifine', 'labymod']) === true);
+
 console.log('\n# CA / TLS');
 ca.ensureCA();
 ok('CA générée + fichier écrit', ca.caExists() && fs.existsSync(ca.caFilePath()));

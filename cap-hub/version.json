@@ -1,6 +1,6 @@
 {
-  "version": "0.3.0",
+  "version": "0.4.0",
   "url": "",
   "sha256": "",
-  "notes": "Prévisualisation animée de la cape directement dans l'app (effet drapeau, capes animées prises en charge) : vois ta cape onduler sans lancer Minecraft."
+  "notes": "Nouveau canal LabyMod (expérimental) qui s'ajoute à OptiFine et MinecraftCapes. Comme tout canal HTTPS, il utilise la CA locale Cap Hub et reste désactivé par défaut."
 }
