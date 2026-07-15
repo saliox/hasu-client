@@ -289,7 +289,7 @@ ipcMain.handle('proxy:enableAll', async () => {
 ipcMain.handle('providers:list', () => ({
   ok: true,
   enabled: getSettings().providers,
-  providers: PROVIDERS.map((p) => ({ id: p.id, label: p.label, scheme: p.scheme, hosts: p.hosts, requiresCA: p.requiresCA })),
+  providers: PROVIDERS.map((p) => ({ id: p.id, label: p.label, scheme: p.scheme, hosts: p.hosts, requiresCA: p.requiresCA, experimental: !!p.experimental })),
 }));
 ipcMain.handle('providers:set', async (_e, ids) => {
   const s = saveSettings({ providers: Array.isArray(ids) ? ids : ['optifine'] });
