@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const S = (f) => path.join(root, 'src', f);
 
-const { initCapes, listCapes, importCape, validateCape, readCape, resolveCape } = await import(S('capes.js'));
+const { initCapes, listCapes, importCape, validateCape, readCape, resolveCape, renameCape } = await import(S('capes.js'));
 const { isPng, readPngSize, encodePNG } = await import(S('png.js'));
 const providers = await import(S('providers.js'));
 const proxy = await import(S('proxy.js'));
@@ -25,7 +25,7 @@ initCapes(ud);
 
 console.log('\n# Capes');
 const capes = listCapes();
-ok('10 capes intégrées', capes.filter((c) => c.builtin).length === 10);
+ok('≥ 24 capes intégrées', capes.filter((c) => c.builtin).length >= 24);
 ok('cape intégrée 64x32 PNG', (() => { const b = readCape(capes[0].id); return isPng(b) && readPngSize(b).width === 64; })());
 ok('valide 64x32 / 46x22, rejette 40x40',
   validateCape(mkPng(64, 32)).ok && validateCape(mkPng(46, 22)).ok && !validateCape(mkPng(40, 40)).ok);
@@ -33,6 +33,10 @@ const src = path.join(ud, 'in.png'); fs.writeFileSync(src, mkPng(64, 32));
 const imp = importCape(src, 'x/../y');
 ok('import assaini (pas de ..)', imp.ok && !imp.id.includes('..'));
 ok('resolveCape bloque la traversée', resolveCape('../../etc/passwd') === null);
+// Renommage (multi-capes)
+const rn = renameCape(imp.id, 'Ma Belle Cape');
+ok('renomme une cape importée', rn.ok && rn.id === 'Ma Belle Cape.png' && !!resolveCape(rn.id));
+ok('refuse de renommer une intégrée', renameCape(capes.find((c) => c.builtin).id, 'X').ok === false);
 
 console.log('\n# Fournisseur OptiFine (seul canal)');
 ok('un seul fournisseur : optifine', providers.PROVIDERS.length === 1 && providers.PROVIDERS[0].id === 'optifine');
@@ -49,7 +53,7 @@ ok('front rect 64x32 = 10x16 @ (1,1)', (() => { const r = geom.capeFrontRect(64,
 ok('front rect frame 1 décalé', geom.capeFrontRect(64, 64, 1).y === 33);
 
 console.log('\n# Proxy HTTP (OptiFine)');
-const myCape = readCape(imp.id);
+const myCape = readCape(rn.id); // cape importée puis renommée
 const regCape = readCape(capes[0].id);
 // Relais amont injecté : 404 partout (aucun réseau).
 const deps = {

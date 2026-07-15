@@ -59,6 +59,26 @@ export function deleteCape(id) {
   try { fs.unlinkSync(file); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
 }
 
+// Renomme une cape importée (les intégrées ne sont pas renommables). Renvoie le
+// nouvel id (nom de fichier). Assainit et évite les collisions comme à l'import.
+export function renameCape(id, newName) {
+  const file = resolveCape(id);
+  if (!file) return { ok: false, error: 'Cape introuvable.' };
+  if (file.startsWith(BUILTIN_DIR)) return { ok: false, error: 'Cape intégrée (non renommable).' };
+  const safe = String(newName || '')
+    .replace(/[^A-Za-z0-9 _.-]/g, '_')
+    .replace(/\.{2,}/g, '_')
+    .replace(/^[.\s]+/, '')
+    .slice(0, 40).trim();
+  if (!safe) return { ok: false, error: 'Nom invalide.' };
+  let dest = path.join(DIR, `${safe}.png`);
+  if (path.basename(dest) === path.basename(file)) return { ok: true, id: path.basename(file) };
+  let i = 2;
+  while (fs.existsSync(dest)) dest = path.join(DIR, `${safe}-${i++}.png`);
+  try { fs.renameSync(file, dest); return { ok: true, id: path.basename(dest) }; }
+  catch (e) { return { ok: false, error: e.message }; }
+}
+
 export function listCapes() {
   const read = (dir, builtin) => {
     try {
@@ -113,18 +133,58 @@ const shade = (fn) => (x, y) => {
   return [Math.round(c[0] * edge), Math.round(c[1] * edge), Math.round(c[2] * edge)];
 };
 
+// HSL -> RGB (h,s,l dans [0,1]) pour les motifs arc-en-ciel / néon.
+function hsl(h, s, l) {
+  const k = (n) => (n + h * 12) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
+}
+
+// Bruit déterministe (0..1) à partir de (x,y) — pas de Math.random (reproductible).
+function hash2(x, y) {
+  let h = (x * 73856093) ^ (y * 19349663);
+  h = (h ^ (h >>> 13)) >>> 0;
+  return (h % 1000) / 1000;
+}
+
 function ensureBuiltins() {
   const defs = {
+    // Unis
     'Cramoisi': shade(() => [180, 40, 46]),
     'Violet': shade(() => [116, 66, 200]),
     'Cyan': shade(() => [38, 166, 184]),
     'Or': shade(() => [214, 160, 38]),
     'Emeraude': shade(() => [36, 158, 84]),
     'Nuit': shade(() => [24, 28, 40]),
+    'Argent': shade(() => [176, 184, 198]),
+    'Rose': shade(() => [226, 96, 150]),
+    'Corail': shade(() => [232, 104, 82]),
+    'Ardoise': shade(() => [70, 80, 100]),
+    // Dégradés verticaux
     'Degrade crepuscule': shade((x, y) => mix([116, 66, 200], [214, 60, 90], y / (H - 1))),
     'Degrade ocean': shade((x, y) => mix([16, 42, 88], [38, 196, 210], y / (H - 1))),
+    'Feu': shade((x, y) => mix([250, 214, 90], [176, 24, 24], y / (H - 1))),
+    'Glace': shade((x, y) => mix([236, 250, 255], [70, 150, 214], y / (H - 1))),
+    'Sang': shade((x, y) => mix([150, 20, 24], [20, 6, 8], y / (H - 1))),
+    'Aurore': shade((x, y) => mix(mix([40, 200, 160], [90, 120, 230], y / (H - 1)), [180, 90, 210], (y / (H - 1)) ** 2)),
+    'Sakura': shade((x, y) => mix([255, 226, 240], [230, 120, 170], y / (H - 1))),
+    'Bronze': shade((x, y) => mix([220, 170, 110], [120, 70, 30], y / (H - 1))),
+    // Motifs
     'Rayures': shade((x, y) => (Math.floor(y / 4) % 2 ? [230, 230, 235] : [180, 40, 46])),
     'Damier': shade((x, y) => ((Math.floor(x / 4) + Math.floor(y / 4)) % 2 ? [30, 32, 44] : [214, 160, 38])),
+    'Arc-en-ciel': shade((x, y) => hsl((y / (H - 1)) * 0.85, 0.7, 0.55)),
+    'Neon': shade((x, y) => (y % 6 < 2 ? [40, 250, 220] : mix([18, 8, 40], [60, 20, 90], y / (H - 1)))),
+    'Vagues': shade((x, y) => (((y + Math.round(Math.sin(x / 4) * 3)) % 8 < 4) ? [30, 90, 170] : [70, 170, 220])),
+    'Carbone': shade((x, y) => ((Math.floor(x / 2) + Math.floor(y / 2)) % 2 ? [26, 28, 34] : [40, 44, 54])),
+    'Galaxie': shade((x, y) => {
+      const n = hash2(x, y);
+      if (n > 0.965) return [255, 255, 255];
+      if (n > 0.93) return [190, 200, 255];
+      return mix([12, 10, 30], [50, 24, 78], (y / (H - 1) + Math.sin(x / 8) * 0.15));
+    }),
+    'Foret': shade((x, y) => (Math.floor(x / 3) % 2 ? [24, 84, 48] : [34, 110, 62])),
+    'Lave': shade((x, y) => (hash2(x, y) > 0.8 ? [255, 170, 40] : mix([60, 12, 8], [140, 30, 12], y / (H - 1)))),
   };
   for (const [name, fn] of Object.entries(defs)) {
     const file = path.join(BUILTIN_DIR, `${name}.png`);

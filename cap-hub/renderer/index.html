@@ -39,11 +39,23 @@
           <p class="muted">Choisis une cape et applique Cap Hub : elle s'affiche sur ton personnage dans tous les clients compatibles OptiFine.</p>
         </div>
         <div class="actions">
-          <button id="btn-import" class="btn">➕ Importer un PNG</button>
+          <button id="btn-import" class="btn">➕ Importer des PNG</button>
           <button id="btn-apply" class="btn primary">⚡ Appliquer Cap Hub</button>
         </div>
       </div>
       <div id="active-banner" class="banner hidden"></div>
+
+      <div class="lib-toolbar">
+        <input id="cape-search" type="search" placeholder="🔍 Rechercher une cape…" autocomplete="off" />
+        <label class="sortby">Trier
+          <select id="cape-sort">
+            <option value="fav">Favoris d'abord</option>
+            <option value="name">Nom (A→Z)</option>
+            <option value="type">Type (importées d'abord)</option>
+          </select>
+        </label>
+        <span id="cape-count" class="muted"></span>
+      </div>
 
       <div class="preview-row">
         <div class="preview-box">
@@ -108,6 +120,17 @@
     <section id="tab-settings" class="panel">
       <h2>Réglages</h2>
       <div class="form">
+        <label>Thème de l'app
+          <select id="in-theme">
+            <option value="nuit">🌙 Nuit (défaut)</option>
+            <option value="clair">☀️ Clair</option>
+            <option value="cyber">🟣 Cyber</option>
+            <option value="sang">🔴 Sang</option>
+            <option value="ocean">🌊 Océan</option>
+            <option value="foret">🌲 Forêt</option>
+          </select>
+        </label>
+
         <label>Ton pseudo Minecraft
           <input id="in-username" type="text" maxlength="16" placeholder="Ex. Notch" autocomplete="off" />
           <small class="muted">Le pseudo sur lequel ta cape locale s'affiche.</small>

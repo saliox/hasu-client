@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('cap', {
     list: () => invoke('capes:list'),
     import: () => invoke('capes:import'),
     remove: (id) => invoke('capes:remove', id),
+    rename: (id, name) => invoke('capes:rename', id, name),
+    favorite: (id, on) => invoke('capes:favorite', id, on),
     setActive: (id) => invoke('capes:setActive', id),
     preview: (id) => invoke('capes:preview', id), // -> data URL
     publish: () => invoke('capes:publish'),

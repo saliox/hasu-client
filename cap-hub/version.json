@@ -1,6 +1,6 @@
 {
-  "version": "0.5.0",
+  "version": "0.6.0",
   "url": "",
   "sha256": "",
-  "notes": "Sécurité : Cap Hub abandonne toute interception TLS. Fini la CA racine, le proxy HTTPS et l'injection dans les truststores Java — Cap Hub reste sur le seul canal OptiFine en HTTP clair (aucun certificat, aucun magasin de confiance touché). Le registre partagé, l'aperçu animé et la détection de Minecraft restent inchangés."
+  "notes": "27 capes intégrées (dégradés, arc-en-ciel, galaxie, feu, glace…), 6 thèmes d'interface (Nuit, Clair, Cyber, Sang, Océan, Forêt), aperçu 3D repensé (maillage de tissu ondulant, rotation, éclairage), et gestion multi-capes : import multiple, favoris, renommage, recherche et tri."
 }
