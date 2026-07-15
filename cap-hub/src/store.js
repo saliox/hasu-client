@@ -32,16 +32,21 @@ export function getSettings() {
     repo: s.repo || '',
     branch: s.branch || '',
     hasToken: !!s.tokenEnc,
+    theme: typeof s.theme === 'string' ? s.theme : 'nuit',
+    favorites: Array.isArray(s.favorites) ? s.favorites.filter((x) => typeof x === 'string') : [],
   };
 }
 
 export function saveSettings(patch) {
   const s = read();
-  for (const k of ['username', 'activeCape', 'repo', 'branch']) {
+  for (const k of ['username', 'activeCape', 'repo', 'branch', 'theme']) {
     if (typeof patch[k] === 'string') s[k] = patch[k].trim();
   }
   for (const k of ['autoApply', 'autoProxy']) {
     if (typeof patch[k] === 'boolean') s[k] = patch[k];
+  }
+  if (Array.isArray(patch.favorites)) {
+    s.favorites = [...new Set(patch.favorites.filter((x) => typeof x === 'string'))].slice(0, 500);
   }
   write(s);
   return getSettings();

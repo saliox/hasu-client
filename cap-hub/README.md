@@ -16,14 +16,18 @@
 
 ## ✨ Ce que ça fait
 
-- **🎨 Ta cape sur ton perso.** Importe un PNG (ou choisis une cape intégrée) et Cap Hub
-  l'affiche sur ton personnage dans **tous les clients compatibles OptiFine** :
+- **🎨 Ta cape sur ton perso.** Importe un PNG (ou choisis parmi **27 capes intégrées**)
+  et Cap Hub l'affiche sur ton personnage dans **tous les clients compatibles OptiFine** :
   vanilla+OptiFine, Forge+OptiFine, Lunar, Feather… Aucun client à modifier.
+- **🗂️ Gestion multi-capes.** Importe **plusieurs PNG d'un coup**, mets tes capes en
+  **favori** (★), **renomme**-les, et retrouve-les par **recherche** et **tri**.
 - **👥 Vous vous voyez entre vous.** Tous les joueurs Cap Hub partagent un **registre
   commun** : leurs capes s'affichent chez toi, la tienne s'affiche chez eux — sur
   **tous les serveurs**, en même temps que les capes OptiFine officielles des autres.
-- **🔎 Aperçu animé dans l'app.** Vois ta cape **onduler** (effet drapeau) sans lancer
-  Minecraft ; les capes **animées** (images empilées, ex. 64×64) défilent toutes seules.
+- **🧊 Aperçu 3D dans l'app.** Vois ta cape en **3D** — tissu qui ondule, rotation douce
+  et éclairage — sans lancer Minecraft ; les capes **animées** (images empilées, ex.
+  64×64) défilent toutes seules.
+- **🎨 6 thèmes d'interface.** Nuit, Clair, Cyber, Sang, Océan, Forêt (Réglages).
 - **🚀 Détection automatique.** Cap Hub surveille le lancement de Minecraft (launcher
   officiel, Lunar, Badlion, Prism, MultiMC, Hasu Launcher, `java`/`javaw`…) et te
   **propose d'appliquer** ta cape en **un clic** au bon moment.
@@ -81,9 +85,10 @@ npm install
 npm start          # lance l'app (Windows)
 ```
 
-1. **Mes capes** → *Importer un PNG* (64×32 ou multiples HD, ou 46×22 OptiFine) puis
-   *Utiliser*. Dix capes sont déjà fournies.
-2. **Réglages** → renseigne **ton pseudo Minecraft**.
+1. **Mes capes** → *Importer des PNG* (64×32 ou multiples HD, ou 46×22 OptiFine) puis
+   *Utiliser*. **27 capes** sont déjà fournies ; mets tes préférées en favori (★),
+   renomme-les, cherche/trie.
+2. **Réglages** → renseigne **ton pseudo Minecraft**, choisis ton **thème**.
 3. Clique **⚡ Appliquer Cap Hub** (une fenêtre admin s'affiche la première fois pour
    la redirection `hosts`). Relance/rejoins un monde : ta cape apparaît.
 4. Au prochain lancement de Minecraft, Cap Hub **te le propose tout seul**.
@@ -118,7 +123,7 @@ npm start          # lance l'app (Windows)
 
 ```bash
 npm run icon               # (re)génère build/icon.png + .ico (pur Node)
-npm test                   # 22 tests : capes, fournisseur OptiFine, géométrie, proxy HTTP
+npm test                   # 24 tests : capes, renommage, fournisseur OptiFine, géométrie, proxy HTTP
 npm run dist               # installeur NSIS + portable (dist/)
 npm run publish:update     # SHA-256 + Release GitHub + maj cap-hub/version.json
 ```

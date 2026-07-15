@@ -11,7 +11,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell, Notification, safeStorage }
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { initCapes, listCapes, importCape, deleteCape, resolveCape, readCape } from './src/capes.js';
+import { initCapes, listCapes, importCape, deleteCape, renameCape, resolveCape, readCape } from './src/capes.js';
 import { initStore, getSettings, saveSettings, setToken, getToken } from './src/store.js';
 import { startProxy, stopProxy, isRunning, getStats, proxyEvents, redirectHosts } from './src/proxy.js';
 import { isApplied, applyRedirect, removeRedirect, appliedHosts } from './src/hosts.js';
@@ -181,21 +181,54 @@ ipcMain.handle('settings:save', (_e, patch) => {
 });
 ipcMain.handle('settings:setToken', (_e, token) => setToken(token));
 
-ipcMain.handle('capes:list', () => ({ ok: true, capes: listCapes(), active: getSettings().activeCape }));
+ipcMain.handle('capes:list', () => {
+  const s = getSettings();
+  return { ok: true, capes: listCapes(), active: s.activeCape, favorites: s.favorites };
+});
 ipcMain.handle('capes:import', async () => {
   const r = await dialog.showOpenDialog(win, {
-    title: 'Choisir un PNG de cape',
+    title: 'Choisir un ou plusieurs PNG de cape',
     filters: [{ name: 'Cape PNG', extensions: ['png'] }],
-    properties: ['openFile'],
+    properties: ['openFile', 'multiSelections'],
   });
-  if (r.canceled || !r.filePaths[0]) return { ok: false, canceled: true };
-  return importCape(r.filePaths[0]);
+  if (r.canceled || !r.filePaths.length) return { ok: false, canceled: true };
+  let imported = 0; const errors = [];
+  for (const p of r.filePaths) {
+    const res = importCape(p);
+    if (res.ok) imported++; else errors.push(res.error);
+  }
+  if (!imported) return { ok: false, error: errors[0] || 'Aucune cape importée.' };
+  return { ok: true, imported, failed: errors.length };
 });
 ipcMain.handle('capes:remove', (_e, id) => {
   const s = getSettings();
   const res = deleteCape(id);
-  if (res.ok && s.activeCape === id) saveSettings({ activeCape: '' });
+  if (res.ok) {
+    const patch = {};
+    if (s.activeCape === id) patch.activeCape = '';
+    if (s.favorites.includes(id)) patch.favorites = s.favorites.filter((x) => x !== id);
+    if (Object.keys(patch).length) saveSettings(patch);
+  }
   return res;
+});
+ipcMain.handle('capes:rename', (_e, id, name) => {
+  const s = getSettings();
+  const res = renameCape(id, name);
+  if (res.ok && res.id !== id) {
+    // Reporte l'état (actif/favori) sur le nouvel id.
+    const patch = {};
+    if (s.activeCape === id) patch.activeCape = res.id;
+    if (s.favorites.includes(id)) patch.favorites = s.favorites.map((x) => (x === id ? res.id : x));
+    if (Object.keys(patch).length) saveSettings(patch);
+  }
+  return res;
+});
+ipcMain.handle('capes:favorite', (_e, id, on) => {
+  const s = getSettings();
+  const set = new Set(s.favorites);
+  if (on) set.add(id); else set.delete(id);
+  saveSettings({ favorites: [...set] });
+  return { ok: true, favorites: [...set] };
 });
 ipcMain.handle('capes:setActive', (_e, id) => {
   if (id && !resolveCape(id)) return { ok: false, error: 'Cape introuvable.' };

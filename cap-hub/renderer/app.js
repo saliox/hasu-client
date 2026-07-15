@@ -42,45 +42,103 @@ async function refreshStatus() {
   $('#btn-hosts-toggle').textContent = s.hostsApplied ? 'Retirer' : 'Activer';
 }
 
-// ---------- Capes ----------
+// ---------- Capes (bibliothèque multi-capes) ----------
 let capeCache = [];
+let capeActive = '';
+let capeFavs = new Set();
+let capeSearch = '';
+let capeSort = 'fav';
+
 async function loadCapes() {
   const r = await window.cap.capes.list();
   capeCache = r.capes || [];
-  const active = r.active || '';
+  capeActive = r.active || '';
+  capeFavs = new Set(r.favorites || []);
+  renderCapeGrid();
+}
+
+function sortedFilteredCapes() {
+  const q = capeSearch.trim().toLowerCase();
+  let list = capeCache.filter((c) => !q || c.name.toLowerCase().includes(q));
+  const byName = (a, b) => a.name.localeCompare(b.name);
+  if (capeSort === 'name') list.sort(byName);
+  else if (capeSort === 'type') list.sort((a, b) => (a.builtin - b.builtin) || byName(a, b));
+  else list.sort((a, b) => (capeFavs.has(b.id) - capeFavs.has(a.id)) || byName(a, b)); // favoris d'abord
+  return list;
+}
+
+function renderCapeGrid() {
   const grid = $('#capes-grid');
   grid.innerHTML = '';
+  const list = sortedFilteredCapes();
+  $('#cape-count').textContent = `${list.length}/${capeCache.length} cape(s)`;
   if (!capeCache.length) {
-    grid.innerHTML = '<p class="muted">Aucune cape. Importe un PNG (64×32, 128×64… ou format OptiFine 46×22) pour commencer.</p>';
+    grid.innerHTML = '<p class="muted">Aucune cape. Importe un ou plusieurs PNG (64×32, 128×64… ou format OptiFine 46×22).</p>';
+  } else if (!list.length) {
+    grid.innerHTML = '<p class="muted">Aucune cape ne correspond à la recherche.</p>';
   }
-  for (const c of capeCache) {
+  for (const c of list) {
+    const fav = capeFavs.has(c.id);
     const el = document.createElement('div');
-    el.className = 'cape' + (c.id === active ? ' active' : '');
+    el.className = 'cape' + (c.id === capeActive ? ' active' : '');
     el.innerHTML = `
-      <div class="thumb" data-id="${encodeURIComponent(c.id)}"></div>
-      ${c.id === active ? '<span class="badge">active</span>' : ''}
+      <button class="fav ${fav ? 'on' : ''}" title="Favori">${fav ? '★' : '☆'}</button>
+      <div class="thumb"></div>
+      ${c.id === capeActive ? '<span class="badge">active</span>' : ''}
       <div class="name" title="${esc(c.name)}">${esc(c.name)}${c.builtin ? ' <span class="muted">· intégrée</span>' : ''}</div>
       <div class="cape-actions">
-        <button class="btn small act-use">${c.id === active ? '✓ Active' : 'Utiliser'}</button>
-        ${c.builtin ? '' : '<button class="btn small danger act-del">🗑</button>'}
+        <button class="btn small act-use">${c.id === capeActive ? '✓ Active' : 'Utiliser'}</button>
+        ${c.builtin ? '' : '<button class="btn small act-rename" title="Renommer">✎</button><button class="btn small danger act-del" title="Supprimer">🗑</button>'}
       </div>`;
+    el.querySelector('.fav').addEventListener('click', () => toggleFav(c.id, !fav));
     el.querySelector('.act-use').addEventListener('click', () => setActive(c.id));
+    const rn = el.querySelector('.act-rename');
+    if (rn) rn.addEventListener('click', () => startRename(el, c));
     const del = el.querySelector('.act-del');
     if (del) del.addEventListener('click', () => removeCape(c.id, c.name));
     grid.appendChild(el);
     loadThumb(el.querySelector('.thumb'), c.id);
   }
-  // Bandeau cape active.
+  // Bandeau + aperçu de la cape active.
   const banner = $('#active-banner');
-  const act = capeCache.find((c) => c.id === active);
+  const act = capeCache.find((c) => c.id === capeActive);
   if (act) {
     banner.classList.remove('hidden');
     banner.innerHTML = `Cape active : <b>${esc(act.name)}</b>. Applique Cap Hub puis rejoins un monde pour la voir.`;
-  } else {
-    banner.classList.add('hidden');
-  }
-  renderPreview(active, act ? act.name : '');
+  } else banner.classList.add('hidden');
+  renderPreview(capeActive, act ? act.name : '');
 }
+
+async function toggleFav(id, on) {
+  const r = await window.cap.capes.favorite(id, on);
+  if (r.ok) { capeFavs = new Set(r.favorites); renderCapeGrid(); }
+}
+
+// Renommage inline : remplace le nom par un champ, Entrée valide, Échap annule.
+function startRename(card, c) {
+  const nameEl = card.querySelector('.name');
+  const input = document.createElement('input');
+  input.type = 'text'; input.value = c.name; input.maxLength = 40; input.className = 'rename-input';
+  nameEl.replaceWith(input);
+  input.focus(); input.select();
+  let done = false;
+  const commit = async (save) => {
+    if (done) return; done = true;
+    if (save && input.value.trim() && input.value.trim() !== c.name) {
+      const r = await window.cap.capes.rename(c.id, input.value.trim());
+      if (!r.ok) toast(r.error || 'Renommage impossible', 'err');
+    }
+    loadCapes();
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') commit(true);
+    else if (e.key === 'Escape') commit(false);
+  });
+  input.addEventListener('blur', () => commit(true));
+}
+
+$('#cape-search').addEventListener('input', (e) => { capeSearch = e.target.value; renderCapeGrid(); });
+$('#cape-sort').addEventListener('change', (e) => { capeSort = e.target.value; renderCapeGrid(); });
 
 // Prévisualisation animée de la cape active.
 let previewMounted = false;
@@ -117,8 +175,10 @@ async function removeCape(id, name) {
 
 $('#btn-import').addEventListener('click', async () => {
   const r = await window.cap.capes.import();
-  if (r.ok) { toast('Cape importée ✔', 'ok'); loadCapes(); }
-  else if (!r.canceled) toast(r.error || 'Import impossible', 'err');
+  if (r.ok) {
+    toast(`${r.imported} cape(s) importée(s) ✔${r.failed ? ` (${r.failed} rejetée(s))` : ''}`, 'ok');
+    loadCapes();
+  } else if (!r.canceled) toast(r.error || 'Import impossible', 'err');
 });
 
 $('#btn-apply').addEventListener('click', async () => {
@@ -180,10 +240,21 @@ $('#btn-hosts-toggle').addEventListener('click', async () => {
   refreshStatus();
 });
 
+// ---------- Thème ----------
+function applyTheme(name) {
+  document.body.dataset.theme = name || 'nuit';
+}
+$('#in-theme').addEventListener('change', async (e) => {
+  applyTheme(e.target.value);
+  await window.cap.settings.save({ theme: e.target.value });
+});
+
 // ---------- Réglages ----------
 async function loadSettings() {
   const r = await window.cap.settings.get();
   const s = r.settings;
+  $('#in-theme').value = s.theme || 'nuit';
+  applyTheme(s.theme || 'nuit');
   $('#in-username').value = s.username || '';
   $('#in-autoapply').checked = s.autoApply;
   $('#in-autoproxy').checked = s.autoProxy;
