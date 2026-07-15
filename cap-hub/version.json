@@ -1,7 +1,7 @@
 {
-  "version": "0.8.0",
-  "url": "https://github.com/saliox/hasu-client/releases/download/cap-hub-v0.8.0/Cap.Hub.Setup.0.8.0.exe",
-  "sha256": "2a6539ad2d0e4f9125eb7c90442cc1df28032976c6799d398477f5b6010473f5",
-  "notes": "Cap Hub 0.8.0 — première release (créateur pixel/image, dossiers, 62 capes, aperçu 3D)",
-  "pubDate": "2026-07-15T15:37:58.304Z"
+  "version": "0.8.1",
+  "url": "https://github.com/saliox/hasu-client/releases/download/cap-hub-v0.8.1/Cap.Hub.Setup.0.8.1.exe",
+  "sha256": "796bc64f210a77d95fd28c380465d0fa593e0f4c5886842254c6ba3045eeac2a",
+  "notes": "Cap Hub 0.8.1 — correctifs : perte de données du registre évitée (fusion sur le distant), perf UI (cache), collision de cache, toggle cape active.",
+  "pubDate": "2026-07-15T15:54:45.512Z"
 }
