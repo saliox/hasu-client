@@ -5,10 +5,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const S = (f) => path.join(root, 'src', f);
+// import() dynamique : sur Windows un chemin absolu (D:\...) doit être une URL file://.
+const S = (f) => pathToFileURL(path.join(root, 'src', f)).href;
 
 const { initCapes, listCapes, importCape, importCapeBuffer, validateCape, readCape, resolveCape, renameCape } = await import(S('capes.js'));
 const { isPng, readPngSize, encodePNG } = await import(S('png.js'));
