@@ -1,12 +1,10 @@
-// Tests hors-Electron du moteur Cap Hub : capes, fournisseurs, CA/TLS, proxy
-// multi-canaux (HTTP OptiFine + HTTPS MinecraftCapes) et résolution own>registre>relais.
-// Aucune dépendance réseau : le relais amont est injecté (stub).
+// Tests hors-Electron du moteur Cap Hub : capes (génération + validation), fournisseur
+// OptiFine, géométrie d'aperçu, et proxy HTTP (résolution own > registre > relais).
+// Aucune dépendance réseau : le relais amont est injecté (stub). Aucune CA, aucun TLS.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
-import https from 'node:https';
-import tls from 'node:tls';
 import { fileURLToPath } from 'node:url';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -15,7 +13,6 @@ const S = (f) => path.join(root, 'src', f);
 const { initCapes, listCapes, importCape, validateCape, readCape, resolveCape } = await import(S('capes.js'));
 const { isPng, readPngSize, encodePNG } = await import(S('png.js'));
 const providers = await import(S('providers.js'));
-const ca = await import(S('ca.js'));
 const proxy = await import(S('proxy.js'));
 const geom = await import(S('capegeom.js'));
 
@@ -25,7 +22,6 @@ const mkPng = (w, h) => encodePNG(w, h, Buffer.alloc(w * h * 4, 180));
 
 const ud = fs.mkdtempSync(path.join(os.tmpdir(), 'caphub-test-'));
 initCapes(ud);
-ca.initCA(ud);
 
 console.log('\n# Capes');
 const capes = listCapes();
@@ -38,109 +34,49 @@ const imp = importCape(src, 'x/../y');
 ok('import assaini (pas de ..)', imp.ok && !imp.id.includes('..'));
 ok('resolveCape bloque la traversée', resolveCape('../../etc/passwd') === null);
 
-console.log('\n# Fournisseurs');
-ok('OptiFine parse /capes/Notch.png', providers.byId('optifine').parse('/capes/Notch.png')?.key === 'Notch');
-ok('OptiFine ignore autre URL', providers.byId('optifine').parse('/x') === null);
-const mp = providers.byId('minecraftcapes');
-ok('MinecraftCapes parse /profile/<uuid>', mp.parse('/profile/' + 'a'.repeat(32))?.keyType === 'uuid');
-ok('enabledHosts(optifine) = s.optifine.net', JSON.stringify(providers.enabledHosts(['optifine'])) === '["s.optifine.net"]');
-ok('needsCA(optifine)=false', providers.needsCA(['optifine']) === false);
-ok('needsCA(minecraftcapes)=true', providers.needsCA(['minecraftcapes']) === true);
-ok('MinecraftCapes render injecte la cape', (() => {
-  const cape = mkPng(64, 32);
-  const up = { status: 200, body: Buffer.from(JSON.stringify({ textures: { skin: 'SKINB64' } })) };
-  const out = mp.render({ capePng: cape, upstream: up });
-  const j = JSON.parse(out.body.toString());
-  return out.status === 200 && j.textures.cape === cape.toString('base64') && j.textures.skin === 'SKINB64';
-})());
+console.log('\n# Fournisseur OptiFine (seul canal)');
+ok('un seul fournisseur : optifine', providers.PROVIDERS.length === 1 && providers.PROVIDERS[0].id === 'optifine');
+ok('parse /capes/Notch.png', providers.byId('optifine').parse('/capes/Notch.png')?.key === 'Notch');
+ok('ignore autre URL', providers.byId('optifine').parse('/x') === null);
+ok('enabledHosts = s.optifine.net', JSON.stringify(providers.enabledHosts()) === '["s.optifine.net"]');
+ok('hostIndex route s.optifine.net', providers.hostIndex().has('s.optifine.net'));
 
-console.log('\n# Géométrie de cape (preview)');
-ok('64x32 = 1 frame (fixe)', geom.frameCount(64, 32) === 1 && !geom.isAnimated(64, 32));
+console.log('\n# Géométrie de cape (aperçu)');
+ok('64x32 = 1 frame', geom.frameCount(64, 32) === 1 && !geom.isAnimated(64, 32));
 ok('64x64 = 2 frames (animée)', geom.frameCount(64, 64) === 2 && geom.isAnimated(64, 64));
 ok('128x64 HD = 1 frame', geom.frameCount(128, 64) === 1);
-ok('46x22 optifine = 1 frame', geom.frameCount(46, 22) === 1);
 ok('front rect 64x32 = 10x16 @ (1,1)', (() => { const r = geom.capeFrontRect(64, 32, 0); return r.x === 1 && r.y === 1 && r.w === 10 && r.h === 16; })());
-ok('front rect frame 1 décalé', (() => { const r = geom.capeFrontRect(64, 64, 1); return r.y === 33; })());
+ok('front rect frame 1 décalé', geom.capeFrontRect(64, 64, 1).y === 33);
 
-console.log('\n# Canal LabyMod (expérimental)');
-const lm = providers.byId('labymod');
-ok('LabyMod présent + expérimental', !!lm && lm.experimental === true && lm.scheme === 'https');
-ok('LabyMod parse /capes/<uuid>', lm.parse('/capes/' + '1'.repeat(32))?.keyType === 'uuid');
-ok('LabyMod render sert PNG', (() => { const p = mkPng(64, 32); return lm.render({ capePng: p }).status === 200; })());
-ok('needsCA inclut labymod', providers.needsCA(['optifine', 'labymod']) === true);
-
-console.log('\n# CA / TLS');
-ca.ensureCA();
-ok('CA générée + fichier écrit', ca.caExists() && fs.existsSync(ca.caFilePath()));
-const caPem = fs.readFileSync(ca.caFilePath(), 'utf8');
-// Handshake réel : serveur TLS présentant un cert Cap Hub, client faisant confiance à la CA.
-const tlsOk = await new Promise((resolve) => {
-  const srv = https.createServer(
-    { SNICallback: (n, cb) => cb(null, ca.secureContextFor(n)) },
-    (_req, res) => { res.writeHead(200); res.end('ok'); }
-  );
-  srv.listen(0, '127.0.0.1', () => {
-    const port = srv.address().port;
-    https.get({ host: '127.0.0.1', port, servername: 'api.minecraftcapes.net', ca: caPem, headers: { host: 'api.minecraftcapes.net' } },
-      (res) => { res.on('data', () => {}); res.on('end', () => { srv.close(); resolve(res.statusCode === 200); }); })
-      .on('error', () => { srv.close(); resolve(false); });
-  });
-});
-ok('handshake TLS avec cert Cap Hub OK', tlsOk);
-
-console.log('\n# Proxy multi-canaux');
-// cape locale pour "notch", cape registre pour "dieu"; idmap: uuid AAAA... -> "dieu"
+console.log('\n# Proxy HTTP (OptiFine)');
 const myCape = readCape(imp.id);
 const regCape = readCape(capes[0].id);
-const UUID = 'd'.repeat(32);
-// Stub idmap via le cache disque lu par idmap.initIdMap : on écrit un idmap.json.
-fs.writeFileSync(path.join(ud, 'idmap.json'), JSON.stringify({ u2n: { [UUID]: 'dieu' }, n2u: { dieu: UUID } }));
-const idmap = await import(S('idmap.js'));
-idmap.initIdMap(ud);
-
-// Relais amont injecté (aucun réseau) : renvoie 200 JSON skin pour MinecraftCapes, 404 sinon.
-const upstreamStub = async (scheme, host, url) => {
-  if (host === 'api.minecraftcapes.net') return { status: 200, body: Buffer.from(JSON.stringify({ textures: { skin: 'REALSKIN' } })) };
-  return { status: 0, body: null };
-};
+// Relais amont injecté : 404 partout (aucun réseau).
 const deps = {
   getOwn: async (n) => (n === 'notch' ? myCape : null),
   getRegistryCape: async (n) => (n === 'dieu' ? regCape : null),
-  enabledIds: () => ['optifine', 'minecraftcapes'],
-  upstream: upstreamStub,
+  upstream: async () => ({ status: 0, body: null }),
 };
-const st = await proxy.startProxy(deps, { httpPort: 0, httpsPort: 0 });
-ok('proxy démarre HTTP + HTTPS', st.ok && st.http > 0 && st.https > 0);
+const st = await proxy.startProxy(deps, { port: 0 });
+ok('proxy démarre (HTTP seul)', st.ok && st.port > 0);
 
-const httpGet = (port, host, p) => new Promise((resolve) => {
-  http.get({ host: '127.0.0.1', port, path: p, headers: { host } }, (res) => {
+const get = (host, p) => new Promise((resolve) => {
+  http.get({ host: '127.0.0.1', port: st.port, path: p, headers: { host } }, (res) => {
     const c = []; res.on('data', (x) => c.push(x)); res.on('end', () => resolve({ status: res.statusCode, buf: Buffer.concat(c) }));
   }).on('error', () => resolve({ status: 0 }));
 });
-const httpsGet = (port, servername, p) => new Promise((resolve) => {
-  https.get({ host: '127.0.0.1', port, path: p, servername, ca: caPem, headers: { host: servername } }, (res) => {
-    const c = []; res.on('data', (x) => c.push(x)); res.on('end', () => resolve({ status: res.statusCode, buf: Buffer.concat(c), ct: res.headers['content-type'] }));
-  }).on('error', (e) => resolve({ status: 0, err: e.message }));
-});
 
-// OptiFine (HTTP) : ma cape
-const a = await httpGet(st.http, 's.optifine.net', '/capes/Notch.png');
-ok('OptiFine sert MA cape (PNG 200)', a.status === 200 && isPng(a.buf));
-// OptiFine inconnu -> relais stub renvoie 0 -> 404
-const b = await httpGet(st.http, 's.optifine.net', '/capes/Personne.png');
-ok('OptiFine inconnu -> 404', b.status === 404);
-// MinecraftCapes (HTTPS) : uuid -> dieu -> cape registre, JSON avec cape injectée + skin préservé
-const d = await httpsGet(st.https, 'api.minecraftcapes.net', '/profile/' + UUID);
-let dj = {}; try { dj = JSON.parse(d.buf.toString()); } catch {}
-ok('MinecraftCapes HTTPS sert cape registre (JSON)', d.status === 200 && dj.textures?.cape === regCape.toString('base64'));
-ok('MinecraftCapes préserve le skin amont', dj.textures?.skin === 'REALSKIN');
-// MinecraftCapes joueur inconnu -> pas de cape, mais upstream 200 -> renvoie skin amont
-fs.writeFileSync(path.join(ud, 'idmap.json'), JSON.stringify({ u2n: { [UUID]: 'dieu', ['e'.repeat(32)]: 'randomguy' }, n2u: {} }));
-idmap.initIdMap(ud);
-const e = await httpsGet(st.https, 'api.minecraftcapes.net', '/profile/' + 'e'.repeat(32));
-ok('MinecraftCapes inconnu -> relais amont (skin réel)', e.status === 200 && JSON.parse(e.buf.toString()).textures?.skin === 'REALSKIN');
-// status endpoint
-const s2 = await httpGet(st.http, 's.optifine.net', '/caphub/status');
+const a = await get('s.optifine.net', '/capes/Notch.png');
+ok('sert MA cape (PNG 200)', a.status === 200 && isPng(a.buf));
+const b = await get('s.optifine.net', '/capes/Dieu.png');
+ok('sert cape registre (PNG 200)', b.status === 200 && isPng(b.buf));
+const c = await get('s.optifine.net', '/capes/Personne.png');
+ok('inconnu (relais vide) -> 404', c.status === 404);
+const d = await get('s.optifine.net', '/capes/bad$name.png');
+ok('pseudo invalide -> 404', d.status === 404);
+const e = await get('autre.domaine.net', '/capes/Notch.png');
+ok('domaine non géré -> 404', e.status === 404);
+const s2 = await get('s.optifine.net', '/caphub/status');
 ok('endpoint /caphub/status', s2.status === 200);
 
 await proxy.stopProxy();

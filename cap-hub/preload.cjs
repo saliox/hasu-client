@@ -31,17 +31,6 @@ contextBridge.exposeInMainWorld('cap', {
     enableAll: () => invoke('proxy:enableAll'),
   },
 
-  providers: {
-    list: () => invoke('providers:list'),
-    set: (ids) => invoke('providers:set', ids),
-  },
-
-  ca: {
-    status: () => invoke('ca:status'),
-    install: () => invoke('ca:install'),
-    remove: () => invoke('ca:remove'),
-  },
-
   registry: {
     refresh: () => invoke('registry:refresh'),
     players: () => invoke('registry:players'),
