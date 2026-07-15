@@ -1,6 +1,6 @@
 {
-  "version": "0.7.0",
+  "version": "0.7.1",
   "url": "",
   "sha256": "",
-  "notes": "62 capes intégrées, dont une palette unie complète (tout le spectre + neutres), et un vrai CRÉATEUR de capes : choisis un motif (uni, dégradé, rayures, damier, diagonales) et tes couleurs, avec aperçu 3D en direct, puis ajoute la cape à ta bibliothèque."
+  "notes": "Correctifs de thème : la barre de titre et le fond des miniatures s'adaptent maintenant aux thèmes clairs (fini le texte illisible et les blocs noirs). Le créateur peut activer directement la cape créée. Parcours d'interface entièrement vérifié (aucune erreur)."
 }

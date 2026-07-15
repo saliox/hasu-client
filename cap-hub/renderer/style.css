@@ -56,7 +56,7 @@ body {
 .titlebar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 18px; border-bottom: 1px solid var(--line);
-  background: rgba(10,14,22,.6);
+  background: var(--bg-2);   /* s'adapte au thème (clair/sombre) */
 }
 .brand { display: flex; align-items: center; gap: 10px; }
 .logo {
@@ -182,7 +182,7 @@ code { background: var(--bg-3); padding: 1px 6px; border-radius: 6px; font-size:
 }
 .cape.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 8px 30px rgba(124,92,255,.18); }
 .cape .thumb {
-  height: 120px; border-radius: 10px; background: #0a0e18 center/contain no-repeat;
+  height: 120px; border-radius: 10px; background: var(--bg-3) center/contain no-repeat;
   image-rendering: pixelated; border: 1px solid var(--line);
 }
 .cape .name { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
