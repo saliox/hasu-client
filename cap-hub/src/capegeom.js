@@ -1,6 +1,6 @@
 // Géométrie d'une texture de cape Minecraft. Sert à la fois côté app (prévisualisation)
 // et aux tests. Une cape « standard » a un ratio largeur:hauteur de 2:1 (ex. 64×32,
-// 128×64…). Une cape ANIMÉE (façon MinecraftCapes) empile N images de 2:1 verticalement
+// 128×64…). Une cape ANIMÉE empile N images de 2:1 verticalement
 // (ex. 64×64 = 2 images, 64×96 = 3 images).
 //
 // Dans une image de largeur W, l'unité de base vaut s = W/64 : le devant de la cape

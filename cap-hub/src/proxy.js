@@ -1,23 +1,18 @@
-// Proxy local MULTI-FOURNISSEURS de capes. Écoute le trafic des services de capes
-// redirigés vers 127.0.0.1 (via hosts) et répond pour CHAQUE canal supporté — pas
-// seulement OptiFine.
+// Proxy local de capes (canal OptiFine, HTTP). Écoute sur 127.0.0.1:80 le trafic de
+// s.optifine.net (redirigé via hosts) et répond aux requêtes `GET /capes/<pseudo>.png`.
 //
-//   - HTTP  :80   canaux en clair (OptiFine)
-//   - HTTPS :443  canaux chiffrés (MinecraftCapes…) via un certificat Cap Hub par
-//                 domaine (module ca.js). Nécessite que la CA Cap Hub soit approuvée
-//                 par le jeu (truststore Java).
-//
-// Ordre de résolution, identique pour tous les canaux :
+// Ordre de résolution :
 //   1. TON pseudo + cape active            -> cape locale
 //   2. pseudo présent dans le registre     -> cape du registre
-//   3. sinon                               -> RELAIS transparent vers le vrai service
-//      (IP réelle résolue en DNS-over-HTTPS), pour ne rien casser aux autres joueurs.
+//   3. sinon                               -> RELAIS transparent vers le vrai
+//      s.optifine.net (IP réelle résolue en DNS-over-HTTPS), pour ne rien casser aux
+//      capes OptiFine des autres joueurs.
+//
+// SÉCURITÉ : uniquement du HTTP en clair, uniquement sur 127.0.0.1, aucun certificat,
+// aucune CA. Le proxy n'est jamais exposé au réseau.
 import http from 'node:http';
-import https from 'node:https';
 import { EventEmitter } from 'node:events';
-import { hostIndex, enabledHosts, needsCA } from './providers.js';
-import { secureContextFor, caExists } from './ca.js';
-import { uuidToName, forget } from './idmap.js';
+import { hostIndex, enabledHosts } from './providers.js';
 
 export const proxyEvents = new EventEmitter(); // 'log' { level, msg, t }
 const log = (level, msg) => proxyEvents.emit('log', { level, msg, t: Date.now() });
@@ -44,150 +39,111 @@ async function resolveRealIp(host) {
   throw new Error('IP réelle introuvable pour ' + host);
 }
 
-// ---------- Relais vers le vrai service ----------
-const passCache = new Map(); // scheme+host+path -> { status, contentType, body, t }
+// ---------- Relais vers le vrai serveur OptiFine ----------
+const passCache = new Map(); // host+path -> { status, body, t }
 const PASS_TTL = 10 * 60 * 1000;
 
-function fetchUpstream(scheme, host, urlPath) {
+function fetchUpstream(host, urlPath) {
   return new Promise(async (resolve) => {
-    const ckey = scheme + '|' + host + '|' + urlPath;
+    const ckey = host + '|' + urlPath;
     const hit = passCache.get(ckey);
     if (hit && Date.now() - hit.t < PASS_TTL) return resolve(hit);
     let ip;
     try { ip = await resolveRealIp(host); } catch { return resolve({ status: 0, body: null }); }
-    const lib = scheme === 'https' ? https : http;
-    const opts = {
-      host: ip, port: scheme === 'https' ? 443 : 80, path: urlPath, method: 'GET',
-      headers: { Host: host, 'User-Agent': 'CapHub' }, timeout: 6000,
-    };
-    if (scheme === 'https') opts.servername = host; // SNI vers le vrai serveur (cert réel vérifié)
-    const req = lib.get(opts, (res) => {
-      const chunks = []; let size = 0;
-      res.on('data', (c) => { size += c.length; if (size < 3 * 1024 * 1024) chunks.push(c); });
-      res.on('end', () => {
-        const entry = { status: res.statusCode || 0, contentType: res.headers['content-type'] || '', body: Buffer.concat(chunks), t: Date.now() };
-        passCache.set(ckey, entry);
-        resolve(entry);
-      });
-    });
+    const req = http.get(
+      { host: ip, port: 80, path: urlPath, headers: { Host: host, 'User-Agent': 'CapHub' }, timeout: 6000 },
+      (res) => {
+        const chunks = []; let size = 0;
+        res.on('data', (c) => { size += c.length; if (size < 3 * 1024 * 1024) chunks.push(c); });
+        res.on('end', () => {
+          const entry = { status: res.statusCode || 0, body: Buffer.concat(chunks), t: Date.now() };
+          passCache.set(ckey, entry);
+          resolve(entry);
+        });
+      }
+    );
     req.on('timeout', () => req.destroy(new Error('timeout')));
     req.on('error', () => resolve({ status: 0, body: null }));
   });
 }
 
 // ---------- État ----------
-let httpServer = null, httpsServer = null;
-let deps = null; // { getOwn(name), getRegistryCape(name), enabledIds(), upstream? }
+let server = null;
+let deps = null; // { getOwn(name), getRegistryCape(name) }
 const stats = { served: 0, passthrough: 0, misses: 0 };
 
-const hostOf = (req) => String(req.headers.host || (req.socket && req.socket.servername) || '').split(':')[0].toLowerCase();
+const hostOf = (req) => String(req.headers.host || '').split(':')[0].toLowerCase();
 
-async function resolveName(parsed) {
-  if (parsed.keyType === 'name') return parsed.key;
-  if (parsed.keyType === 'uuid') return await uuidToName(parsed.key);
-  return null;
-}
-
-async function handle(req, res, scheme) {
+async function handle(req, res) {
   const url = req.url || '';
-  const host = hostOf(req) || (scheme === 'https' && req.socket ? req.socket.servername : '');
-
-  // Endpoint d'auto-diagnostic (utile pour vérifier que le proxy tourne).
   if (url === '/caphub/status') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ app: 'cap-hub', scheme, ...stats }));
+    return res.end(JSON.stringify({ app: 'cap-hub', ...stats }));
   }
 
-  const idx = hostIndex(deps.enabledIds());
-  const provider = idx.get(host);
+  const provider = hostIndex().get(hostOf(req));
   if (req.method !== 'GET' || !provider) { res.writeHead(404); return res.end(); }
 
   const parsed = provider.parse(url);
   if (!parsed) { res.writeHead(404); return res.end(); }
-
-  const name = await resolveName(parsed);
+  const name = parsed.key;
 
   // 1/2) Notre cape (toi puis registre).
   let capePng = null;
-  if (name) {
-    for (const src of ['own', 'registry']) {
-      try {
-        const buf = src === 'own' ? await deps.getOwn(name.toLowerCase()) : await deps.getRegistryCape(name.toLowerCase());
-        if (buf) { capePng = buf; break; }
-      } catch {}
-    }
+  for (const src of ['own', 'registry']) {
+    try {
+      const buf = src === 'own' ? await deps.getOwn(name.toLowerCase()) : await deps.getRegistryCape(name.toLowerCase());
+      if (buf) { capePng = buf; break; }
+    } catch {}
   }
 
-  // 3) Relais amont : requis si pas de cape, OU si le fournisseur fusionne (JSON) pour
-  //    préserver le skin du joueur. OptiFine (PNG brut) n'a rien à fusionner.
-  const wantUpstream = !capePng || provider.id === 'minecraftcapes';
+  // 3) Relais amont si on n'a pas de cape.
   let upstream = null;
-  if (wantUpstream) {
+  if (!capePng) {
     const fetcher = deps.upstream || fetchUpstream;
-    upstream = await fetcher(scheme, host, url);
-    // UUID -> pseudo peut être périmé : si aucune cape trouvée et amont vide, on oublie.
-    if (!capePng && parsed.keyType === 'uuid' && upstream && upstream.status === 0) forget(parsed.key);
+    upstream = await fetcher(hostOf(req), url);
   }
 
-  const out = provider.render({ capePng, upstream, key: parsed.key, name });
+  const out = provider.render({ capePng, upstream });
   if (out.status === 200) {
     if (capePng) { stats.served++; log('ok', `${provider.label} : cape servie -> ${name}`); }
-    else { stats.passthrough++; }
-  } else { stats.misses++; }
+    else stats.passthrough++;
+  } else stats.misses++;
   res.writeHead(out.status, out.headers || {});
   res.end(out.body || undefined);
 }
 
-export function isRunning() { return !!httpServer || !!httpsServer; }
-export function getStats() {
-  return { running: isRunning(), http: !!httpServer, https: !!httpsServer, ...stats };
-}
+export function isRunning() { return !!server; }
+export function getStats() { return { running: !!server, ...stats }; }
 
-// Démarre les écouteurs nécessaires selon les fournisseurs activés.
-// opts.httpPort / opts.httpsPort (défaut 80/443) servent aux tests (0 = éphémère).
-export async function startProxy(dependencies, opts = {}) {
+// OptiFine interroge s.optifine.net en HTTP sur le port 80 : on écoute uniquement sur
+// 127.0.0.1:80. opts.port (défaut 80) sert aux tests (0 = éphémère).
+export function startProxy(dependencies, opts = {}) {
   deps = dependencies;
-  const enabled = deps.enabledIds();
-  const httpPort = opts.httpPort ?? 80;
-  const httpsPort = opts.httpsPort ?? 443;
-
-  const listen = (server, port) => new Promise((resolve) => {
-    server.once('error', (e) => resolve({ ok: false, error: e.code === 'EADDRINUSE' ? `Port ${port} déjà utilisé.` : e.message }));
-    server.listen(port, '127.0.0.1', () => resolve({ ok: true, port: server.address()?.port }));
+  const port = opts.port ?? 80;
+  return new Promise((resolve) => {
+    if (server) return resolve({ ok: true, already: true, port: server.address()?.port });
+    const s = http.createServer((req, res) => { handle(req, res).catch(() => { try { res.writeHead(500); res.end(); } catch {} }); });
+    s.once('error', (e) => {
+      server = null;
+      resolve({ ok: false, error: e.code === 'EADDRINUSE' ? 'Port 80 déjà utilisé (IIS ? Skype ? autre proxy ?).' : e.message });
+    });
+    s.listen(port, '127.0.0.1', () => {
+      server = s;
+      const bound = s.address()?.port;
+      log('ok', `proxy de capes démarré sur 127.0.0.1:${bound}`);
+      resolve({ ok: true, port: bound });
+    });
   });
-
-  const result = { ok: true, http: null, https: null };
-
-  if (!httpServer) {
-    const s = http.createServer((req, res) => handle(req, res, 'http').catch(() => { try { res.writeHead(500); res.end(); } catch {} }));
-    const r = await listen(s, httpPort);
-    if (r.ok) { httpServer = s; result.http = r.port; log('ok', `proxy HTTP sur 127.0.0.1:${r.port}`); }
-    else { result.ok = false; result.error = 'HTTP : ' + r.error; }
-  } else result.http = httpServer.address()?.port;
-
-  // HTTPS seulement si un canal chiffré est activé et la CA existe.
-  if (needsCA(enabled)) {
-    if (!caExists()) { result.ok = false; result.error = (result.error ? result.error + ' ; ' : '') + 'CA Cap Hub absente (installe-la pour les canaux HTTPS).'; }
-    else if (!httpsServer) {
-      const s = https.createServer(
-        { SNICallback: (name, cb) => { try { cb(null, secureContextFor(name)); } catch (e) { cb(e); } } },
-        (req, res) => handle(req, res, 'https').catch(() => { try { res.writeHead(500); res.end(); } catch {} })
-      );
-      const r = await listen(s, httpsPort);
-      if (r.ok) { httpsServer = s; result.https = r.port; log('ok', `proxy HTTPS sur 127.0.0.1:${r.port}`); }
-      else { result.ok = false; result.error = (result.error ? result.error + ' ; ' : '') + 'HTTPS : ' + r.error; }
-    } else result.https = httpsServer.address()?.port;
-  }
-
-  return result;
 }
 
 export function stopProxy() {
-  const close = (s) => new Promise((resolve) => { if (!s) return resolve(); s.close(() => resolve()); setTimeout(resolve, 1500).unref(); });
-  return Promise.all([close(httpServer), close(httpsServer)]).then(() => {
-    httpServer = null; httpsServer = null; log('ok', 'proxy arrêté'); return { ok: true };
+  return new Promise((resolve) => {
+    if (!server) return resolve({ ok: true, already: true });
+    server.close(() => { server = null; log('ok', 'proxy arrêté'); resolve({ ok: true }); });
+    setTimeout(() => { server = null; resolve({ ok: true }); }, 1500).unref();
   });
 }
 
-// Domaines que hosts doit rediriger pour l'ensemble activé (utilisé par main/hosts).
-export function redirectHosts(enabledIds) { return enabledHosts(enabledIds); }
+// Domaines que hosts doit rediriger (utilisé par main/hosts).
+export function redirectHosts() { return enabledHosts(); }

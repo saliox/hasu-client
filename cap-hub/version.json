@@ -1,6 +1,6 @@
 {
-  "version": "0.4.0",
+  "version": "0.5.0",
   "url": "",
   "sha256": "",
-  "notes": "Nouveau canal LabyMod (expérimental) qui s'ajoute à OptiFine et MinecraftCapes. Comme tout canal HTTPS, il utilise la CA locale Cap Hub et reste désactivé par défaut."
+  "notes": "Sécurité : Cap Hub abandonne toute interception TLS. Fini la CA racine, le proxy HTTPS et l'injection dans les truststores Java — Cap Hub reste sur le seul canal OptiFine en HTTP clair (aucun certificat, aucun magasin de confiance touché). Le registre partagé, l'aperçu animé et la détection de Minecraft restent inchangés."
 }

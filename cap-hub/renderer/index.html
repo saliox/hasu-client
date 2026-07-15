@@ -26,7 +26,6 @@
   <nav class="tabs">
     <button class="tab active" data-tab="capes">🎽 Mes capes</button>
     <button class="tab" data-tab="players">👥 Joueurs</button>
-    <button class="tab" data-tab="channels">📡 Canaux</button>
     <button class="tab" data-tab="status">🛰️ État</button>
     <button class="tab" data-tab="settings">⚙️ Réglages</button>
   </nav>
@@ -73,37 +72,6 @@
         </div>
       </div>
       <div id="players-list" class="list"></div>
-    </section>
-
-    <!-- CANAUX (fournisseurs de capes) -->
-    <section id="tab-channels" class="panel">
-      <div class="row between">
-        <div>
-          <h2>Canaux de capes</h2>
-          <p class="muted">Chaque client affiche les capes via un service précis. Active plusieurs canaux pour que tes capes ne soient pas limitées à OptiFine.</p>
-        </div>
-      </div>
-
-      <div id="providers-list" class="list"></div>
-
-      <div class="card" id="ca-card" style="margin-top:16px">
-        <h3>🔐 Certificat Cap Hub (canaux HTTPS)</h3>
-        <p class="muted">
-          Les mods de capes en <b>HTTPS</b> (MinecraftCapes…) exigent que le certificat local de Cap Hub
-          soit approuvé <b>par le jeu</b>. Minecraft étant en Java, il utilise son propre magasin
-          (<code>cacerts</code>) : Cap Hub détecte les runtimes Java des launchers et y installe le certificat.
-          <b>Opt-in et réversible.</b> OptiFine (HTTP) n'en a pas besoin.
-        </p>
-        <div id="ca-status" class="muted">Statut du certificat…</div>
-        <div id="ca-java" class="muted"></div>
-        <div class="card-actions">
-          <span id="st-ca" class="pill off">non installé</span>
-          <div class="actions">
-            <button id="btn-ca-install" class="btn small primary">Installer le certificat</button>
-            <button id="btn-ca-remove" class="btn small danger">Retirer</button>
-          </div>
-        </div>
-      </div>
     </section>
 
     <!-- ÉTAT -->

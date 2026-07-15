@@ -2,12 +2,13 @@
 
 # 🎽 Cap Hub
 
-**Des capes Minecraft personnalisées sur *tous* les clients — et visibles entre joueurs sur les serveurs.**
+**Des capes Minecraft personnalisées, visibles entre joueurs — sans rien installer d'invasif.**
 
 ![platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows)
 ![built with](https://img.shields.io/badge/built%20with-Electron-47848F?logo=electron)
 ![auto update](https://img.shields.io/badge/auto--update-yes-3ba55d)
 ![no server](https://img.shields.io/badge/backend-100%25%20GitHub-6e5494?logo=github)
+![no MITM](https://img.shields.io/badge/TLS-aucune%20interception-3ba55d)
 
 </div>
 
@@ -15,10 +16,9 @@
 
 ## ✨ Ce que ça fait
 
-- **🎨 Ta cape, partout — pas seulement OptiFine.** Importe un PNG (ou choisis une cape
-  intégrée) et Cap Hub l'affiche sur ton personnage via **plusieurs canaux de capes** :
-  **OptiFine** (vanilla+OptiFine, Forge+OptiFine, Lunar, Feather…) **et** les mods de
-  capes en HTTPS comme **MinecraftCapes**. Aucun client à modifier.
+- **🎨 Ta cape sur ton perso.** Importe un PNG (ou choisis une cape intégrée) et Cap Hub
+  l'affiche sur ton personnage dans **tous les clients compatibles OptiFine** :
+  vanilla+OptiFine, Forge+OptiFine, Lunar, Feather… Aucun client à modifier.
 - **👥 Vous vous voyez entre vous.** Tous les joueurs Cap Hub partagent un **registre
   commun** : leurs capes s'affichent chez toi, la tienne s'affiche chez eux — sur
   **tous les serveurs**, en même temps que les capes OptiFine officielles des autres.
@@ -26,7 +26,7 @@
   Minecraft ; les capes **animées** (images empilées, ex. 64×64) défilent toutes seules.
 - **🚀 Détection automatique.** Cap Hub surveille le lancement de Minecraft (launcher
   officiel, Lunar, Badlion, Prism, MultiMC, Hasu Launcher, `java`/`javaw`…) et te
-  **propose d'appliquer** tes capes en **un clic** au bon moment.
+  **propose d'appliquer** ta cape en **un clic** au bon moment.
 - **☁️ 100 % GitHub, aucun serveur, aucune IP.** Lecture des capes en
   `raw.githubusercontent.com`, publication via l'API GitHub. Même philosophie que
   Hasu Client / Snipe Hub.
@@ -37,41 +37,40 @@
 
 ## ⚙️ Comment ça marche
 
-Chaque système de capes va chercher la cape d'un joueur sur **son** service. Cap Hub
-**redirige ces services vers un proxy local** (via le fichier `hosts`, bloc balisé —
-rien d'autre n'est touché) et répond à leur place, sur **plusieurs canaux** :
+Les clients compatibles OptiFine vont chercher la cape d'un joueur à l'adresse
+`http://s.optifine.net/capes/<pseudo>.png` — en **HTTP clair**. Cap Hub :
 
-| Canal | Protocole | Requête | Certificat requis |
-|---|---|---|---|
-| **OptiFine** | HTTP :80 | `GET s.optifine.net/capes/<pseudo>.png` → PNG | non |
-| **MinecraftCapes** (mod) | HTTPS :443 | `GET api.minecraftcapes.net/profile/<uuid>` → JSON | **oui** (CA Cap Hub) |
-| **LabyMod** *(expérimental)* | HTTPS :443 | `GET dl.labymod.net/capes/<uuid>` → PNG | **oui** (CA Cap Hub) |
+1. **redirige** `s.optifine.net` vers `127.0.0.1` (une ligne ajoutée au fichier `hosts`,
+   dans un bloc balisé — rien d'autre n'est touché) ;
+2. lance un **petit proxy local** sur le port 80 qui répond à ces requêtes :
+   - **ton** pseudo → **ta** cape active (locale) ;
+   - un joueur du **registre Cap Hub** → sa cape (mise en cache) ;
+   - **n'importe qui d'autre** → **relais transparent** vers le vrai serveur OptiFine
+     (IP résolue en DNS-over-HTTPS), pour que les capes officielles continuent de s'afficher.
 
-Pour **chaque** canal, le proxy résout dans le même ordre :
+> Résultat : tu vois tes capes et celles de la commu Cap Hub, **sans casser** l'affichage
+> des capes OptiFine de tout le monde. Rien n'est envoyé aux serveurs de jeu — c'est
+> purement visuel, côté client, exactement comme une cape OptiFine.
 
-1. **ton** pseudo → **ta** cape active (locale) ;
-2. un joueur du **registre Cap Hub** → sa cape (cache) ;
-3. **n'importe qui d'autre** → **relais transparent** vers le vrai service (IP résolue
-   en DNS-over-HTTPS), pour que les capes officielles **et le skin** des autres
-   continuent de s'afficher.
+---
 
-### Le certificat Cap Hub (canaux HTTPS)
+## 🔒 Pourquoi OptiFine seulement (choix de sécurité)
 
-OptiFine passe en **HTTP clair** : rien à installer. Les mods de capes modernes passent
-en **HTTPS** — pour répondre à leur place, le proxy présente un certificat signé par une
-**autorité locale Cap Hub**. Comme **Minecraft est en Java**, il n'utilise pas le magasin
-de Windows mais son **propre truststore** (`cacerts`, un par runtime Java). Cap Hub :
+D'autres systèmes de capes (mods HTTPS) existent, mais les servir imposerait
+d'**intercepter du HTTPS**, donc d'installer une **autorité de certification racine** dans
+le magasin de confiance de la machine **et du runtime Java** du jeu. C'est puissant, mais
+ça revient à embarquer un outil d'interception TLS : si la clé de la CA fuit, elle
+devient une clé passe-partout pour **tout** le trafic chiffré de la machine.
 
-- **génère** cette CA localement (jamais partagée) ;
-- **détecte** les runtimes Java des launchers et y **importe** la CA (`keytool`) ;
-- l'ajoute aussi au magasin **utilisateur** de Windows (clients non-Java).
+**Cap Hub refuse ce compromis.** Il reste sur le **seul canal OptiFine**, en **HTTP clair** :
 
-Tout est **opt-in** (onglet *Canaux*) et **réversible** (bouton *Retirer*). Un canal HTTPS
-n'est **redirigé que si la CA existe**, pour ne jamais casser le mod d'un joueur.
+- **aucune autorité de certification**, aucune clé racine sur ta machine ;
+- **aucun magasin de confiance** (Windows ou Java) modifié ;
+- **aucune interception TLS** : le proxy ne parle que HTTP, uniquement sur `127.0.0.1` ;
+- la seule modification système est **une ligne dans `hosts`** (`s.optifine.net`),
+  réversible depuis *État → Redirection → Retirer*.
 
-> Résultat : tes capes et celles de la commu Cap Hub s'affichent sur **plusieurs types de
-> clients**, **sans casser** l'affichage de personne. Rien n'est envoyé aux serveurs de
-> jeu — c'est purement visuel, côté client.
+C'est la même mécanique, sûre et éprouvée, que celle des capes OptiFine.
 
 ---
 
@@ -85,11 +84,9 @@ npm start          # lance l'app (Windows)
 1. **Mes capes** → *Importer un PNG* (64×32 ou multiples HD, ou 46×22 OptiFine) puis
    *Utiliser*. Dix capes sont déjà fournies.
 2. **Réglages** → renseigne **ton pseudo Minecraft**.
-3. *(facultatif)* **Canaux** → active **MinecraftCapes** et clique *Installer le
-   certificat* pour que tes capes s'affichent aussi hors OptiFine.
-4. Clique **⚡ Appliquer Cap Hub** (une fenêtre admin s'affiche la première fois pour
+3. Clique **⚡ Appliquer Cap Hub** (une fenêtre admin s'affiche la première fois pour
    la redirection `hosts`). Relance/rejoins un monde : ta cape apparaît.
-5. Au prochain lancement de Minecraft, Cap Hub **te le propose tout seul**.
+4. Au prochain lancement de Minecraft, Cap Hub **te le propose tout seul**.
 
 ### Se voir entre joueurs
 
@@ -106,17 +103,14 @@ npm start          # lance l'app (Windows)
 - **Purement cosmétique & côté client.** Cap Hub n'automatise rien, n'envoie rien aux
   serveurs de jeu, ne lit aucune donnée cachée — c'est une cape, au même titre
   qu'OptiFine. Il ne modifie aucun fichier de jeu ni aucun client.
+- **Aucune interception TLS.** Pas de CA, pas de certificat, pas de magasin de confiance
+  touché (voir « Pourquoi OptiFine seulement »).
 - **Renderer verrouillé.** `contextIsolation`, `sandbox`, `nodeIntegration:false`,
   **CSP stricte** (`default-src 'none'`), navigation externe bloquée.
 - **Token chiffré** via Electron `safeStorage` (DPAPI). Il ne sert qu'à publier **ta**
   cape sur **ton** pseudo.
 - **hosts réversible** : le bloc Cap Hub est délimité par des marqueurs ; *État →
   Redirection → Retirer* le supprime proprement.
-- **CA locale, opt-in, réversible** : la CA Cap Hub est **générée sur ta machine**
-  (jamais partagée, jamais téléchargée), sa clé privée reste locale, et elle ne signe
-  que des certificats pour les domaines de capes redirigés. *Canaux → Retirer* la
-  désinstalle des truststores (Windows + Java). Elle ne sert **que** l'affichage des
-  capes ; aucun autre trafic n'est intercepté.
 
 ---
 
@@ -124,12 +118,13 @@ npm start          # lance l'app (Windows)
 
 ```bash
 npm run icon               # (re)génère build/icon.png + .ico (pur Node)
+npm test                   # 22 tests : capes, fournisseur OptiFine, géométrie, proxy HTTP
 npm run dist               # installeur NSIS + portable (dist/)
 npm run publish:update     # SHA-256 + Release GitHub + maj cap-hub/version.json
 ```
 
 Auto-update : manifeste `cap-hub/version.json` (lu en raw sur `saliox/hasu-client`),
-installeur vérifié par SHA-256. Aucun serveur, aucune IP.
+installeur vérifié par SHA-256. Aucun serveur, aucune IP. **Zéro dépendance runtime.**
 
 ---
 
@@ -137,36 +132,20 @@ installeur vérifié par SHA-256. Aucun serveur, aucune IP.
 
 ```
 cap-hub/
-  main.js                processus principal : câble proxy + hosts + CA + registre + watcher + update
+  main.js                processus principal : câble proxy + hosts + registre + watcher + update
   preload.cjs            pont IPC verrouillé
-  renderer/              UI (index.html, style.css, app.js, preview.js) — onglets Capes/Joueurs/Canaux/État/Réglages
+  renderer/              UI (index.html, style.css, app.js, preview.js) — onglets Capes/Joueurs/État/Réglages
   src/
-    proxy.js             proxy multi-canaux (HTTP :80 + HTTPS :443, own > registre > relais)
-    providers.js         registre des fournisseurs de capes (OptiFine, MinecraftCapes, extensible)
-    ca.js                CA locale (node-forge) + certificats par domaine + install truststore Java/Windows
-    idmap.js             résolution pseudo <-> UUID (API Mojang, cache)
-    capegeom.js          géométrie de cape (devant, images animées) — partagée avec la preview
-    hosts.js             redirection dynamique des domaines -> 127.0.0.1 (bloc balisé, UAC)
+    proxy.js             proxy local de capes (HTTP :80, own > registre > relais OptiFine)
+    providers.js         fournisseur OptiFine (parse/render)
+    capegeom.js          géométrie de cape (devant, images animées) — partagée avec l'aperçu
+    hosts.js             redirection s.optifine.net -> 127.0.0.1 (bloc balisé, UAC)
     watcher.js           détection du lancement de Minecraft (tout client)
     registry.js          registre partagé GitHub (lecture raw + publication API)
     capes.js             bibliothèque locale + validation + capes intégrées
-    store.js             réglages + canaux activés + token chiffré (safeStorage)
+    store.js             réglages + token chiffré (safeStorage)
     updater.js           auto-update SHA-256
     png.js               encodeur PNG / lecture de taille (zéro dépendance)
   registry/              registre public servi en raw (capes.json + capes/*.png)
   scripts/               make-icon.mjs, publish-update.mjs, test.mjs
-```
-
-### Ajouter un canal de capes
-
-Un fournisseur = un objet dans `src/providers.js` : `hosts`, `scheme`, `parse(url)` →
-`{ key, keyType }`, et `render({ capePng, upstream })` → réponse. L'ajouter au tableau
-`PROVIDERS` suffit ; le proxy, la redirection `hosts` et l'UI le prennent en compte
-automatiquement.
-
-## 🧪 Tests
-
-```bash
-npm install --omit=dev   # installe node-forge (sans Electron)
-npm test                 # 31 tests : capes, fournisseurs, géométrie, CA/TLS réel, proxy multi-canaux
 ```
