@@ -140,6 +140,15 @@ npm run publish:update    # SHA-256 + Release GitHub + maj cap-hub/version.json
 Démarrer, lancement à la fin) — exactement comme Hasu Panel / Snipe Hub — plus une
 version **portable**. L'`.exe` se construit sous **Windows** (`npm run dist`).
 
+### Sans PC Windows : build automatique (GitHub Actions)
+
+Pas de machine Windows ? Onglet **Actions** du dépôt → **« Cap Hub — build & release »**
+→ *Run workflow*. Le CI (runner `windows-latest`) installe, teste, construit
+l'installeur NSIS + portable, **publie la Release** (`cap-hub-v<version>`) et met à jour
+`cap-hub/version.json` pour armer l'auto-update. L'installeur est aussi dispo en artefact
+téléchargeable du run. Déclenchement **manuel uniquement** (aucun impact sur les releases
+du launcher).
+
 Auto-update : manifeste `cap-hub/version.json` (lu en raw sur `saliox/hasu-client`),
 installeur vérifié par SHA-256. Aucun serveur, aucune IP. **Zéro dépendance runtime.**
 
