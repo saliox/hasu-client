@@ -17,6 +17,7 @@ const { isPng, readPngSize, encodePNG } = await import(S('png.js'));
 const providers = await import(S('providers.js'));
 const ca = await import(S('ca.js'));
 const proxy = await import(S('proxy.js'));
+const geom = await import(S('capegeom.js'));
 
 let pass = 0, fail = 0;
 const ok = (name, cond) => { if (cond) { pass++; console.log('  \x1b[32m✓\x1b[0m', name); } else { fail++; console.log('  \x1b[31m✗\x1b[0m', name); } };
@@ -52,6 +53,14 @@ ok('MinecraftCapes render injecte la cape', (() => {
   const j = JSON.parse(out.body.toString());
   return out.status === 200 && j.textures.cape === cape.toString('base64') && j.textures.skin === 'SKINB64';
 })());
+
+console.log('\n# Géométrie de cape (preview)');
+ok('64x32 = 1 frame (fixe)', geom.frameCount(64, 32) === 1 && !geom.isAnimated(64, 32));
+ok('64x64 = 2 frames (animée)', geom.frameCount(64, 64) === 2 && geom.isAnimated(64, 64));
+ok('128x64 HD = 1 frame', geom.frameCount(128, 64) === 1);
+ok('46x22 optifine = 1 frame', geom.frameCount(46, 22) === 1);
+ok('front rect 64x32 = 10x16 @ (1,1)', (() => { const r = geom.capeFrontRect(64, 32, 0); return r.x === 1 && r.y === 1 && r.w === 10 && r.h === 16; })());
+ok('front rect frame 1 décalé', (() => { const r = geom.capeFrontRect(64, 64, 1); return r.y === 33; })());
 
 console.log('\n# CA / TLS');
 ca.ensureCA();

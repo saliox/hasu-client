@@ -22,6 +22,8 @@
 - **👥 Vous vous voyez entre vous.** Tous les joueurs Cap Hub partagent un **registre
   commun** : leurs capes s'affichent chez toi, la tienne s'affiche chez eux — sur
   **tous les serveurs**, en même temps que les capes OptiFine officielles des autres.
+- **🔎 Aperçu animé dans l'app.** Vois ta cape **onduler** (effet drapeau) sans lancer
+  Minecraft ; les capes **animées** (images empilées, ex. 64×64) défilent toutes seules.
 - **🚀 Détection automatique.** Cap Hub surveille le lancement de Minecraft (launcher
   officiel, Lunar, Badlion, Prism, MultiMC, Hasu Launcher, `java`/`javaw`…) et te
   **propose d'appliquer** tes capes en **un clic** au bon moment.
@@ -136,12 +138,13 @@ installeur vérifié par SHA-256. Aucun serveur, aucune IP.
 cap-hub/
   main.js                processus principal : câble proxy + hosts + CA + registre + watcher + update
   preload.cjs            pont IPC verrouillé
-  renderer/              UI (index.html, style.css, app.js) — onglets Capes/Joueurs/Canaux/État/Réglages
+  renderer/              UI (index.html, style.css, app.js, preview.js) — onglets Capes/Joueurs/Canaux/État/Réglages
   src/
     proxy.js             proxy multi-canaux (HTTP :80 + HTTPS :443, own > registre > relais)
     providers.js         registre des fournisseurs de capes (OptiFine, MinecraftCapes, extensible)
     ca.js                CA locale (node-forge) + certificats par domaine + install truststore Java/Windows
     idmap.js             résolution pseudo <-> UUID (API Mojang, cache)
+    capegeom.js          géométrie de cape (devant, images animées) — partagée avec la preview
     hosts.js             redirection dynamique des domaines -> 127.0.0.1 (bloc balisé, UAC)
     watcher.js           détection du lancement de Minecraft (tout client)
     registry.js          registre partagé GitHub (lecture raw + publication API)
@@ -164,5 +167,5 @@ automatiquement.
 
 ```bash
 npm install --omit=dev   # installe node-forge (sans Electron)
-npm test                 # 21 tests : capes, fournisseurs, CA/TLS réel, proxy multi-canaux
+npm test                 # 31 tests : capes, fournisseurs, géométrie, CA/TLS réel, proxy multi-canaux
 ```

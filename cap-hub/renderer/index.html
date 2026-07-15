@@ -45,6 +45,18 @@
         </div>
       </div>
       <div id="active-banner" class="banner hidden"></div>
+
+      <div class="preview-row">
+        <div class="preview-box">
+          <canvas id="cape-preview" width="260" height="320"></canvas>
+          <div id="preview-label" class="muted">Aucune cape active</div>
+        </div>
+        <div class="preview-hint muted">
+          <p>🔎 <b>Aperçu animé</b> — voici comment ta cape ondulera en jeu, sans avoir à lancer Minecraft.</p>
+          <p>Les capes <b>animées</b> (images empilées, ex. 64×64) défilent automatiquement.</p>
+        </div>
+      </div>
+
       <div id="capes-grid" class="grid"></div>
     </section>
 
@@ -168,6 +180,7 @@
   </main>
 
   <div id="toast" class="toast hidden"></div>
+  <script src="preview.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

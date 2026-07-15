@@ -80,6 +80,23 @@ async function loadCapes() {
   } else {
     banner.classList.add('hidden');
   }
+  renderPreview(active, act ? act.name : '');
+}
+
+// Prévisualisation animée de la cape active.
+let previewMounted = false;
+async function renderPreview(id, name) {
+  if (!window.CapePreview) return;
+  if (!previewMounted) { window.CapePreview.mount($('#cape-preview')); previewMounted = true; }
+  if (!id) {
+    window.CapePreview.clear();
+    $('#preview-label').textContent = 'Aucune cape active';
+    return;
+  }
+  const r = await window.cap.capes.preview(id);
+  if (!r.ok) { window.CapePreview.clear(); return; }
+  window.CapePreview.setCape(r.dataUrl);
+  $('#preview-label').textContent = name || '';
 }
 
 async function loadThumb(el, id) {
@@ -164,6 +181,7 @@ async function loadProviders() {
         <div class="pn">${esc(p.label)}
           <span class="pill ${p.scheme === 'https' ? 'warn' : 'on'}" style="margin-left:6px">${p.scheme.toUpperCase()}</span>
           ${p.requiresCA ? '<span class="muted" style="margin-left:6px">· certificat requis</span>' : ''}
+          ${p.experimental ? '<span class="pill warn" style="margin-left:6px">expérimental</span>' : ''}
         </div>
         <div class="pd">${p.hosts.map(esc).join(', ')}</div>
       </div>`;
