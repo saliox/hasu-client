@@ -103,30 +103,44 @@ async function gh(token, url, options = {}) {
   return r.json();
 }
 
-async function putFile(token, relPath, contentBuf, message) {
+// GET du fichier via l'API contents : renvoie { sha, buf } ou null s'il n'existe pas.
+async function getFile(token, relPath) {
+  const j = await gh(token, `${apiBase()}/${relPath}?ref=${cfg.branch}`);
+  if (!j || !j.sha) return null;
+  return { sha: j.sha, buf: j.content ? Buffer.from(j.content, 'base64') : null };
+}
+
+async function putFile(token, relPath, contentBuf, message, knownSha) {
   const url = `${apiBase()}/${relPath}`;
-  const existing = await gh(token, `${url}?ref=${cfg.branch}`);
+  const sha = knownSha !== undefined ? knownSha : (await getFile(token, relPath))?.sha;
   const body = {
     message,
     branch: cfg.branch,
     content: contentBuf.toString('base64'),
-    ...(existing && existing.sha ? { sha: existing.sha } : {}),
+    ...(sha ? { sha } : {}),
   };
   await gh(token, url, { method: 'PUT', body: JSON.stringify(body) });
 }
 
 // Publie TA cape : pousse le PNG puis met à jour capes.json (2 commits).
+// IMPORTANT : capes.json est fusionné sur le CONTENU DISTANT LE PLUS RÉCENT (relu via
+// l'API juste avant le PUT) pour ne jamais écraser les entrées d'autres joueurs
+// publiées entre-temps.
 export async function publishCape(token, username, pngBuf) {
   const name = String(username || '').toLowerCase();
   if (!/^[a-z0-9_]{1,16}$/.test(name)) return { ok: false, error: 'Pseudo Minecraft invalide.' };
   if (!token) return { ok: false, error: 'Token GitHub manquant (Réglages).' };
   try {
     await putFile(token, `capes/${name}.png`, pngBuf, `Cap Hub : cape de ${name}`);
-    await refreshIndex(true).catch(() => {});
-    const players = { ...(index.players || {}) };
+
+    // Relit capes.json distant (source de vérité) et fusionne notre entrée.
+    const cur = await getFile(token, 'capes.json');
+    let players = {};
+    if (cur && cur.buf) { try { players = JSON.parse(cur.buf.toString('utf8')).players || {}; } catch {} }
     players[name] = { cape: `capes/${name}.png`, updated: new Date().toISOString().slice(0, 10) };
     const json = JSON.stringify({ format: 1, players }, null, 2) + '\n';
-    await putFile(token, 'capes.json', Buffer.from(json), `Cap Hub : index (+${name})`);
+    await putFile(token, 'capes.json', Buffer.from(json), `Cap Hub : index (+${name})`, cur ? cur.sha : undefined);
+
     index = { format: 1, players };
     fs.writeFileSync(path.join(cacheDir, 'capes.json'), json);
     return { ok: true };

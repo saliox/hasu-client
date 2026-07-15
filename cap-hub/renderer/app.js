@@ -19,9 +19,11 @@ $$('.tab').forEach((tab) => {
     $$('.panel').forEach((p) => p.classList.remove('active'));
     tab.classList.add('active');
     $('#tab-' + tab.dataset.tab).classList.add('active');
-    if (tab.dataset.tab === 'players') loadPlayers();
-    if (tab.dataset.tab === 'capes') { mountPreview('#cape-preview'); renderPreview(capeActive, (capeCache.find((c) => c.id === capeActive) || {}).name || ''); }
-    if (tab.dataset.tab === 'creator') { mountPreview('#creator-preview'); updateCreator(); }
+    const t = tab.dataset.tab;
+    if (t === 'players') loadPlayers();
+    if (t === 'capes') { previewState.canvas = null; renderPreview(capeActive, (capeCache.find((c) => c.id === capeActive) || {}).name || ''); }
+    else if (t === 'creator') { previewState.canvas = null; updateCreator(); }
+    else if (window.CapePreview) { window.CapePreview.clear(); previewState.canvas = null; } // pas d'aperçu -> stoppe l'animation (CPU)
   });
 });
 
@@ -58,6 +60,11 @@ let capeSort = 'fav';
 let capeCatFilter = '';
 
 async function loadCapes() {
+  // Changement structurel (import/création/suppression/renommage) : on invalide le
+  // cache d'images (un id de fichier peut être réutilisé) et on force l'aperçu à se
+  // recalculer. La frappe dans la recherche ne passe PAS par ici -> cache conservé.
+  capeImgCache.clear();
+  previewState.canvas = null;
   const r = await window.cap.capes.list();
   capeCache = r.capes || [];
   capeActive = r.active || '';
@@ -125,11 +132,11 @@ function renderCapeGrid() {
       <div class="name" title="${esc(c.name)}">${esc(c.name)}${c.builtin ? ' <span class="muted">· intégrée</span>' : ''}</div>
       <div class="catrow"><span class="cat-chip" title="Changer de dossier">🗂️ ${esc(catOf(c))}</span></div>
       <div class="cape-actions">
-        <button class="btn small act-use">${c.id === capeActive ? '✓ Active' : 'Utiliser'}</button>
+        <button class="btn small act-use" title="${c.id === capeActive ? 'Cliquer pour désactiver' : 'Utiliser cette cape'}">${c.id === capeActive ? '✓ Active' : 'Utiliser'}</button>
         ${c.builtin ? '' : '<button class="btn small act-rename" title="Renommer">✎</button><button class="btn small danger act-del" title="Supprimer">🗑</button>'}
       </div>`;
     el.querySelector('.fav').addEventListener('click', () => toggleFav(c.id, !fav));
-    el.querySelector('.act-use').addEventListener('click', () => setActive(c.id));
+    el.querySelector('.act-use').addEventListener('click', () => setActive(c.id === capeActive ? '' : c.id));
     el.querySelector('.cat-chip').addEventListener('click', () => startCatEdit(el, c));
     const rn = el.querySelector('.act-rename');
     if (rn) rn.addEventListener('click', () => startRename(el, c));
@@ -202,29 +209,44 @@ $('#cape-search').addEventListener('input', (e) => { capeSearch = e.target.value
 $('#cape-sort').addEventListener('change', (e) => { capeSort = e.target.value; renderCapeGrid(); });
 $('#cape-cat').addEventListener('change', (e) => { capeCatFilter = e.target.value; renderCapeGrid(); });
 
-// Prévisualisation animée de la cape active (onglet Mes capes).
+// Cache des data URL de capes (miniatures + aperçu) — évite un aller-retour IPC par
+// cape à chaque re-render (recherche, tri, favori…). Clé = id ; le contenu d'un id ne
+// change jamais (un renommage change l'id), donc le cache reste valide.
+const capeImgCache = new Map();
+async function capeDataUrl(id) {
+  if (capeImgCache.has(id)) return capeImgCache.get(id);
+  const r = await window.cap.capes.preview(id);
+  const url = r.ok ? r.dataUrl : null;
+  capeImgCache.set(id, url);
+  return url;
+}
+
+// Prévisualisation 3D de la cape active. Ne se relance QUE si la cape (ou le canvas)
+// a changé — sinon taper dans la recherche ferait clignoter l'aperçu à chaque frappe.
+const previewState = { id: null, canvas: null };
 async function renderPreview(id, name) {
   if (!window.CapePreview) return;
   mountPreview('#cape-preview');
-  if (!id) {
-    window.CapePreview.clear();
-    $('#preview-label').textContent = 'Aucune cape active';
-    return;
+  if (previewState.id === id && previewState.canvas === '#cape-preview') {
+    $('#preview-label').textContent = id ? (name || '') : 'Aucune cape active';
+    return; // déjà affichée sur ce canvas -> rien à refaire
   }
-  const r = await window.cap.capes.preview(id);
-  if (!r.ok) { window.CapePreview.clear(); return; }
-  window.CapePreview.setCape(r.dataUrl);
+  previewState.id = id; previewState.canvas = '#cape-preview';
+  if (!id) { window.CapePreview.clear(); $('#preview-label').textContent = 'Aucune cape active'; return; }
+  const url = await capeDataUrl(id);
+  if (!url) { window.CapePreview.clear(); return; }
+  window.CapePreview.setCape(url);
   $('#preview-label').textContent = name || '';
 }
 
 async function loadThumb(el, id) {
-  const r = await window.cap.capes.preview(id);
-  if (r.ok) el.style.backgroundImage = `url(${r.dataUrl})`;
+  const url = await capeDataUrl(id);
+  if (url) el.style.backgroundImage = `url(${url})`;
 }
 
 async function setActive(id) {
   const r = await window.cap.capes.setActive(id);
-  if (r.ok) { toast('Cape active mise à jour.', 'ok'); loadCapes(); }
+  if (r.ok) { toast(id ? 'Cape activée.' : 'Cape désactivée.', 'ok'); loadCapes(); }
   else toast(r.error || 'Erreur', 'err');
 }
 
