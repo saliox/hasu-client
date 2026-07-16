@@ -136,6 +136,78 @@ const idxPut = puts.map((p) => { try { return JSON.parse(Buffer.from(p.content, 
 ok('fusionne « newguy » SANS effacer « other »', !!idxPut.other && !!idxPut.newguy);
 ok('réutilise le sha distant (pas d’écrasement aveugle)', puts.some((p) => p.sha === 'abc'));
 
+console.log('\n# Compte Minecraft officiel (mcaccount)');
+const mc = await import(S('mcaccount.js'));
+const PROFILE = { id: 'uuid1', name: 'Steve', capes: [{ id: 'cap-a', state: 'ACTIVE', alias: 'Migrator', url: 'https://tex/a' }, { id: 'cap-b', state: 'INACTIVE', alias: 'MineCon', url: 'https://tex/b' }] };
+// Mock de toute la chaîne MS -> XBL -> XSTS -> MC + profil/capes. Aucun vrai réseau.
+function mcFetch(state = {}) {
+  return async (url, opts = {}) => {
+    url = String(url); const method = opts.method || 'GET';
+    const R = (status, obj) => ({ ok: status < 400, status, json: async () => obj, text: async () => JSON.stringify(obj) });
+    if (url.includes('/devicecode')) return R(200, { device_code: 'DC', user_code: 'ABCD-EFGH', verification_uri: 'https://microsoft.com/link', interval: 0, expires_in: 900 });
+    if (url.endsWith('/token')) return R(200, { access_token: 'ms-access', refresh_token: 'ms-refresh', expires_in: 3600 });
+    if (url.includes('user.auth.xboxlive.com')) return R(200, { Token: 'xbl-tok', DisplayClaims: { xui: [{ uhs: 'userhash' }] } });
+    if (url.includes('xsts.auth.xboxlive.com')) return R(200, { Token: 'xsts-tok', DisplayClaims: { xui: [{ uhs: 'userhash' }] } });
+    if (url.includes('/authentication/login_with_xbox')) return R(200, { access_token: 'mc-access', expires_in: 86400 });
+    if (url.includes('/minecraft/profile/capes/active')) {
+      state.lastCapeOp = { method, body: opts.body ? JSON.parse(opts.body) : null };
+      return method === 'DELETE' ? R(200, {}) : R(200, { ...PROFILE, capes: PROFILE.capes.map((c) => ({ ...c, state: c.id === JSON.parse(opts.body).capeId ? 'ACTIVE' : 'INACTIVE' })) });
+    }
+    if (url.includes('/minecraft/profile')) {
+      if (state.profile401) return R(401, {});
+      if (state.noProfile) return R(404, {});
+      return R(200, PROFILE);
+    }
+    return R(500, {});
+  };
+}
+const realFetch = global.fetch;
+global.fetch = mcFetch();
+const prof = await mc.getProfile('mc-access');
+ok('getProfile renvoie name + 2 capes', prof.name === 'Steve' && prof.capes.length === 2);
+const tokSession = await mc.loginWithToken('mc-access');
+ok('loginWithToken -> session avec profil', tokSession.accessToken === 'mc-access' && tokSession.profile.name === 'Steve');
+let st1 = {}; global.fetch = mcFetch(st1);
+const afterSet = await mc.setActiveCape('mc-access', 'cap-b');
+ok('setActiveCape PUT le bon capeId', st1.lastCapeOp.method === 'PUT' && st1.lastCapeOp.body.capeId === 'cap-b');
+ok('setActiveCape renvoie la cape activée', afterSet.capes.find((c) => c.id === 'cap-b').state === 'ACTIVE');
+let st2 = {}; global.fetch = mcFetch(st2);
+await mc.hideCape('mc-access');
+ok('hideCape envoie un DELETE', st2.lastCapeOp.method === 'DELETE');
+// Chaîne Microsoft complète (refresh -> XBL -> XSTS -> MC -> profil).
+global.fetch = mcFetch();
+const msSession = await mc.refreshSession('client-id', 'ms-refresh');
+ok('refreshSession chaîne jusqu’au profil', msSession.accessToken === 'mc-access' && msSession.profile.name === 'Steve' && msSession.msRefreshToken === 'ms-refresh');
+ok('refreshSession pose expiresAt futur', msSession.expiresAt > Date.now());
+const dc = await mc.requestDeviceCode('client-id');
+ok('requestDeviceCode renvoie user_code', dc.user_code === 'ABCD-EFGH');
+let threw = false; global.fetch = mcFetch({ profile401: true });
+try { await mc.getProfile('bad'); } catch { threw = true; }
+ok('getProfile 401 -> exception', threw);
+global.fetch = mcFetch({ noProfile: true });
+ok('getProfile 404 -> null', (await mc.getProfile('x')) === null);
+let threw2 = false; global.fetch = mcFetch({ noProfile: true });
+try { await mc.loginWithToken('x'); } catch { threw2 = true; }
+ok('loginWithToken sans profil Java -> exception', threw2);
+global.fetch = realFetch;
+await mc.requestDeviceCode('').catch(() => {}); // ne doit pas planter le process
+ok('requestDeviceCode sans clientId -> rejette', await mc.requestDeviceCode('').then(() => false, () => true));
+
+console.log('\n# Session MC persistée (chiffrée)');
+const enc = { isEncryptionAvailable: () => true, encryptString: (s) => Buffer.from('e:' + s, 'utf8'), decryptString: (b) => b.toString('utf8').slice(2) };
+store.initStore(ud, enc);
+const sess = { accessToken: 'a', msRefreshToken: 'r', expiresAt: 123, profile: PROFILE };
+const setRes = store.setMcSession(sess);
+ok('setMcSession chiffre + persiste', setRes.ok && setRes.encrypted);
+const back = store.getMcSession();
+ok('getMcSession round-trip', back && back.accessToken === 'a' && back.profile.name === 'Steve');
+ok('hasMcSession exposé dans les réglages', store.getSettings().hasMcSession === true);
+ok('mcClientId persiste', store.saveSettings({ mcClientId: 'guid-123' }).mcClientId === 'guid-123');
+store.clearMcSession();
+ok('clearMcSession efface la session', store.getMcSession() === null && store.getSettings().hasMcSession === false);
+store.initStore(ud, { isEncryptionAvailable: () => false });
+ok('setMcSession refuse sans chiffrement (pas de tokens en clair)', store.setMcSession(sess).ok === false);
+
 fs.rmSync(ud, { recursive: true, force: true });
 
 console.log(`\n${fail ? '\x1b[31m' : '\x1b[32m'}${pass} OK, ${fail} KO\x1b[0m`);

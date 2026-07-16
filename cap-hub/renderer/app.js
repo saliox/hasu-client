@@ -21,6 +21,7 @@ $$('.tab').forEach((tab) => {
     $('#tab-' + tab.dataset.tab).classList.add('active');
     const t = tab.dataset.tab;
     if (t === 'players') loadPlayers();
+    if (t === 'official') loadMc();
     if (t === 'capes') { previewState.canvas = null; renderPreview(capeActive, (capeCache.find((c) => c.id === capeActive) || {}).name || ''); }
     else if (t === 'creator') { previewState.canvas = null; updateCreator(); }
     else if (window.CapePreview) { window.CapePreview.clear(); previewState.canvas = null; } // pas d'aperçu -> stoppe l'animation (CPU)
@@ -444,6 +445,123 @@ $('#cr-create').addEventListener('click', async () => {
   updateCreator();
 });
 
+// ---------- Compte Minecraft officiel ----------
+let mcBusy = false;
+
+function renderMc(v) {
+  const inOut = !!(v && v.connected);
+  $('#mc-loggedout').classList.toggle('hidden', inOut);
+  $('#mc-loggedin').classList.toggle('hidden', !inOut);
+  if (!inOut) return;
+  $('#mc-name').textContent = v.name || '—';
+  const expired = v.expiresAt && Date.now() > v.expiresAt && !v.canRefresh;
+  $('#mc-warn-expired').classList.toggle('hidden', !expired);
+  const grid = $('#mc-capes');
+  grid.innerHTML = '';
+  const capes = v.capes || [];
+  if (!capes.length) {
+    grid.innerHTML = '<p class="muted">Aucune cape officielle sur ce compte. (Les capes s’obtiennent via Mojang : Migrator, MineCon, éditions spéciales…)</p>';
+    return;
+  }
+  // Carte « Aucune cape » (masquer) + une carte par cape possédée.
+  const none = document.createElement('div');
+  const anyActive = capes.some((c) => c.state === 'ACTIVE');
+  none.className = 'cape mc-cape' + (!anyActive ? ' active' : '');
+  none.innerHTML = `<div class="thumb mc-none">🚫</div>
+    <div class="name">Aucune cape</div>
+    <div class="cape-actions"><button class="btn small act-hide">${!anyActive ? '✓ Aucune' : 'Masquer'}</button></div>`;
+  none.querySelector('.act-hide').addEventListener('click', () => mcHide());
+  grid.appendChild(none);
+  for (const c of capes) {
+    const active = c.state === 'ACTIVE';
+    const el = document.createElement('div');
+    el.className = 'cape mc-cape' + (active ? ' active' : '');
+    // La texture de cape officielle est une image distante (mojang) — la CSP stricte
+    // interdit les hôtes externes. On affiche donc une vignette générique + l'alias.
+    el.innerHTML = `
+      <div class="thumb mc-none">🎽</div>
+      ${active ? '<span class="badge">active</span>' : ''}
+      <div class="name" title="${esc(c.alias)}">${esc(c.alias)}</div>
+      <div class="cape-actions"><button class="btn small act-use">${active ? '✓ Active' : 'Activer'}</button></div>`;
+    el.querySelector('.act-use').addEventListener('click', () => { if (!active) mcSetCape(c.id); });
+    grid.appendChild(el);
+  }
+}
+
+async function loadMc() {
+  const r = await window.cap.mc.status();
+  renderMc(r);
+}
+
+async function mcSetCape(id) {
+  if (mcBusy) return; mcBusy = true;
+  toast('Activation de la cape…');
+  const r = await window.cap.mc.setCape(id);
+  mcBusy = false;
+  if (r.ok) { renderMc(r); toast('Cape officielle activée ✔', 'ok'); }
+  else toast(r.error || 'Activation impossible', 'err');
+}
+
+async function mcHide() {
+  if (mcBusy) return; mcBusy = true;
+  toast('Masquage de la cape…');
+  const r = await window.cap.mc.hideCape();
+  mcBusy = false;
+  if (r.ok) { renderMc(r); toast('Cape masquée ✔', 'ok'); }
+  else toast(r.error || 'Masquage impossible', 'err');
+}
+
+$('#mc-refresh').addEventListener('click', async () => {
+  toast('Rafraîchissement…');
+  const r = await window.cap.mc.refresh();
+  if (r.ok) { renderMc(r); toast('Profil à jour ✔', 'ok'); }
+  else toast(r.error || 'Erreur', 'err');
+});
+
+$('#mc-logout').addEventListener('click', async () => {
+  await window.cap.mc.logout();
+  renderMc({ connected: false });
+  toast('Déconnecté.', 'ok');
+});
+
+$('#mc-login-token').addEventListener('click', async () => {
+  const token = $('#mc-token').value.trim();
+  if (!token) return toast('Colle un token.', 'err');
+  toast('Connexion…');
+  const r = await window.cap.mc.loginToken(token);
+  if (r.ok) { $('#mc-token').value = ''; renderMc(r); toast('Connecté ✔', 'ok'); }
+  else toast(r.error || 'Connexion impossible', 'err');
+});
+
+$('#mc-login-ms').addEventListener('click', async () => {
+  $('#mc-login-ms').disabled = true;
+  $('#mc-code-box').classList.remove('hidden');
+  $('#mc-code-val').textContent = '…';
+  toast('Ouverture de la connexion Microsoft…');
+  const r = await window.cap.mc.loginMicrosoft();
+  $('#mc-login-ms').disabled = false;
+  $('#mc-code-box').classList.add('hidden');
+  if (r.ok) { renderMc(r); toast('Connecté ✔', 'ok'); }
+  else toast(r.error || 'Connexion Microsoft annulée/échouée', 'err');
+});
+
+$('#mc-cancel').addEventListener('click', async () => {
+  await window.cap.mc.cancelLogin();
+  $('#mc-code-box').classList.add('hidden');
+  $('#mc-login-ms').disabled = false;
+});
+
+// Le lien est informatif : le main ouvre déjà la page automatiquement.
+$('#mc-code-link').addEventListener('click', (e) => e.preventDefault());
+
+// Le main pousse le code à saisir pendant le device-code Microsoft.
+window.cap.on('mc-code', (d) => {
+  $('#mc-code-box').classList.remove('hidden');
+  $('#mc-code-val').textContent = d.userCode || '——';
+  const link = $('#mc-code-link');
+  if (link && d.verificationUri) { link.textContent = d.verificationUri; link.href = d.verificationUri; }
+});
+
 // ---------- Joueurs ----------
 async function loadPlayers() {
   const list = $('#players-list');
@@ -515,6 +633,7 @@ async function loadSettings() {
   $('#in-autoproxy').checked = s.autoProxy;
   $('#in-repo').value = s.repo || '';
   $('#in-branch').value = s.branch || '';
+  $('#in-mc-clientid').value = s.mcClientId || '';
   $('#token-state').textContent = s.hasToken ? '· enregistré' : '· non défini';
   if (!r.encryption) $('#token-state').textContent += ' (⚠ chiffrement indisponible)';
 }
@@ -526,6 +645,7 @@ $('#btn-save').addEventListener('click', async () => {
     autoProxy: $('#in-autoproxy').checked,
     repo: $('#in-repo').value,
     branch: $('#in-branch').value,
+    mcClientId: $('#in-mc-clientid').value,
   });
   const tok = $('#in-token').value;
   if (tok) { await window.cap.settings.setToken(tok); $('#in-token').value = ''; }
