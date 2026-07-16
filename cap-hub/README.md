@@ -16,10 +16,12 @@
 
 ## ✨ Ce que ça fait
 
-- **🎨 Ta cape sur ton perso.** Importe un PNG (ou choisis parmi **62 capes intégrées**,
-  dont une **palette unie complète** — tout le spectre + neutres) et Cap Hub l'affiche
-  sur ton personnage dans **tous les clients compatibles OptiFine** : vanilla+OptiFine,
-  Forge+OptiFine, Lunar, Feather… Aucun client à modifier.
+- **🎨 Ta cape sur ton perso.** Importe un **PNG** (jusqu'en **4K**), un **GIF** (cape
+  **animée**) ou n'importe quelle image (recadrée), ou choisis parmi **62 capes
+  intégrées** — Cap Hub l'affiche sur ton personnage dans **tous les clients compatibles
+  OptiFine** : vanilla+OptiFine, Forge+OptiFine, Lunar, Feather… Aucun client à modifier.
+  *(Les capes animées défilent dans l'aperçu 3D ; en jeu via OptiFine, la 1ʳᵉ image est
+  affichée — OptiFine n'anime pas les capes.)*
 - **✨ Créateur de capes.** Compose ta propre cape dans l'app : motifs (uni, dégradé,
   rayures, damier, diagonales), **éditeur pixel par pixel** (pinceau/gomme/remplir), ou
   **depuis n'importe quelle image** (recadrée : remplir/contenir/étirer) — **aperçu 3D en
@@ -92,9 +94,9 @@ npm install
 npm start          # lance l'app (Windows)
 ```
 
-1. **Mes capes** → *Importer des PNG* (64×32 ou multiples HD, ou 46×22 OptiFine) puis
-   *Utiliser*. **62 capes** sont déjà fournies ; mets tes préférées en favori (★),
-   renomme-les, cherche/trie. Ou **Créateur** → compose la tienne.
+1. **Mes capes** → *Importer* un **PNG** (64×32 → HD/4K), un **GIF** (cape animée) ou
+   une image, puis *Utiliser*. **62 capes** sont déjà fournies ; favoris (★), renommage,
+   recherche/tri/dossiers. Ou **Créateur** → compose la tienne.
 2. **Réglages** → renseigne **ton pseudo Minecraft**, choisis ton **thème**.
 3. Clique **⚡ Appliquer Cap Hub** (une fenêtre admin s'affiche la première fois pour
    la redirection `hosts`). Relance/rejoins un monde : ta cape apparaît.
@@ -131,7 +133,7 @@ npm start          # lance l'app (Windows)
 ```bash
 npm install               # dépendances de build (Electron) — sur ton PC Windows
 npm run icon              # (re)génère build/icon.png + .ico (pur Node)
-npm test                  # 33 tests : capes, réglages, registre (anti-écrasement), fournisseur OptiFine, géométrie, proxy HTTP
+npm test                  # 43 tests : capes (animées/HD), PNG, registre, réglages, fournisseur OptiFine, géométrie, proxy HTTP
 npm run dist              # → dist/Cap Hub Setup <version>.exe (NSIS) + Cap Hub <version> portable.exe
 npm run publish:update    # SHA-256 + Release GitHub + maj cap-hub/version.json
 ```

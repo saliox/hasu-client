@@ -256,12 +256,69 @@ async function removeCape(id, name) {
   else toast(r.error || 'Erreur', 'err');
 }
 
+// ---------- Import (PNG / GIF animé / image recadrée) ----------
+function loadImage(src) {
+  return new Promise((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = src; });
+}
+// Une image de dimensions (w,h) est-elle déjà une texture de cape (vanilla/HD/animée ou OptiFine) ?
+function isCapeShape(w, h) {
+  const vs = w / 64;
+  if (Number.isInteger(vs) && vs >= 1 && vs <= 64 && h % (32 * vs) === 0 && h / (32 * vs) <= 64) return true;
+  const os = w / 46;
+  return Number.isInteger(os) && os >= 1 && os <= 64 && h === 22 * os;
+}
+// Dessine img en "cover" (rogne) dans le rectangle (dx,dy,dw,dh).
+function drawCover(ctx, img, dx, dy, dw, dh) {
+  const iw = img.naturalWidth || img.displayWidth || img.codedWidth || dw;
+  const ih = img.naturalHeight || img.displayHeight || img.codedHeight || dh;
+  const s = Math.max(dw / iw, dh / ih), w = iw * s, h = ih * s;
+  ctx.drawImage(img, dx + (dw - w) / 2, dy + (dh - h) / 2, w, h);
+}
+function fitImageToCape(img) {
+  const cv = document.createElement('canvas'); cv.width = 64; cv.height = 32;
+  const c = cv.getContext('2d'); c.imageSmoothingEnabled = true;
+  drawCover(c, img, 0, 0, 64, 32);
+  return cv.toDataURL('image/png');
+}
+// GIF -> cape ANIMÉE : chaque image du GIF devient une image 64×32 empilée verticalement.
+async function gifToCape(dataUrl) {
+  if (!('ImageDecoder' in window)) return fitImageToCape(await loadImage(dataUrl)); // repli : 1re image statique
+  const bytes = Uint8Array.from(atob(dataUrl.split(',')[1]), (ch) => ch.charCodeAt(0));
+  const dec = new ImageDecoder({ data: bytes, type: 'image/gif' });
+  await dec.tracks.ready;
+  const total = dec.tracks.selectedTrack?.frameCount || 1;
+  const count = Math.min(total, 24); // borne la hauteur / le poids
+  const cv = document.createElement('canvas'); cv.width = 64; cv.height = 32 * count;
+  const c = cv.getContext('2d');
+  for (let i = 0; i < count; i++) {
+    const { image } = await dec.decode({ frameIndex: i });
+    drawCover(c, image, 0, i * 32, 64, 32);
+    image.close?.();
+  }
+  return cv.toDataURL('image/png');
+}
+async function buildCapeFromFile(f) {
+  if (f.ext === 'gif') return await gifToCape(f.dataUrl);
+  const img = await loadImage(f.dataUrl);
+  if (f.ext === 'png' && isCapeShape(img.naturalWidth, img.naturalHeight)) return f.dataUrl; // vraie cape (HD/4K/animée) telle quelle
+  return fitImageToCape(img); // sinon on recadre en 64×32
+}
+
 $('#btn-import').addEventListener('click', async () => {
   const r = await window.cap.capes.import();
-  if (r.ok) {
-    toast(`${r.imported} cape(s) importée(s) ✔${r.failed ? ` (${r.failed} rejetée(s))` : ''}`, 'ok');
-    loadCapes();
-  } else if (!r.canceled) toast(r.error || 'Import impossible', 'err');
+  if (!r.ok) { if (!r.canceled) toast(r.error || 'Import impossible', 'err'); return; }
+  toast(`Traitement de ${r.files.length} fichier(s)…`);
+  let ok = 0, fail = 0;
+  for (const f of r.files) {
+    if (f.tooBig) { fail++; continue; }
+    try {
+      const url = await buildCapeFromFile(f);
+      const res = url && await window.cap.capes.create(f.name, url);
+      if (res && res.ok) ok++; else fail++;
+    } catch { fail++; }
+  }
+  toast(`${ok} cape(s) importée(s) ✔${fail ? ` (${fail} rejetée(s))` : ''}`, ok ? 'ok' : 'err');
+  if (ok) loadCapes();
 });
 
 $('#btn-apply').addEventListener('click', async () => {

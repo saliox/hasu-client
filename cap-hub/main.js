@@ -210,20 +210,26 @@ ipcMain.handle('capes:pickImage', async () => {
   const mime = ext === 'jpg' ? 'jpeg' : (ext || 'png');
   return { ok: true, dataUrl: `data:image/${mime};base64,` + buf.toString('base64') };
 });
+// Ouvre le sélecteur (PNG / GIF / image) et renvoie les fichiers en data URL. Le
+// renderer convertit ensuite (GIF -> cape animée empilée, image -> recadrée, PNG de
+// cape HD/4K -> tel quel) puis enregistre via capes:create.
 ipcMain.handle('capes:import', async () => {
   const r = await dialog.showOpenDialog(win, {
-    title: 'Choisir un ou plusieurs PNG de cape',
-    filters: [{ name: 'Cape PNG', extensions: ['png'] }],
+    title: 'Importer des capes (PNG, GIF, image)',
+    filters: [{ name: 'Capes et images', extensions: ['png', 'gif', 'jpg', 'jpeg', 'webp', 'bmp'] }],
     properties: ['openFile', 'multiSelections'],
   });
   if (r.canceled || !r.filePaths.length) return { ok: false, canceled: true };
-  let imported = 0; const errors = [];
+  const files = [];
   for (const p of r.filePaths) {
-    const res = importCape(p);
-    if (res.ok) imported++; else errors.push(res.error);
+    let buf;
+    try { buf = fs.readFileSync(p); } catch { continue; }
+    if (buf.length > 12 * 1024 * 1024) { files.push({ name: path.basename(p), tooBig: true }); continue; }
+    const ext = path.extname(p).toLowerCase().replace('.', '');
+    const mime = ext === 'jpg' ? 'jpeg' : (ext || 'png');
+    files.push({ name: path.basename(p, path.extname(p)).slice(0, 40) || 'cape', ext, dataUrl: `data:image/${mime};base64,` + buf.toString('base64') });
   }
-  if (!imported) return { ok: false, error: errors[0] || 'Aucune cape importée.' };
-  return { ok: true, imported, failed: errors.length };
+  return { ok: true, files };
 });
 ipcMain.handle('capes:remove', (_e, id) => {
   const s = getSettings();
@@ -254,7 +260,7 @@ ipcMain.handle('capes:create', (_e, name, dataUrl) => {
   if (!m) return { ok: false, error: 'Image invalide.' };
   let buf;
   try { buf = Buffer.from(m[1], 'base64'); } catch { return { ok: false, error: 'Décodage impossible.' }; }
-  if (buf.length > 2 * 1024 * 1024) return { ok: false, error: 'Image trop lourde.' };
+  if (buf.length > 12 * 1024 * 1024) return { ok: false, error: 'Image trop lourde (max 12 Mo).' };
   return importCapeBuffer(buf, name || 'Ma cape');
 });
 ipcMain.handle('capes:favorite', (_e, id, on) => {
