@@ -20,20 +20,29 @@ export function initCapes(userDataDir) {
 }
 
 // ---------- Validation ----------
+// Accepte : disposition vanilla 64x32 et ses multiples HD/4K (jusqu'à 4096x2048),
+// les capes ANIMÉES (N images 64s×32s empilées verticalement), et la disposition
+// OptiFine 46x22 (+ multiples).
 export function validateCape(buf) {
   if (!isPng(buf)) return { ok: false, error: 'Le fichier n’est pas un PNG valide.' };
-  if (buf.length > 2 * 1024 * 1024) return { ok: false, error: 'PNG trop lourd (max 2 Mo).' };
+  if (buf.length > 12 * 1024 * 1024) return { ok: false, error: 'PNG trop lourd (max 12 Mo).' };
   const size = readPngSize(buf);
   if (!size) return { ok: false, error: 'Impossible de lire la taille du PNG.' };
   const { width: w, height: h } = size;
-  const vanillaScale = w / 64;
-  const optifineScale = w / 46;
-  const okVanilla = Number.isInteger(vanillaScale) && vanillaScale >= 1 && vanillaScale <= 32 && h === 32 * vanillaScale;
-  const okOptifine = Number.isInteger(optifineScale) && optifineScale >= 1 && optifineScale <= 32 && h === 22 * optifineScale;
-  if (!okVanilla && !okOptifine) {
-    return { ok: false, error: `Taille ${w}x${h} non reconnue. Attendu : 64x32 (ou multiple) ou 46x22 (ou multiple).` };
+
+  let okVanilla = false, frames = 1;
+  const vs = w / 64;                                   // échelle HD (1 = 64px, 64 = 4096px)
+  if (Number.isInteger(vs) && vs >= 1 && vs <= 64) {
+    const base = 32 * vs;
+    if (h % base === 0) { const fr = h / base; if (fr >= 1 && fr <= 64) { okVanilla = true; frames = fr; } }
   }
-  return { ok: true, width: w, height: h, layout: okVanilla ? 'vanilla' : 'optifine' };
+  const os = w / 46;
+  const okOptifine = Number.isInteger(os) && os >= 1 && os <= 64 && h === 22 * os;
+
+  if (!okVanilla && !okOptifine) {
+    return { ok: false, error: `Taille ${w}x${h} non reconnue. Attendu : 64x32 (ou multiple HD), 64x${32 * 2}… (animée) ou 46x22 (ou multiple).` };
+  }
+  return { ok: true, width: w, height: h, layout: okVanilla ? 'vanilla' : 'optifine', frames: okVanilla ? frames : 1 };
 }
 
 // ---------- Import / liste ----------

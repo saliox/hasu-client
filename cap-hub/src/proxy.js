@@ -13,6 +13,7 @@
 import http from 'node:http';
 import { EventEmitter } from 'node:events';
 import { hostIndex, enabledHosts } from './providers.js';
+import { firstFrameIfAnimated } from './png.js';
 
 export const proxyEvents = new EventEmitter(); // 'log' { level, msg, t }
 const log = (level, msg) => proxyEvents.emit('log', { level, msg, t: Date.now() });
@@ -88,12 +89,13 @@ async function handle(req, res) {
   if (!parsed) { res.writeHead(404); return res.end(); }
   const name = parsed.key;
 
-  // 1/2) Notre cape (toi puis registre).
+  // 1/2) Notre cape (toi puis registre). Une cape animée (images empilées) n'est pas
+  // affichable par OptiFine -> on sert sa 1re image (PNG valide 64x32/HD).
   let capePng = null;
   for (const src of ['own', 'registry']) {
     try {
       const buf = src === 'own' ? await deps.getOwn(name.toLowerCase()) : await deps.getRegistryCape(name.toLowerCase());
-      if (buf) { capePng = buf; break; }
+      if (buf) { capePng = firstFrameIfAnimated(buf); break; }
     } catch {}
   }
 

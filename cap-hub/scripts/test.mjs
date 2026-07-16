@@ -12,7 +12,7 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const S = (f) => pathToFileURL(path.join(root, 'src', f)).href;
 
 const { initCapes, listCapes, importCape, importCapeBuffer, validateCape, readCape, resolveCape, renameCape } = await import(S('capes.js'));
-const { isPng, readPngSize, encodePNG } = await import(S('png.js'));
+const { isPng, readPngSize, encodePNG, decodePNG, firstFrameIfAnimated, capeFrames } = await import(S('png.js'));
 const providers = await import(S('providers.js'));
 const proxy = await import(S('proxy.js'));
 const geom = await import(S('capegeom.js'));
@@ -31,6 +31,15 @@ ok('palette unie présente (Uni …)', capes.filter((c) => c.builtin && c.name.s
 ok('cape intégrée 64x32 PNG', (() => { const b = readCape(capes[0].id); return isPng(b) && readPngSize(b).width === 64; })());
 ok('valide 64x32 / 46x22, rejette 40x40',
   validateCape(mkPng(64, 32)).ok && validateCape(mkPng(46, 22)).ok && !validateCape(mkPng(40, 40)).ok);
+ok('accepte animée 64x64 (2 img)', (() => { const v = validateCape(mkPng(64, 64)); return v.ok && v.frames === 2; })());
+ok('accepte animée 64x96 (3 img)', validateCape(mkPng(64, 96)).frames === 3);
+ok('accepte HD 256x128', validateCape(mkPng(256, 128)).ok && validateCape(mkPng(256, 128)).frames === 1);
+ok('accepte 4K 4096x2048', validateCape(mkPng(4096, 2048)).ok);
+ok('rejette 64x48 (hauteur invalide)', validateCape(mkPng(64, 48)).ok === false);
+ok('capeFrames 64x64=2, 128x64=1', capeFrames(64, 64) === 2 && capeFrames(128, 64) === 1);
+ok('firstFrameIfAnimated 64x64 -> 64x32', (() => { const ff = firstFrameIfAnimated(mkPng(64, 64)); const s = readPngSize(ff); return s.width === 64 && s.height === 32; })());
+ok('firstFrameIfAnimated laisse une cape fixe intacte', (() => { const p = mkPng(64, 32); return firstFrameIfAnimated(p) === p; })());
+ok('decodePNG round-trip couleur', (() => { const p = encodePNG(2, 1, Buffer.from([10, 20, 30, 255, 40, 50, 60, 255])); const d = decodePNG(p); return d && d.rgba[0] === 10 && d.rgba[6] === 60; })());
 const src = path.join(ud, 'in.png'); fs.writeFileSync(src, mkPng(64, 32));
 const imp = importCape(src, 'x/../y');
 ok('import assaini (pas de ..)', imp.ok && !imp.id.includes('..'));
@@ -71,8 +80,9 @@ console.log('\n# Proxy HTTP (OptiFine)');
 const myCape = readCape(rn.id); // cape importée puis renommée
 const regCape = readCape(capes[0].id);
 // Relais amont injecté : 404 partout (aucun réseau).
+const animCape = mkPng(64, 64); // cape animée (2 images)
 const deps = {
-  getOwn: async (n) => (n === 'notch' ? myCape : null),
+  getOwn: async (n) => (n === 'notch' ? myCape : n === 'anim' ? animCape : null),
   getRegistryCape: async (n) => (n === 'dieu' ? regCape : null),
   upstream: async () => ({ status: 0, body: null }),
 };
@@ -89,6 +99,8 @@ const a = await get('s.optifine.net', '/capes/Notch.png');
 ok('sert MA cape (PNG 200)', a.status === 200 && isPng(a.buf));
 const b = await get('s.optifine.net', '/capes/Dieu.png');
 ok('sert cape registre (PNG 200)', b.status === 200 && isPng(b.buf));
+const an = await get('s.optifine.net', '/capes/Anim.png');
+ok('cape animée servie en 1re frame 64x32', an.status === 200 && readPngSize(an.buf).height === 32);
 const c = await get('s.optifine.net', '/capes/Personne.png');
 ok('inconnu (relais vide) -> 404', c.status === 404);
 const d = await get('s.optifine.net', '/capes/bad$name.png');
