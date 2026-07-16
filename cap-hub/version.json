@@ -1,7 +1,7 @@
 {
-  "version": "0.8.1",
-  "url": "https://github.com/saliox/hasu-client/releases/download/cap-hub-v0.8.1/Cap.Hub.Setup.0.8.1.exe",
-  "sha256": "796bc64f210a77d95fd28c380465d0fa593e0f4c5886842254c6ba3045eeac2a",
-  "notes": "Cap Hub 0.8.1 — correctifs : perte de données du registre évitée (fusion sur le distant), perf UI (cache), collision de cache, toggle cape active.",
-  "pubDate": "2026-07-15T15:54:45.512Z"
+  "version": "0.8.2",
+  "url": "https://github.com/saliox/hasu-client/releases/download/cap-hub-v0.8.2/Cap.Hub.Setup.0.8.2.exe",
+  "sha256": "669efc1cf2e805363d6f2c8df0c505de07b9f66f3e2041d7089ed6dc6b316d4c",
+  "notes": "Cap Hub 0.8.2 — import de capes GIF (animées) et PNG HD/4K ; le proxy sert la 1re image aux clients OptiFine.",
+  "pubDate": "2026-07-16T10:19:27.343Z"
 }
