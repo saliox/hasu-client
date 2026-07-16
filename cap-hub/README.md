@@ -33,6 +33,11 @@
 - **👥 Vous vous voyez entre vous.** Tous les joueurs Cap Hub partagent un **registre
   commun** : leurs capes s'affichent chez toi, la tienne s'affiche chez eux — sur
   **tous les serveurs**, en même temps que les capes OptiFine officielles des autres.
+- **🎖️ Tes capes officielles Mojang.** Connecte **ton** compte Minecraft (**Microsoft**
+  en device-code comme le launcher, ou **token** direct) et **active/masque** tes capes
+  officielles (Migrator, MineCon, Vanilla…) via l'**API officielle** Mojang — visibles
+  partout, **sans OptiFine ni redirection**. Ta session est **chiffrée** au repos ; Cap Hub
+  ne gère que **ton** compte, jamais celui d'un tiers.
 - **🧊 Aperçu 3D dans l'app.** Vois ta cape en **3D** — tissu qui ondule, rotation douce
   et éclairage — sans lancer Minecraft ; les capes **animées** (images empilées, ex.
   64×64) défilent toutes seules.
@@ -110,6 +115,20 @@ npm start          # lance l'app (Windows)
   les autres joueurs Cap Hub te voient au rafraîchissement suivant.
 - Sans token, tu peux quand même appliquer et voir les capes déjà publiées.
 
+### Gérer tes capes officielles (compte Minecraft)
+
+- **Réglages → Compte Minecraft officiel** → colle ton **Azure Client ID** (public,
+  non secret — **le même que Hasu Client**). Requis pour la connexion Microsoft ; la
+  connexion par token n'en a pas besoin.
+- **Compte officiel** → **🔐 Se connecter avec Microsoft** (une page Microsoft s'ouvre,
+  tu saisis le code affiché — aucun mot de passe demandé par Cap Hub) **ou** colle un
+  **access token** Minecraft.
+- Tes **capes officielles Mojang** s'affichent : clique pour **activer** l'une d'elles ou
+  **masquer** ta cape. Le changement est appliqué **côté Mojang** immédiatement (API
+  officielle `api.minecraftservices.com`), visible sur tous les serveurs sans OptiFine.
+- Ta session (tokens) est **chiffrée** au repos via `safeStorage` (DPAPI). Cap Hub agit
+  uniquement sur **ton** compte.
+
 ---
 
 ## 🔒 Sécurité & respect des règles
@@ -133,7 +152,7 @@ npm start          # lance l'app (Windows)
 ```bash
 npm install               # dépendances de build (Electron) — sur ton PC Windows
 npm run icon              # (re)génère build/icon.png + .ico (pur Node)
-npm test                  # 43 tests : capes (animées/HD), PNG, registre, réglages, fournisseur OptiFine, géométrie, proxy HTTP
+npm test                  # 61 tests : capes (animées/HD), PNG, registre, réglages, fournisseur OptiFine, géométrie, proxy HTTP, compte Minecraft officiel
 npm run dist              # → dist/Cap Hub Setup <version>.exe (NSIS) + Cap Hub <version> portable.exe
 npm run publish:update    # SHA-256 + Release GitHub + maj cap-hub/version.json
 ```
@@ -162,7 +181,7 @@ installeur vérifié par SHA-256. Aucun serveur, aucune IP. **Zéro dépendance 
 cap-hub/
   main.js                processus principal : câble proxy + hosts + registre + watcher + update
   preload.cjs            pont IPC verrouillé
-  renderer/              UI (index.html, style.css, app.js, preview.js) — onglets Capes/Créateur/Joueurs/État/Réglages
+  renderer/              UI (index.html, style.css, app.js, preview.js) — onglets Capes/Créateur/Compte officiel/Joueurs/État/Réglages
   src/
     proxy.js             proxy local de capes (HTTP :80, own > registre > relais OptiFine)
     providers.js         fournisseur OptiFine (parse/render)
@@ -171,7 +190,8 @@ cap-hub/
     watcher.js           détection du lancement de Minecraft (tout client)
     registry.js          registre partagé GitHub (lecture raw + publication API)
     capes.js             bibliothèque locale + validation + capes intégrées
-    store.js             réglages + token chiffré (safeStorage)
+    mcaccount.js         compte Minecraft officiel (MS device-code/token) + capes Mojang (API officielle)
+    store.js             réglages + token chiffré + session Minecraft chiffrée (safeStorage)
     updater.js           auto-update SHA-256
     png.js               encodeur PNG / lecture de taille (zéro dépendance)
   registry/              registre public servi en raw (capes.json + capes/*.png)

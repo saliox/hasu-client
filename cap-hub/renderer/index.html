@@ -26,6 +26,7 @@
   <nav class="tabs">
     <button class="tab active" data-tab="capes">🎽 Mes capes</button>
     <button class="tab" data-tab="creator">🎨 Créateur</button>
+    <button class="tab" data-tab="official">🎖️ Compte officiel</button>
     <button class="tab" data-tab="players">👥 Joueurs</button>
     <button class="tab" data-tab="status">🛰️ État</button>
     <button class="tab" data-tab="settings">⚙️ Réglages</button>
@@ -156,6 +157,59 @@
       <canvas id="cr-canvas" width="64" height="32" style="display:none"></canvas>
     </section>
 
+    <!-- COMPTE MINECRAFT OFFICIEL -->
+    <section id="tab-official" class="panel">
+      <div class="row between">
+        <div>
+          <h2>Compte Minecraft officiel</h2>
+          <p class="muted">Connecte <b>ton</b> compte Minecraft (Microsoft ou token) pour gérer tes <b>capes officielles Mojang</b> — celles que tu possèdes réellement (Migrator, MineCon, Vanilla…). L'activation se fait via l'API officielle : la cape est visible partout, <b>sans OptiFine ni redirection</b>.</p>
+        </div>
+      </div>
+
+      <!-- Non connecté -->
+      <div id="mc-loggedout" class="mc-box">
+        <div class="mc-connect">
+          <div class="card">
+            <h3>Connexion Microsoft</h3>
+            <p class="muted">Ouvre une page Microsoft et saisis le code affiché (comme le launcher officiel). Aucun mot de passe n'est demandé par Cap Hub.</p>
+            <div id="mc-code-box" class="mc-code hidden">
+              <p class="muted">Sur la page Microsoft, saisis ce code :</p>
+              <div class="mc-code-val" id="mc-code-val">——</div>
+              <a href="#" id="mc-code-link" class="muted">Ouvrir la page de connexion</a>
+              <div><button id="mc-cancel" class="btn small">Annuler</button></div>
+            </div>
+            <div class="card-actions">
+              <button id="mc-login-ms" class="btn primary">🔐 Se connecter avec Microsoft</button>
+            </div>
+            <small class="muted">Nécessite un <b>Azure Client ID</b> (Réglages → Compte Minecraft) — le même que Hasu Client.</small>
+          </div>
+          <div class="card">
+            <h3>Connexion par token</h3>
+            <p class="muted">Colle un <b>access token</b> Minecraft (Bearer) valide si tu en as déjà un.</p>
+            <label>Access token Minecraft
+              <input id="mc-token" type="password" placeholder="eyJ… (Bearer)" autocomplete="off" />
+            </label>
+            <div class="card-actions">
+              <button id="mc-login-token" class="btn">Se connecter par token</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Connecté -->
+      <div id="mc-loggedin" class="mc-box hidden">
+        <div class="banner">
+          Connecté en tant que <b id="mc-name">—</b>.
+          <button id="mc-refresh" class="btn small">🔄 Rafraîchir</button>
+          <button id="mc-logout" class="btn small danger">Se déconnecter</button>
+        </div>
+        <div id="mc-warn-expired" class="banner warn hidden">Session expirée — reconnecte-toi pour gérer tes capes.</div>
+        <h3>Tes capes officielles</h3>
+        <p class="muted">Clique pour activer une cape sur ton compte, ou masque-la. Le changement est appliqué côté Mojang immédiatement.</p>
+        <div id="mc-capes" class="grid"></div>
+      </div>
+    </section>
+
     <!-- JOUEURS -->
     <section id="tab-players" class="panel">
       <div class="row between">
@@ -229,6 +283,14 @@
           <input id="in-autoproxy" type="checkbox" />
           Démarrer le proxy automatiquement au lancement de l'app
         </label>
+
+        <fieldset>
+          <legend>Compte Minecraft officiel</legend>
+          <label>Azure Client ID
+            <input id="in-mc-clientid" type="text" placeholder="ex. 00000000-0000-0000-0000-000000000000" autocomplete="off" />
+            <small class="muted">ID d'application Azure (public, non secret) pour la connexion Microsoft — le <b>même que Hasu Client</b>. Requis pour « Se connecter avec Microsoft ». La connexion par token n'en a pas besoin.</small>
+          </label>
+        </fieldset>
 
         <fieldset>
           <legend>Publication (registre partagé)</legend>

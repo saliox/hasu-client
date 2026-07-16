@@ -50,9 +50,21 @@ contextBridge.exposeInMainWorld('cap', {
     apply: () => invoke('update:apply'),
   },
 
+  // Compte Minecraft officiel (capes officielles Mojang).
+  mc: {
+    status: () => invoke('mc:status'),
+    loginToken: (token) => invoke('mc:loginToken', token),
+    loginMicrosoft: () => invoke('mc:loginMicrosoft'),
+    cancelLogin: () => invoke('mc:cancelLogin'),
+    logout: () => invoke('mc:logout'),
+    refresh: () => invoke('mc:refresh'),
+    setCape: (capeId) => invoke('mc:setCape', capeId),
+    hideCape: () => invoke('mc:hideCape'),
+  },
+
   // Événements poussés par le main -> UI.
   on: (channel, cb) => {
-    const allowed = ['log', 'game-start', 'game-stop', 'update-status', 'proxy-changed'];
+    const allowed = ['log', 'game-start', 'game-stop', 'update-status', 'proxy-changed', 'mc-code'];
     if (!allowed.includes(channel)) return () => {};
     const h = (_e, data) => cb(data);
     ipcRenderer.on(channel, h);

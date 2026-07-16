@@ -36,12 +36,17 @@ export function getSettings() {
     favorites: Array.isArray(s.favorites) ? s.favorites.filter((x) => typeof x === 'string') : [],
     // Catégorie (dossier) par cape : { id -> nom }. Surcharge la catégorie auto.
     categories: (s.categories && typeof s.categories === 'object') ? s.categories : {},
+    // ID d'application Azure (public client) pour la connexion Microsoft — le même que
+    // Hasu Client. Public par nature (non secret), stocké en clair. La session Minecraft
+    // (tokens) est stockée à part, chiffrée (voir setMcSession/getMcSession).
+    mcClientId: typeof s.mcClientId === 'string' ? s.mcClientId : '',
+    hasMcSession: !!s.mcSessionEnc,
   };
 }
 
 export function saveSettings(patch) {
   const s = read();
-  for (const k of ['username', 'activeCape', 'repo', 'branch', 'theme']) {
+  for (const k of ['username', 'activeCape', 'repo', 'branch', 'theme', 'mcClientId']) {
     if (typeof patch[k] === 'string') s[k] = patch[k].trim();
   }
   for (const k of ['autoApply', 'autoProxy']) {
@@ -85,3 +90,30 @@ export function getToken() {
   }
   return s.tokenPlain || null;
 }
+
+// --- Session Minecraft officielle (compte perso) ---
+// La session contient des tokens sensibles (accessToken Minecraft, refresh token
+// Microsoft) : elle est chiffrée au repos via safeStorage. Si le chiffrement n'est pas
+// disponible, on REFUSE de la persister (pas de repli en clair pour des tokens).
+export function setMcSession(session) {
+  const s = read();
+  if (!session) { delete s.mcSessionEnc; write(s); return { ok: true, cleared: true }; }
+  if (!encAvailable()) return { ok: false, error: 'Chiffrement indisponible : session non enregistrée (reconnexion nécessaire à chaque lancement).' };
+  try {
+    s.mcSessionEnc = safe.encryptString(JSON.stringify(session)).toString('base64');
+    write(s);
+    return { ok: true, encrypted: true };
+  } catch {
+    return { ok: false, error: 'Chiffrement de la session impossible.' };
+  }
+}
+
+export function getMcSession() {
+  const s = read();
+  if (s.mcSessionEnc && encAvailable()) {
+    try { return JSON.parse(safe.decryptString(Buffer.from(s.mcSessionEnc, 'base64'))); } catch { return null; }
+  }
+  return null;
+}
+
+export function clearMcSession() { return setMcSession(null); }

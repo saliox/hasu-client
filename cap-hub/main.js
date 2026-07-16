@@ -13,7 +13,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { initCapes, listCapes, importCape, importCapeBuffer, deleteCape, renameCape, resolveCape, readCape } from './src/capes.js';
-import { initStore, getSettings, saveSettings, setToken, getToken } from './src/store.js';
+import { initStore, getSettings, saveSettings, setToken, getToken, setMcSession, getMcSession, clearMcSession } from './src/store.js';
+import * as mc from './src/mcaccount.js';
 import { startProxy, stopProxy, isRunning, getStats, proxyEvents, redirectHosts } from './src/proxy.js';
 import { isApplied, applyRedirect, removeRedirect, appliedHosts } from './src/hosts.js';
 import { initRegistry, configureRegistry, refreshIndex, listPlayers, getRegistryCape, publishCape } from './src/registry.js';
@@ -329,3 +330,129 @@ ipcMain.handle('games:current', () => ({ ok: true, games: currentGames() }));
 
 ipcMain.handle('update:check', () => doUpdateCheck(false));
 ipcMain.handle('update:apply', () => applyUpdate(() => app.quit()));
+
+// ---------- Compte Minecraft officiel (capes officielles) ----------
+// Vue publique d'une session : jamais de token vers l'UI, seulement le profil utile.
+function mcView(session) {
+  if (!session || !session.profile) return { connected: false };
+  const p = session.profile;
+  const capes = (p.capes || []).map((c) => ({ id: c.id, alias: c.alias || c.id, state: c.state, url: c.url }));
+  return {
+    connected: true,
+    name: p.name,
+    id: p.id,
+    capes,
+    activeCapeId: (capes.find((c) => c.state === 'ACTIVE') || {}).id || '',
+    expiresAt: session.expiresAt || null,
+    canRefresh: !!session.msRefreshToken,
+  };
+}
+
+// Renvoie une session Minecraft avec un accessToken valide : rafraîchit via le refresh
+// token Microsoft si expiré (et si dispo). Persiste la session rafraîchie.
+async function ensureMcSession() {
+  const session = getMcSession();
+  if (!session) return null;
+  const fresh = session.expiresAt && Date.now() < session.expiresAt - 30000;
+  if (fresh) return session;
+  if (!session.msRefreshToken) return session; // token direct : on tente tel quel
+  const clientId = getSettings().mcClientId;
+  if (!clientId) return session;
+  try {
+    const renewed = await mc.refreshSession(clientId, session.msRefreshToken);
+    setMcSession(renewed);
+    return renewed;
+  } catch {
+    return session; // échec de refresh : on laisse l'appel échouer en 401 -> l'UI proposera de se reconnecter
+  }
+}
+
+let mcLoginState = null; // { cancelled } pour interrompre le device-code en cours
+
+ipcMain.handle('mc:status', async () => {
+  const session = getMcSession();
+  return { ok: true, ...mcView(session) };
+});
+
+// Connexion par token Minecraft direct (colle un access token).
+ipcMain.handle('mc:loginToken', async (_e, token) => {
+  const t = String(token || '').trim();
+  if (!t) return { ok: false, error: 'Token vide.' };
+  try {
+    const session = await mc.loginWithToken(t);
+    const saved = setMcSession(session);
+    if (!saved.ok) return { ok: false, error: saved.error };
+    return { ok: true, ...mcView(session) };
+  } catch (e) {
+    return { ok: false, error: e.message || 'Connexion impossible.' };
+  }
+});
+
+// Connexion Microsoft (device code). Émet 'mc-code' avec le code à saisir, puis attend.
+ipcMain.handle('mc:loginMicrosoft', async () => {
+  const clientId = getSettings().mcClientId;
+  if (!clientId) return { ok: false, error: 'Renseigne d’abord l’Azure Client ID (Réglages → Compte Minecraft).' };
+  mcLoginState = { cancelled: false };
+  const state = mcLoginState;
+  try {
+    const dc = await mc.requestDeviceCode(clientId);
+    send('mc-code', { userCode: dc.user_code, verificationUri: dc.verification_uri, expiresIn: dc.expires_in });
+    try { shell.openExternal(dc.verification_uri); } catch {}
+    const session = await mc.pollDeviceCode(clientId, dc.device_code, dc.interval, dc.expires_in, () => state.cancelled);
+    const saved = setMcSession(session);
+    if (!saved.ok) return { ok: false, error: saved.error };
+    return { ok: true, ...mcView(session) };
+  } catch (e) {
+    return { ok: false, error: e.message || 'Connexion Microsoft impossible.' };
+  } finally {
+    if (mcLoginState === state) mcLoginState = null;
+  }
+});
+
+ipcMain.handle('mc:cancelLogin', () => { if (mcLoginState) mcLoginState.cancelled = true; return { ok: true }; });
+
+ipcMain.handle('mc:logout', () => { clearMcSession(); return { ok: true, connected: false }; });
+
+// Rafraîchit le profil (relit les capes officielles depuis l'API).
+ipcMain.handle('mc:refresh', async () => {
+  const session = await ensureMcSession();
+  if (!session) return { ok: false, error: 'Non connecté.' };
+  try {
+    const profile = await mc.getProfile(session.accessToken);
+    if (!profile) return { ok: false, error: 'Aucun profil Java sur ce compte.' };
+    const updated = { ...session, profile };
+    setMcSession(updated);
+    return { ok: true, ...mcView(updated) };
+  } catch (e) {
+    return { ok: false, error: e.message || 'Lecture du profil impossible.' };
+  }
+});
+
+// Active une cape officielle du compte.
+ipcMain.handle('mc:setCape', async (_e, capeId) => {
+  const session = await ensureMcSession();
+  if (!session) return { ok: false, error: 'Non connecté.' };
+  if (!capeId) return { ok: false, error: 'Cape non spécifiée.' };
+  try {
+    const profile = await mc.setActiveCape(session.accessToken, capeId);
+    const updated = { ...session, profile };
+    setMcSession(updated);
+    return { ok: true, ...mcView(updated) };
+  } catch (e) {
+    return { ok: false, error: e.message || 'Activation impossible.' };
+  }
+});
+
+// Masque la cape officielle (aucune cape).
+ipcMain.handle('mc:hideCape', async () => {
+  const session = await ensureMcSession();
+  if (!session) return { ok: false, error: 'Non connecté.' };
+  try {
+    const profile = await mc.hideCape(session.accessToken);
+    const updated = { ...session, profile };
+    setMcSession(updated);
+    return { ok: true, ...mcView(updated) };
+  } catch (e) {
+    return { ok: false, error: e.message || 'Masquage impossible.' };
+  }
+});
