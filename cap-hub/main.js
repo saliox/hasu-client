@@ -622,6 +622,22 @@ ipcMain.handle('mc:importCape', async (_e, capeId) => {
   } catch (e) { return { ok: false, error: e.message || 'Import impossible.' }; }
 });
 
+// Skin du joueur connecté (texture Mojang) en data URL, pour l'aperçu 3D. Récupéré côté
+// main (hors CSP), filtré anti-SSRF comme les capes. slim = modèle fin (Alex).
+ipcMain.handle('mc:skin', async () => {
+  try {
+    const session = getMcSession();
+    if (!session || !session.profile) return { ok: false };
+    const skins = session.profile.skins || [];
+    const active = skins.find((s) => s.state === 'ACTIVE') || skins[0];
+    if (!active || !active.url) return { ok: false };
+    const dataUrl = await mc.fetchCapeTexture(active.url);
+    if (!dataUrl) return { ok: false };
+    const variant = String(active.variant || (active.metadata && active.metadata.model) || '');
+    return { ok: true, dataUrl, slim: /slim/i.test(variant) };
+  } catch { return { ok: false }; }
+});
+
 // Masque la cape officielle (aucune cape).
 ipcMain.handle('mc:hideCape', async () => {
   const session = await ensureMcSession();

@@ -625,6 +625,16 @@ function renderMc(v) {
 async function loadMc() {
   const r = await window.cap.mc.status();
   renderMc(r);
+  if (r && r.connected) loadMcSkin();
+}
+
+// Récupère le skin du compte connecté et l'applique à tous les aperçus 3D (sinon défaut).
+async function loadMcSkin() {
+  if (!window.CapePreview) return;
+  try {
+    const r = await window.cap.mc.skin();
+    window.CapePreview.setSkin(r && r.ok ? r.dataUrl : null, r && r.slim);
+  } catch { window.CapePreview.setSkin(null); }
 }
 
 async function mcSetCape(id) {
@@ -678,14 +688,14 @@ $('#mc-code-copy').addEventListener('click', async () => {
 $('#mc-refresh').addEventListener('click', async () => {
   toast('Rafraîchissement…');
   const r = await window.cap.mc.refresh();
-  if (r.ok) { renderMc(r); toast('Profil à jour ✔', 'ok'); }
+  if (r.ok) { renderMc(r); loadMcSkin(); toast('Profil à jour ✔', 'ok'); } // le skin a pu changer
   else toast(r.error || 'Erreur', 'err');
 });
 
 $('#mc-logout').addEventListener('click', async () => {
   await window.cap.mc.logout();
   mcTexCache.clear();
-  if (window.CapePreview) window.CapePreview.clear();
+  if (window.CapePreview) { window.CapePreview.setSkin(null); window.CapePreview.clear(); }
   renderMc({ connected: false });
   toast('Déconnecté.', 'ok');
 });
@@ -695,7 +705,7 @@ $('#mc-login-token').addEventListener('click', async () => {
   if (!token) return toast('Colle un token.', 'err');
   toast('Connexion…');
   const r = await window.cap.mc.loginToken(token);
-  if (r.ok) { $('#mc-token').value = ''; renderMc(r); toast('Connecté ✔', 'ok'); }
+  if (r.ok) { $('#mc-token').value = ''; renderMc(r); loadMcSkin(); toast('Connecté ✔', 'ok'); }
   else toast(r.error || 'Connexion impossible', 'err');
 });
 
@@ -707,7 +717,7 @@ $('#mc-login-ms').addEventListener('click', async () => {
   const r = await window.cap.mc.loginMicrosoft();
   $('#mc-login-ms').disabled = false;
   $('#mc-code-box').classList.add('hidden');
-  if (r.ok) { renderMc(r); toast('Connecté ✔', 'ok'); }
+  if (r.ok) { renderMc(r); loadMcSkin(); toast('Connecté ✔', 'ok'); }
   else toast(r.error || 'Connexion Microsoft annulée/échouée', 'err');
 });
 
@@ -927,6 +937,8 @@ function esc(s) {
   await loadSettings();
   await loadCapes();
   await refreshStatus();
+  // Si un compte Minecraft est déjà connecté, applique son skin aux aperçus 3D.
+  window.cap.mc.status().then((r) => { if (r && r.connected) loadMcSkin(); }).catch(() => {});
   const g = await window.cap.games.current();
   if (g.games && g.games.length) {
     setPill('#pill-game', true, 'Minecraft');

@@ -66,6 +66,7 @@ contextBridge.exposeInMainWorld('cap', {
     hideCape: () => invoke('mc:hideCape'),
     capeTexture: (capeId) => invoke('mc:capeTexture', capeId), // -> data URL (texture Mojang)
     importCape: (capeId) => invoke('mc:importCape', capeId),   // -> ajoute à la bibliothèque
+    skin: () => invoke('mc:skin'),                             // -> data URL du skin connecté
   },
 
   // Événements poussés par le main -> UI.
