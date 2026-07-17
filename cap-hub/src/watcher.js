@@ -25,13 +25,19 @@ const LAUNCHER_EXES = {
   'hasulauncher.exe': 'Hasu Launcher',
 };
 
-// Signatures dans la ligne de commande Java -> nom du client en jeu.
+// Signatures dans la ligne de commande Java -> nom du client en jeu. On vise des
+// jetons ANCRÉS (classe main, arguments de lancement, packages précis, dossier
+// .minecraft entre séparateurs) plutôt que des sous-chaînes fourre-tout comme
+// « fabric »/« forge »/« .minecraft » qui matchaient n'importe quel classpath.
 const JAVA_SIGNS = [
-  { re: /com\.moonsworth\.lunar|lunar(?:client|-prod)/i, client: 'Lunar Client (en jeu)' },
-  { re: /badlion/i, client: 'Badlion Client (en jeu)' },
-  { re: /feather/i, client: 'Feather Client (en jeu)' },
-  { re: /hasu/i, client: 'Hasu Client (en jeu)' },
-  { re: /net\.minecraft\.client\.main\.Main|--gameDir|\.minecraft|fabric|forge/i, client: 'Minecraft (en jeu)' },
+  { re: /com\.moonsworth\.lunar/i, client: 'Lunar Client (en jeu)' },
+  { re: /net\.badlion\.|badlionclient/i, client: 'Badlion Client (en jeu)' },
+  { re: /net\.digitalingot\.feather|featherclient/i, client: 'Feather Client (en jeu)' },
+  { re: /\bhasu(?:client)?\b/i, client: 'Hasu Client (en jeu)' },
+  {
+    re: /net\.minecraft\.client\.main\.Main|net\.minecraft\.launchwrapper|--gameDir\b|--assetIndex\b|--assetsDir\b|[\\/]\.minecraft[\\/]|net\.fabricmc\.|net\.minecraftforge\.|cpw\.mods\.modlauncher|io\.github\.zekerzhayard/i,
+    client: 'Minecraft (en jeu)',
+  },
 ];
 
 const NAMES = ['javaw.exe', 'java.exe', ...Object.keys(LAUNCHER_EXES)];
@@ -55,8 +61,8 @@ function listProcesses() {
 }
 
 // Classe un processus : renvoie { key, client, username } ou null s'il ne
-// ressemble pas à Minecraft (ex. java.exe d'un autre programme).
-function classify(p) {
+// ressemble pas à Minecraft (ex. java.exe d'un autre programme). Exporté pour les tests.
+export function classify(p) {
   const name = String(p.Name || '').toLowerCase();
   const cmd = String(p.CommandLine || '');
   if (LAUNCHER_EXES[name]) return { key: `launcher:${name}`, client: LAUNCHER_EXES[name], username: null };
@@ -89,9 +95,12 @@ async function scan() {
     for (const [key, info] of current) {
       if (!known.has(key)) watcherEvents.emit('game-start', { key, ...info });
     }
-    const hadGame = known.size > 0;
+    // game-stop = plus aucun JEU en cours (clés « java: »), même si un launcher reste
+    // ouvert (sinon fermer le jeu launcher-ouvert n'émettait jamais game-stop).
+    const inGame = (m) => [...m.keys()].some((k) => k.startsWith('java:'));
+    const hadGame = inGame(known);
     known = current;
-    if (hadGame && current.size === 0) watcherEvents.emit('game-stop');
+    if (hadGame && !inGame(current)) watcherEvents.emit('game-stop');
   } finally { scanning = false; }
 }
 

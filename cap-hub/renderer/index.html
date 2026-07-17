@@ -23,18 +23,18 @@
     </div>
   </header>
 
-  <nav class="tabs">
-    <button class="tab active" data-tab="capes">🎽 Mes capes</button>
-    <button class="tab" data-tab="creator">🎨 Créateur</button>
-    <button class="tab" data-tab="official">🎖️ Compte officiel</button>
-    <button class="tab" data-tab="players">👥 Joueurs</button>
-    <button class="tab" data-tab="status">🛰️ État</button>
-    <button class="tab" data-tab="settings">⚙️ Réglages</button>
+  <nav class="tabs" role="tablist" aria-label="Sections de Cap Hub">
+    <button class="tab active" data-tab="capes" role="tab" aria-selected="true">🎽 Mes capes</button>
+    <button class="tab" data-tab="creator" role="tab" aria-selected="false">🎨 Créateur</button>
+    <button class="tab" data-tab="official" role="tab" aria-selected="false">🎖️ Compte officiel</button>
+    <button class="tab" data-tab="players" role="tab" aria-selected="false">👥 Joueurs</button>
+    <button class="tab" data-tab="status" role="tab" aria-selected="false">🛰️ État</button>
+    <button class="tab" data-tab="settings" role="tab" aria-selected="false">⚙️ Réglages</button>
   </nav>
 
   <main>
     <!-- MES CAPES -->
-    <section id="tab-capes" class="panel active">
+    <section id="tab-capes" class="panel active" role="tabpanel" tabindex="0">
       <div class="row between">
         <div>
           <h2>Ma bibliothèque de capes</h2>
@@ -79,7 +79,7 @@
     </section>
 
     <!-- CRÉATEUR -->
-    <section id="tab-creator" class="panel">
+    <section id="tab-creator" class="panel" role="tabpanel" tabindex="0">
       <div class="row between">
         <div>
           <h2>Créer ta cape</h2>
@@ -158,7 +158,7 @@
     </section>
 
     <!-- COMPTE MINECRAFT OFFICIEL -->
-    <section id="tab-official" class="panel">
+    <section id="tab-official" class="panel" role="tabpanel" tabindex="0">
       <div class="row between">
         <div>
           <h2>Compte Minecraft officiel</h2>
@@ -225,7 +225,7 @@
     </section>
 
     <!-- JOUEURS -->
-    <section id="tab-players" class="panel">
+    <section id="tab-players" class="panel" role="tabpanel" tabindex="0">
       <div class="row between">
         <div>
           <h2>Joueurs Cap Hub</h2>
@@ -240,7 +240,7 @@
     </section>
 
     <!-- ÉTAT -->
-    <section id="tab-status" class="panel">
+    <section id="tab-status" class="panel" role="tabpanel" tabindex="0">
       <h2>État du système</h2>
       <div class="cards">
         <div class="card">
@@ -270,7 +270,7 @@
     </section>
 
     <!-- RÉGLAGES -->
-    <section id="tab-settings" class="panel">
+    <section id="tab-settings" class="panel" role="tabpanel" tabindex="0">
       <h2>Réglages</h2>
       <div class="form">
         <label>Thème de l'app
