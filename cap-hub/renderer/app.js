@@ -837,6 +837,8 @@ async function loadSettings() {
   $('#in-username').value = s.username || '';
   $('#in-autoapply').checked = s.autoApply;
   $('#in-autoproxy').checked = s.autoProxy;
+  $('#in-tray').checked = s.closeToTray;
+  $('#in-startup').checked = s.launchAtStartup;
   $('#in-repo').value = s.repo || '';
   $('#in-branch').value = s.branch || '';
   $('#in-mc-clientid').value = s.mcClientId || '';
@@ -849,6 +851,8 @@ $('#btn-save').addEventListener('click', async () => {
     username: $('#in-username').value,
     autoApply: $('#in-autoapply').checked,
     autoProxy: $('#in-autoproxy').checked,
+    closeToTray: $('#in-tray').checked,
+    launchAtStartup: $('#in-startup').checked,
     repo: $('#in-repo').value,
     branch: $('#in-branch').value,
     mcClientId: $('#in-mc-clientid').value,

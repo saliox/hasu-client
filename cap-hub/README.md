@@ -54,6 +54,10 @@
 - **🚀 Détection automatique.** Cap Hub surveille le lancement de Minecraft (launcher
   officiel, Lunar, Badlion, Prism, MultiMC, Hasu Launcher, `java`/`javaw`…) et te
   **propose d'appliquer** ta cape en **un clic** au bon moment.
+- **🫥 Assistant en arrière-plan.** Fermer la fenêtre **réduit dans la barre système**
+  (menu : Ouvrir / Appliquer / Quitter) pour que la détection tourne en continu, et une
+  option **« Démarrer avec Windows »** (discrètement, dans le tray) rend l'app toujours
+  prête à te proposer ta cape quand tu lances Minecraft.
 - **☁️ 100 % GitHub, aucun serveur, aucune IP.** Lecture des capes en
   `raw.githubusercontent.com`, publication via l'API GitHub. Même philosophie que
   Hasu Client / Snipe Hub.
@@ -166,7 +170,7 @@ npm start          # lance l'app (Windows)
 ```bash
 npm install               # dépendances de build (Electron) — sur ton PC Windows
 npm run icon              # (re)génère build/icon.png + .ico (pur Node)
-npm test                  # 91 tests : capes (animées/HD + anti-traversée), PNG (décodeur borné), registre (fusion sûre + anti-traversée), réglages (écriture atomique), OptiFine, géométrie, proxy HTTP, détection Minecraft (anti faux-positifs), auto-update (URL restreinte), compte Minecraft officiel (auth + texture anti-SSRF)
+npm test                  # 93 tests : capes (animées/HD + anti-traversée), PNG (décodeur borné), registre (fusion sûre + anti-traversée), réglages (écriture atomique), OptiFine, géométrie, proxy HTTP, détection Minecraft (anti faux-positifs), auto-update (URL restreinte), compte Minecraft officiel (auth + texture anti-SSRF)
 npm run dist              # → dist/Cap Hub Setup <version>.exe (NSIS) + Cap Hub <version> portable.exe
 npm run publish:update    # SHA-256 + Release GitHub + maj cap-hub/version.json
 ```

@@ -40,6 +40,8 @@ export function getSettings() {
     activeCape: s.activeCape || '',
     autoApply: s.autoApply !== false,   // proposer d'appliquer au lancement (défaut oui)
     autoProxy: s.autoProxy !== false,   // démarrer le proxy avec l'app (défaut oui)
+    launchAtStartup: !!s.launchAtStartup, // démarrer Cap Hub avec Windows (défaut non)
+    closeToTray: s.closeToTray !== false, // fermer -> réduire dans la barre système (défaut oui)
     repo: s.repo || '',
     branch: s.branch || '',
     hasToken: !!s.tokenEnc,
@@ -60,7 +62,7 @@ export function saveSettings(patch) {
   for (const k of ['username', 'activeCape', 'repo', 'branch', 'theme', 'mcClientId']) {
     if (typeof patch[k] === 'string') s[k] = patch[k].trim();
   }
-  for (const k of ['autoApply', 'autoProxy']) {
+  for (const k of ['autoApply', 'autoProxy', 'launchAtStartup', 'closeToTray']) {
     if (typeof patch[k] === 'boolean') s[k] = patch[k];
   }
   if (Array.isArray(patch.favorites)) {
