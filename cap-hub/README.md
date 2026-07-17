@@ -43,9 +43,10 @@
   officielles (Migrator, MineCon, Vanilla…) via l'**API officielle** Mojang — visibles
   partout, **sans OptiFine ni redirection**. Ta session est **chiffrée** au repos ; Cap Hub
   ne gère que **ton** compte, jamais celui d'un tiers.
-- **🧊 Aperçu 3D dans l'app.** Vois ta cape en **3D** — tissu qui ondule, rotation douce
-  et éclairage — sans lancer Minecraft ; les capes **animées** (images empilées, ex.
-  64×64) défilent toutes seules.
+- **🧊 Aperçu 3D dans l'app.** Vois ta cape en **3D** **portée sur un personnage**
+  (mannequin bloc, vue de dos) ou **seule** — tissu qui ondule, rotation douce et
+  éclairage — sans lancer Minecraft ; les capes **animées** défilent toutes seules.
+  Bascule perso / cape seule sous l'aperçu.
 - **🎨 6 thèmes d'interface.** Nuit, Clair, Cyber, Sang, Océan, Forêt (Réglages).
 - **🩺 Auto-diagnostic.** Un bouton *Tester ma configuration* (onglet **État**) vérifie
   toute la chaîne — proxy, redirection `hosts`, pseudo, cape active — et fait une **vraie
@@ -171,7 +172,7 @@ npm start          # lance l'app (Windows)
 ```bash
 npm install               # dépendances de build (Electron) — sur ton PC Windows
 npm run icon              # (re)génère build/icon.png + .ico (pur Node)
-npm test                  # 96 tests : capes (animées/HD + anti-traversée), PNG (décodeur borné), registre (fusion sûre + anti-traversée), réglages (écriture atomique), OptiFine, géométrie, proxy HTTP, détection Minecraft (anti faux-positifs), auto-update (URL restreinte), compte Minecraft officiel (auth + texture anti-SSRF)
+npm test                  # 100 tests : capes (animées/HD + anti-traversée), PNG (décodeur borné), registre (fusion sûre + anti-traversée), réglages (écriture atomique), OptiFine, géométrie, proxy HTTP, détection Minecraft (anti faux-positifs), auto-update (URL restreinte), compte Minecraft officiel (auth + texture anti-SSRF)
 npm run dist              # → dist/Cap Hub Setup <version>.exe (NSIS) + Cap Hub <version> portable.exe
 npm run publish:update    # SHA-256 + Release GitHub + maj cap-hub/version.json
 ```
