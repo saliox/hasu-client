@@ -509,8 +509,12 @@ function renderMc(v) {
       <div class="thumb mc-none">🎽</div>
       ${active ? '<span class="badge">active</span>' : ''}
       <div class="name" title="${esc(c.alias)}">${esc(c.alias)}</div>
-      <div class="cape-actions"><button class="btn small act-use">${active ? '✓ Active' : 'Activer'}</button></div>`;
+      <div class="cape-actions">
+        <button class="btn small act-use">${active ? '✓ Active' : 'Activer'}</button>
+        <button class="btn small act-import" title="Ajouter à ma bibliothèque (utilisable via OptiFine, créateur, aperçu)">➕</button>
+      </div>`;
     el.querySelector('.act-use').addEventListener('click', () => { if (!active) mcSetCape(c.id); });
+    el.querySelector('.act-import').addEventListener('click', () => mcImportCape(c.id, c.alias));
     grid.appendChild(el);
     mcLoadThumb(el.querySelector('.thumb'), c.id);
   }
@@ -538,6 +542,31 @@ async function mcHide() {
   if (r.ok) { renderMc(r); toast('Cape masquée ✔', 'ok'); }
   else toast(r.error || 'Masquage impossible', 'err');
 }
+
+// Ajoute une cape officielle à la bibliothèque locale (utilisable via OptiFine, etc.).
+async function mcImportCape(id, alias) {
+  toast('Ajout à ta bibliothèque…');
+  const r = await window.cap.mc.importCape(id);
+  if (r.ok) { toast(`« ${alias} » ajoutée à Mes capes ✔`, 'ok'); loadCapes(); }
+  else toast(r.error || 'Ajout impossible', 'err');
+}
+
+// Renseigne le pseudo du compte officiel comme pseudo Cap Hub (capes custom via OptiFine).
+$('#mc-use-name').addEventListener('click', async () => {
+  const name = $('#mc-name').textContent.trim();
+  if (!name || name === '—') return;
+  await window.cap.settings.save({ username: name });
+  $('#in-username').value = name;
+  toast(`Pseudo Cap Hub réglé sur « ${name} » ✔`, 'ok');
+});
+
+// Copie le code device dans le presse-papier.
+$('#mc-code-copy').addEventListener('click', async () => {
+  const code = $('#mc-code-val').textContent.trim();
+  if (!code || code === '——' || code === '…') return;
+  try { await navigator.clipboard.writeText(code); toast('Code copié 📋', 'ok'); }
+  catch { toast('Copie impossible (copie manuelle).', 'err'); }
+});
 
 $('#mc-refresh').addEventListener('click', async () => {
   toast('Rafraîchissement…');

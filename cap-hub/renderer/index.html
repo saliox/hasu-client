@@ -176,7 +176,10 @@
               <p class="muted">Sur la page Microsoft, saisis ce code :</p>
               <div class="mc-code-val" id="mc-code-val">——</div>
               <a href="#" id="mc-code-link" class="muted">Ouvrir la page de connexion</a>
-              <div><button id="mc-cancel" class="btn small">Annuler</button></div>
+              <div class="mc-code-actions">
+                <button id="mc-code-copy" class="btn small">📋 Copier le code</button>
+                <button id="mc-cancel" class="btn small">Annuler</button>
+              </div>
             </div>
             <div class="card-actions">
               <button id="mc-login-ms" class="btn primary">🔐 Se connecter avec Microsoft</button>
@@ -200,6 +203,7 @@
       <div id="mc-loggedin" class="mc-box hidden">
         <div class="banner">
           Connecté en tant que <b id="mc-name">—</b>.
+          <button id="mc-use-name" class="btn small" title="Renseigner ce pseudo comme pseudo Cap Hub (pour tes capes custom via OptiFine)">🎽 Utiliser ce pseudo</button>
           <button id="mc-refresh" class="btn small">🔄 Rafraîchir</button>
           <button id="mc-logout" class="btn small danger">Se déconnecter</button>
         </div>

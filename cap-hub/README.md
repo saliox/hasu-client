@@ -127,6 +127,10 @@ npm start          # lance l'app (Windows)
   côté app, hors CSP) et un **aperçu 3D** de la cape active : clique pour **activer** l'une
   d'elles ou **masquer** ta cape. Le changement est appliqué **côté Mojang** immédiatement
   (API officielle `api.minecraftservices.com`), visible sur tous les serveurs sans OptiFine.
+- **Ponts entre les deux systèmes** : **➕ ajoute** une cape officielle à ta bibliothèque
+  (utilisable via OptiFine, le créateur et l'aperçu), et **🎽 réutilise** le pseudo du
+  compte connecté comme pseudo Cap Hub en un clic. Le **code Microsoft** est copiable
+  (📋), et la session est **rafraîchie automatiquement** à l'ouverture de l'app.
 - Ta session (tokens) est **chiffrée** au repos via `safeStorage` (DPAPI). Cap Hub agit
   uniquement sur **ton** compte.
 
