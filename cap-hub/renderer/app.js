@@ -21,18 +21,33 @@ async function guard(btnSel, fn) {
 }
 
 // ---------- Onglets ----------
-$$('.tab').forEach((tab) => {
-  tab.addEventListener('click', () => {
-    $$('.tab').forEach((t) => t.classList.remove('active'));
-    $$('.panel').forEach((p) => p.classList.remove('active'));
-    tab.classList.add('active');
-    $('#tab-' + tab.dataset.tab).classList.add('active');
-    const t = tab.dataset.tab;
-    if (t === 'players') loadPlayers();
-    if (t === 'official') loadMc();
-    if (t === 'capes') { previewState.canvas = null; renderPreview(capeActive, (capeCache.find((c) => c.id === capeActive) || {}).name || ''); }
-    else if (t === 'creator') { previewState.canvas = null; updateCreator(); }
-    else if (window.CapePreview) { window.CapePreview.clear(); previewState.canvas = null; } // pas d'aperçu -> stoppe l'animation (CPU)
+const tabEls = $$('.tab');
+function activateTab(tab) {
+  tabEls.forEach((t) => { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); });
+  $$('.panel').forEach((p) => p.classList.remove('active'));
+  tab.classList.add('active');
+  tab.setAttribute('aria-selected', 'true');
+  $('#tab-' + tab.dataset.tab).classList.add('active');
+  const t = tab.dataset.tab;
+  if (t === 'players') loadPlayers();
+  if (t === 'official') loadMc();
+  if (t === 'capes') { previewState.canvas = null; renderPreview(capeActive, (capeCache.find((c) => c.id === capeActive) || {}).name || ''); }
+  else if (t === 'creator') { previewState.canvas = null; updateCreator(); }
+  else if (window.CapePreview) { window.CapePreview.clear(); previewState.canvas = null; } // pas d'aperçu -> stoppe l'animation (CPU)
+}
+tabEls.forEach((tab, i) => {
+  tab.addEventListener('click', () => activateTab(tab));
+  // Navigation clavier attendue d'un onglet ARIA : flèches, Origine/Fin.
+  tab.addEventListener('keydown', (e) => {
+    let j = null;
+    if (e.key === 'ArrowRight') j = (i + 1) % tabEls.length;
+    else if (e.key === 'ArrowLeft') j = (i - 1 + tabEls.length) % tabEls.length;
+    else if (e.key === 'Home') j = 0;
+    else if (e.key === 'End') j = tabEls.length - 1;
+    if (j === null) return;
+    e.preventDefault();
+    tabEls[j].focus();
+    activateTab(tabEls[j]);
   });
 });
 
@@ -391,6 +406,13 @@ function renderPxCanvas() {
   for (let y = 0; y <= PX_H; y++) { c.beginPath(); c.moveTo(0, y * sy); c.lineTo(cv.width, y * sy); c.stroke(); }
 }
 
+// Aperçu 3D coalescé : au plus 1 (ré)encodage PNG + décodage image par frame, quel que
+// soit le nombre de pixels peints entre deux frames (avant : 1 par échantillon de souris).
+let pxPreviewRaf = 0;
+function schedulePxPreview() {
+  if (pxPreviewRaf || !window.CapePreview) return;
+  pxPreviewRaf = requestAnimationFrame(() => { pxPreviewRaf = 0; window.CapePreview.setCape(drawCreator()); });
+}
 function paintPx(e) {
   const cv = $('#px-canvas'), rect = cv.getBoundingClientRect();
   const x = Math.floor((e.clientX - rect.left) / (rect.width / PX_W));
@@ -398,7 +420,7 @@ function paintPx(e) {
   if (x < 0 || y < 0 || x >= PX_W || y >= PX_H) return;
   pxGrid[y * PX_W + x] = $('#px-erase').checked ? $('#px-bg').value : $('#px-color').value;
   renderPxCanvas();
-  if (window.CapePreview) window.CapePreview.setCape(drawCreator());
+  schedulePxPreview();
 }
 
 function updateCreator() {
@@ -417,12 +439,12 @@ function updateCreator() {
   const el = $(sel); el.addEventListener('input', updateCreator); el.addEventListener('change', updateCreator);
 });
 
-// Éditeur pixel : peinture à la souris.
+// Éditeur pixel : peinture au pointeur (souris, tactile ET stylet via Pointer Events).
 const pxCanvas = $('#px-canvas');
-pxCanvas.addEventListener('mousedown', (e) => { pxPainting = true; paintPx(e); });
-pxCanvas.addEventListener('mousemove', (e) => { if (pxPainting) paintPx(e); });
-window.addEventListener('mouseup', () => { pxPainting = false; });
-pxCanvas.addEventListener('mouseleave', () => { pxPainting = false; });
+pxCanvas.addEventListener('pointerdown', (e) => { pxPainting = true; try { pxCanvas.setPointerCapture(e.pointerId); } catch {} paintPx(e); });
+pxCanvas.addEventListener('pointermove', (e) => { if (pxPainting) paintPx(e); });
+window.addEventListener('pointerup', () => { pxPainting = false; });
+pxCanvas.addEventListener('pointercancel', () => { pxPainting = false; });
 $('#px-fill').addEventListener('click', () => { pxGrid.fill($('#px-color').value); renderPxCanvas(); updateCreator(); });
 $('#px-reset').addEventListener('click', () => { pxGrid.fill($('#px-bg').value); renderPxCanvas(); updateCreator(); });
 

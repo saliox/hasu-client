@@ -265,6 +265,22 @@ ok('clearMcSession efface la session', store.getMcSession() === null && store.ge
 store.initStore(ud, { isEncryptionAvailable: () => false });
 ok('setMcSession refuse sans chiffrement (pas de tokens en clair)', store.setMcSession(sess).ok === false);
 
+console.log('\n# Détection Minecraft (watcher) — anti faux-positifs');
+const watch = await import(S('watcher.js'));
+ok('launcher détecté par nom', watch.classify({ Name: 'MinecraftLauncher.exe', ProcessId: 1 })?.key === 'launcher:minecraftlauncher.exe');
+ok('java Minecraft (classe main) détecté + pseudo', watch.classify({ Name: 'javaw.exe', ProcessId: 42, CommandLine: 'javaw -cp x net.minecraft.client.main.Main --username Notch' })?.username === 'Notch');
+ok('java avec .minecraft dans le chemin détecté', /Minecraft/.test(watch.classify({ Name: 'javaw.exe', ProcessId: 8, CommandLine: 'javaw -Djava.library.path=C:/Users/x/AppData/Roaming/.minecraft/bin net.x' })?.client || ''));
+ok('java tiers avec « forge » dans un jar -> IGNORÉ (plus de faux positif)', watch.classify({ Name: 'java.exe', ProcessId: 7, CommandLine: 'java -jar C:/tools/forge-cli-utils.jar' }) === null);
+ok('java quelconque (IntelliJ) -> ignoré', watch.classify({ Name: 'java.exe', ProcessId: 9, CommandLine: 'java -cp idea.jar com.intellij.Main' }) === null);
+
+console.log('\n# Auto-update (URL d’installeur restreinte)');
+const up = await import(S('updater.js'));
+ok('isNewer compare correctement', up.isNewer('1.2.0', '1.1.9') && !up.isNewer('1.0.0', '1.0.0') && up.isNewer('0.10.0', '0.9.9'));
+ok('installeur autorisé : release de notre dépôt (https)', up.isAllowedInstallerUrl('https://github.com/saliox/hasu-client/releases/download/cap-hub-v0.9.3/Cap.Hub.Setup.0.9.3.exe'));
+ok('installeur refusé : autre hôte', !up.isAllowedInstallerUrl('https://evil.example/x.exe'));
+ok('installeur refusé : autre dépôt GitHub', !up.isAllowedInstallerUrl('https://github.com/evil/repo/releases/download/x/x.exe'));
+ok('installeur refusé : http non chiffré', !up.isAllowedInstallerUrl('http://github.com/saliox/hasu-client/releases/download/x/x.exe'));
+
 fs.rmSync(ud, { recursive: true, force: true });
 
 console.log(`\n${fail ? '\x1b[31m' : '\x1b[32m'}${pass} OK, ${fail} KO\x1b[0m`);
