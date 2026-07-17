@@ -443,6 +443,18 @@ ipcMain.handle('mc:setCape', async (_e, capeId) => {
   }
 });
 
+// Renvoie la texture d'une cape officielle en data URL (récupérée côté main, hors CSP).
+// L'URL n'est JAMAIS fournie par le renderer : on la lit dans le profil du compte
+// connecté, puis fetchCapeTexture filtre l'hôte (anti-SSRF) et exige un vrai PNG.
+ipcMain.handle('mc:capeTexture', async (_e, capeId) => {
+  const session = getMcSession();
+  if (!session || !session.profile) return { ok: false };
+  const cape = (session.profile.capes || []).find((c) => c.id === capeId);
+  if (!cape || !cape.url) return { ok: false };
+  const dataUrl = await mc.fetchCapeTexture(cape.url);
+  return dataUrl ? { ok: true, dataUrl } : { ok: false };
+});
+
 // Masque la cape officielle (aucune cape).
 ipcMain.handle('mc:hideCape', async () => {
   const session = await ensureMcSession();

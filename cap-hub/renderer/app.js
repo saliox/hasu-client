@@ -448,6 +448,32 @@ $('#cr-create').addEventListener('click', async () => {
 // ---------- Compte Minecraft officiel ----------
 let mcBusy = false;
 
+// Cache des textures de capes officielles (data URL récupérées côté main, hors CSP).
+// Clé = capeId (l'URL Mojang est content-addressée -> stable). Vidé à la déconnexion.
+const mcTexCache = new Map();
+async function mcTexture(capeId) {
+  if (mcTexCache.has(capeId)) return mcTexCache.get(capeId);
+  const r = await window.cap.mc.capeTexture(capeId);
+  const url = (r && r.ok) ? r.dataUrl : null;
+  mcTexCache.set(capeId, url);
+  return url;
+}
+async function mcLoadThumb(el, capeId) {
+  const url = await mcTexture(capeId);
+  if (url) { el.style.backgroundImage = `url(${url})`; el.textContent = ''; el.classList.remove('mc-none'); }
+}
+// Aperçu 3D de la cape officielle active (réutilise le moteur CapePreview).
+async function mcRenderPreview(v) {
+  if (!window.CapePreview) return;
+  mountPreview('#mc-preview');
+  const active = (v.capes || []).find((c) => c.state === 'ACTIVE');
+  const label = $('#mc-preview-label');
+  if (!active) { window.CapePreview.clear(); if (label) label.textContent = 'Aucune cape active'; return; }
+  const url = await mcTexture(active.id);
+  if (url) { window.CapePreview.setCape(url); if (label) label.textContent = active.alias; }
+  else { window.CapePreview.clear(); if (label) label.textContent = active.alias + ' (aperçu indisponible)'; }
+}
+
 function renderMc(v) {
   const inOut = !!(v && v.connected);
   $('#mc-loggedout').classList.toggle('hidden', inOut);
@@ -459,6 +485,7 @@ function renderMc(v) {
   const grid = $('#mc-capes');
   grid.innerHTML = '';
   const capes = v.capes || [];
+  mcRenderPreview(v);
   if (!capes.length) {
     grid.innerHTML = '<p class="muted">Aucune cape officielle sur ce compte. (Les capes s’obtiennent via Mojang : Migrator, MineCon, éditions spéciales…)</p>';
     return;
@@ -476,8 +503,8 @@ function renderMc(v) {
     const active = c.state === 'ACTIVE';
     const el = document.createElement('div');
     el.className = 'cape mc-cape' + (active ? ' active' : '');
-    // La texture de cape officielle est une image distante (mojang) — la CSP stricte
-    // interdit les hôtes externes. On affiche donc une vignette générique + l'alias.
+    // Vignette générique par défaut (🎽) remplacée par la vraie texture Mojang dès
+    // qu'elle est récupérée côté main (mcLoadThumb) — la CSP interdit les hôtes distants.
     el.innerHTML = `
       <div class="thumb mc-none">🎽</div>
       ${active ? '<span class="badge">active</span>' : ''}
@@ -485,6 +512,7 @@ function renderMc(v) {
       <div class="cape-actions"><button class="btn small act-use">${active ? '✓ Active' : 'Activer'}</button></div>`;
     el.querySelector('.act-use').addEventListener('click', () => { if (!active) mcSetCape(c.id); });
     grid.appendChild(el);
+    mcLoadThumb(el.querySelector('.thumb'), c.id);
   }
 }
 
@@ -520,6 +548,8 @@ $('#mc-refresh').addEventListener('click', async () => {
 
 $('#mc-logout').addEventListener('click', async () => {
   await window.cap.mc.logout();
+  mcTexCache.clear();
+  if (window.CapePreview) window.CapePreview.clear();
   renderMc({ connected: false });
   toast('Déconnecté.', 'ok');
 });
