@@ -251,6 +251,8 @@ code { background: var(--bg-3); padding: 1px 6px; border-radius: 6px; font-size:
 .mc-code a { display: inline-block; margin: 6px 0; word-break: break-all; }
 .mc-cape .thumb { height: 96px; display: flex; align-items: center; justify-content: center; font-size: 34px; }
 .mc-cape .thumb.mc-none { color: var(--muted); }
+.mc-cape .cape-actions .act-import { flex: 0 0 auto; }
+.mc-code-actions { display: flex; gap: 8px; justify-content: center; margin-top: 8px; }
 .banner .btn { margin-left: 10px; }
 
 /* Journal */

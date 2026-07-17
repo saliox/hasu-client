@@ -370,7 +370,9 @@ async function ensureMcSession() {
 let mcLoginState = null; // { cancelled } pour interrompre le device-code en cours
 
 ipcMain.handle('mc:status', async () => {
-  const session = getMcSession();
+  // ensureMcSession rafraîchit le token s'il est expiré (et rafraîchissable) : au
+  // rouvrir l'app, le profil et les capes sont à jour sans reconnexion.
+  const session = await ensureMcSession();
   return { ok: true, ...mcView(session) };
 });
 
@@ -453,6 +455,20 @@ ipcMain.handle('mc:capeTexture', async (_e, capeId) => {
   if (!cape || !cape.url) return { ok: false };
   const dataUrl = await mc.fetchCapeTexture(cape.url);
   return dataUrl ? { ok: true, dataUrl } : { ok: false };
+});
+
+// Ajoute une cape officielle à la bibliothèque locale (utilisable sur le canal OptiFine,
+// dans le créateur et l'aperçu) : récupère la texture et l'enregistre comme cape custom.
+ipcMain.handle('mc:importCape', async (_e, capeId) => {
+  const session = getMcSession();
+  if (!session || !session.profile) return { ok: false, error: 'Non connecté.' };
+  const cape = (session.profile.capes || []).find((c) => c.id === capeId);
+  if (!cape || !cape.url) return { ok: false, error: 'Cape introuvable.' };
+  const dataUrl = await mc.fetchCapeTexture(cape.url);
+  if (!dataUrl) return { ok: false, error: 'Texture indisponible.' };
+  let buf;
+  try { buf = Buffer.from(dataUrl.split(',')[1], 'base64'); } catch { return { ok: false, error: 'Décodage impossible.' }; }
+  return importCapeBuffer(buf, cape.alias || 'Cape officielle');
 });
 
 // Masque la cape officielle (aucune cape).
