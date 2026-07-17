@@ -123,15 +123,17 @@ async function msToMinecraft(msAccessToken) {
   const profile = await getProfile(mc.access_token);
   return { accessToken: mc.access_token, expiresAt: Date.now() + (mc.expires_in - 60) * 1000, profile };
 }
-async function microsoftToSession(clientId, msTok) {
+async function microsoftToSession(clientId, msTok, prevRefresh) {
   const s = await msToMinecraft(msTok.access_token);
-  return { msRefreshToken: msTok.refresh_token || null, ...s };
+  // Microsoft (v2 + offline_access) fait normalement tourner le refresh token ; s'il ne
+  // le renvoie pas, on conserve le précédent au lieu de perdre la capacité de refresh.
+  return { msRefreshToken: msTok.refresh_token || prevRefresh || null, ...s };
 }
 
 // Rafraîchit une session Microsoft expirée (si refresh token dispo).
 export async function refreshSession(clientId, msRefreshToken) {
   const msTok = await refreshMs(clientId, msRefreshToken);
-  return microsoftToSession(clientId, msTok);
+  return microsoftToSession(clientId, msTok, msRefreshToken);
 }
 
 // --- Profil & capes officielles ---

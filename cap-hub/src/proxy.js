@@ -65,9 +65,10 @@ function fetchUpstream(host, urlPath) {
   if (cached) return Promise.resolve(cached);
   return new Promise((resolve) => {
     let done = false;
-    const finish = (v) => { if (!done) { done = true; resolve(v); } };
     // Filet de sécurité : quoi qu'il arrive, on résout (jamais de requête suspendue).
-    const guard = setTimeout(() => finish({ status: 0, body: null }), 8000);
+    let guard = null;
+    const finish = (v) => { if (!done) { done = true; if (guard) clearTimeout(guard); resolve(v); } };
+    guard = setTimeout(() => finish({ status: 0, body: null }), 8000);
     guard.unref?.();
     (async () => {
       let ip;
