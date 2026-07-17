@@ -74,6 +74,9 @@ ok('catégories nettoyées (vide ignoré)', ss.categories['x.png'] === 'Cool' &&
 ok('thème par défaut = nuit', store.getSettings().theme === 'nuit');
 ok('écriture atomique : pas de .tmp résiduel', !fs.existsSync(path.join(ud, 'settings.json.tmp')));
 ok('écriture atomique : sauvegarde .bak après ré-écriture', fs.existsSync(path.join(ud, 'settings.json.bak')));
+ok('closeToTray défaut oui / launchAtStartup défaut non', store.getSettings().closeToTray === true && store.getSettings().launchAtStartup === false);
+const trayCfg = store.saveSettings({ closeToTray: false, launchAtStartup: true });
+ok('closeToTray / launchAtStartup persistés', trayCfg.closeToTray === false && trayCfg.launchAtStartup === true);
 
 console.log('\n# Fournisseur OptiFine (seul canal)');
 ok('un seul fournisseur : optifine', providers.PROVIDERS.length === 1 && providers.PROVIDERS[0].id === 'optifine');

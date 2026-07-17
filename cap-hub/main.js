@@ -7,7 +7,7 @@
 // SÉCURITÉ — Cap Hub reste volontairement sur le SEUL canal OptiFine (HTTP clair) :
 // aucune autorité de certification, aucune interception TLS, aucun magasin de
 // confiance modifié. Voir README (« Pourquoi OptiFine seulement »).
-import { app, BrowserWindow, ipcMain, dialog, shell, Notification, safeStorage } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, Notification, safeStorage, Tray, Menu } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
@@ -25,12 +25,16 @@ import { checkForUpdates, applyUpdate } from './src/updater.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let win = null;
+let tray = null;
+let isQuitting = false;
+// Démarré au login (option « démarrer avec Windows ») -> on reste discret dans le tray.
+const startedHidden = process.argv.includes('--hidden');
 
 // Empêche deux instances (le proxy tient le port 80 : une seule doit l'occuper).
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => { if (win) { win.show(); win.focus(); } });
+  app.on('second-instance', () => showWindow());
 }
 
 function send(channel, data) {
@@ -40,7 +44,7 @@ function send(channel, data) {
 function createWindow() {
   win = new BrowserWindow({
     width: 1080, height: 740, minWidth: 900, minHeight: 620,
-    backgroundColor: '#0b0f17', title: 'Cap Hub',
+    backgroundColor: '#0b0f17', title: 'Cap Hub', show: !startedHidden,
     icon: path.join(__dirname, 'build', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -52,6 +56,49 @@ function createWindow() {
   // Tout lien externe s'ouvre dans le navigateur, jamais dans l'app.
   win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (e) => e.preventDefault());
+  // Fermer la fenêtre = réduire dans la barre système (si l'option est active) pour que
+  // la détection de Minecraft continue de tourner en arrière-plan.
+  win.on('close', (e) => {
+    if (!isQuitting && tray && getSettings().closeToTray) {
+      e.preventDefault();
+      win.hide();
+      if (!win.__toldTray) { win.__toldTray = true; notify('Cap Hub continue en arrière-plan', 'Cap Hub reste dans la barre système et surveille le lancement de Minecraft. Clic droit sur l’icône → Quitter pour fermer complètement.'); }
+    }
+  });
+}
+
+// Icône de barre système : Cap Hub reste un assistant discret en arrière-plan.
+function createTray() {
+  try {
+    tray = new Tray(path.join(__dirname, 'build', 'icon.png'));
+    tray.setToolTip('Cap Hub');
+    const menu = Menu.buildFromTemplate([
+      { label: 'Ouvrir Cap Hub', click: () => showWindow() },
+      {
+        label: 'Appliquer Cap Hub', click: async () => {
+          const r = await enableEverything();
+          send('proxy-changed', await proxyStatus());
+          notify('Cap Hub', r.ok ? 'Cap Hub appliqué ✔ — relance/rejoins un monde.' : 'Échec : ' + r.error);
+        },
+      },
+      { type: 'separator' },
+      { label: 'Quitter Cap Hub', click: () => { isQuitting = true; app.quit(); } },
+    ]);
+    tray.setContextMenu(menu);
+    tray.on('double-click', () => showWindow());
+  } catch {}
+}
+
+function showWindow() {
+  if (!win || win.isDestroyed()) createWindow();
+  win.show(); win.focus();
+}
+
+// Applique (ou retire) le lancement automatique avec Windows.
+function applyLoginItem(enabled) {
+  try {
+    if (process.platform === 'win32') app.setLoginItemSettings({ openAtLogin: !!enabled, args: ['--hidden'] });
+  } catch {}
 }
 
 function notify(title, body) {
@@ -86,6 +133,8 @@ app.whenReady().then(async () => {
   initRegistry(ud, { repo: s0.repo, branch: s0.branch });
 
   createWindow();
+  createTray();
+  applyLoginItem(s0.launchAtStartup);
 
   // Relaie les logs du proxy vers l'UI.
   proxyEvents.on('log', (e) => send('log', e));
@@ -110,8 +159,10 @@ app.whenReady().then(async () => {
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-app.on('before-quit', () => { try { stopWatcher(); } catch {} });
+// Avec la barre système, fermer la fenêtre ne quitte pas l'app (elle reste dans le tray).
+// On ne quitte sur window-all-closed que s'il n'y a pas de tray ou qu'on quitte vraiment.
+app.on('window-all-closed', () => { if (process.platform !== 'darwin' && (!tray || isQuitting)) app.quit(); });
+app.on('before-quit', () => { isQuitting = true; try { stopWatcher(); } catch {} try { tray?.destroy(); } catch {} });
 
 // ---------- Détection de Minecraft -> proposition d'appliquer Cap Hub ----------
 let lastPrompt = 0;
@@ -181,6 +232,7 @@ ipcMain.handle('settings:get', () => ({ ok: true, settings: getSettings(), encry
 ipcMain.handle('settings:save', (_e, patch) => {
   const s = saveSettings(patch || {});
   configureRegistry({ repo: s.repo, branch: s.branch });
+  if (patch && typeof patch.launchAtStartup === 'boolean') applyLoginItem(s.launchAtStartup);
   return { ok: true, settings: s };
 });
 ipcMain.handle('settings:setToken', (_e, token) => setToken(token));
