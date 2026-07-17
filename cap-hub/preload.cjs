@@ -60,6 +60,7 @@ contextBridge.exposeInMainWorld('cap', {
     refresh: () => invoke('mc:refresh'),
     setCape: (capeId) => invoke('mc:setCape', capeId),
     hideCape: () => invoke('mc:hideCape'),
+    capeTexture: (capeId) => invoke('mc:capeTexture', capeId), // -> data URL (texture Mojang)
   },
 
   // Événements poussés par le main -> UI.

@@ -7,6 +7,8 @@
 // scope XboxLive.signin, approuvé Minecraft via https://aka.ms/mce-reviewappid) est
 // fourni par l'utilisateur — le même que Hasu Client.
 
+import { isPng } from './png.js';
+
 const TENANT = 'consumers';
 const DEVICECODE_URL = `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/devicecode`;
 const TOKEN_URL = `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/token`;
@@ -25,8 +27,38 @@ async function json(url, body) {
 export async function requestDeviceCode(clientId) {
   if (!clientId) throw new Error('Azure Client ID manquant (Réglages → Compte Minecraft).');
   const r = await form(DEVICECODE_URL, { client_id: clientId, scope: SCOPE });
-  if (!r.ok) throw new Error(`devicecode ${r.status} : ${(await r.text()).slice(0, 160)}`);
+  if (!r.ok) throw new Error(deviceCodeError(await r.text().catch(() => '')));
   return r.json(); // { device_code, user_code, verification_uri, interval, expires_in }
+}
+
+// Traduit les erreurs Microsoft les plus fréquentes en messages actionnables
+// (mappings validés contre l'endpoint live : voir les codes AADSTS).
+function deviceCodeError(body) {
+  let d = {};
+  try { d = JSON.parse(body); } catch {}
+  const desc = d.error_description || '';
+  if (/AADSTS700016/.test(desc)) return 'Client ID introuvable côté Microsoft : vérifie l’Azure Client ID (Réglages → Compte Minecraft).';
+  if (d.error === 'invalid_client' || /AADSTS7000218|AADSTS700025|public client|allowPublicClient/i.test(desc))
+    return 'L’app Azure doit autoriser les « public client flows » (device code) : active-le dans le portail Azure (Authentication → Allow public client flows).';
+  if (/AADSTS90009|AADSTS70011|AADSTS90014|scope/i.test(desc)) return 'Scope refusé : l’app Azure doit demander « XboxLive.signin ».';
+  return 'Microsoft a refusé la demande : ' + (desc ? desc.slice(0, 160) : (d.error || 'erreur inconnue'));
+}
+
+// Récupère la texture PNG d'une cape officielle et la renvoie en data URL, pour
+// l'afficher dans l'app malgré la CSP stricte du renderer (qui interdit les hôtes
+// distants). Anti-SSRF : uniquement les hôtes de textures Mojang, pas de redirection,
+// taille bornée, et vraie signature PNG exigée. L'appelant (main) ne passe jamais une
+// URL venant du renderer — seulement celle du profil du compte connecté.
+export async function fetchCapeTexture(url) {
+  let u;
+  try { u = new URL(String(url)); } catch { return null; }
+  if (!/(^|\.)minecraft\.net$/i.test(u.hostname)) return null;
+  let r;
+  try { r = await fetch(u.href, { redirect: 'error' }); } catch { return null; }
+  if (!r.ok) return null;
+  const buf = Buffer.from(await r.arrayBuffer());
+  if (buf.length > 512 * 1024 || !isPng(buf)) return null;
+  return 'data:image/png;base64,' + buf.toString('base64');
 }
 
 // Interroge Microsoft jusqu'à validation, puis chaîne jusqu'à Minecraft. isCancelled()

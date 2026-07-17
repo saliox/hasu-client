@@ -189,6 +189,25 @@ ok('getProfile 404 -> null', (await mc.getProfile('x')) === null);
 let threw2 = false; global.fetch = mcFetch({ noProfile: true });
 try { await mc.loginWithToken('x'); } catch { threw2 = true; }
 ok('loginWithToken sans profil Java -> exception', threw2);
+// Messages d'erreur device-code (mappings validés contre l'endpoint Microsoft live).
+global.fetch = async () => ({ ok: false, status: 400, text: async () => JSON.stringify({ error: 'unauthorized_client', error_description: 'AADSTS700016: Application with identifier X was not found in the directory' }) });
+ok('device-code AADSTS700016 -> « Client ID introuvable »', await mc.requestDeviceCode('x').then(() => '', (e) => e.message).then((m) => /Client ID introuvable/.test(m)));
+global.fetch = async () => ({ ok: false, status: 400, text: async () => JSON.stringify({ error: 'invalid_client', error_description: 'AADSTS7000218 public client required' }) });
+ok('device-code invalid_client -> « public client flows »', await mc.requestDeviceCode('x').then(() => '', (e) => e.message).then((m) => /public client flows/.test(m)));
+
+console.log('\n# Texture de cape officielle (anti-SSRF)');
+const capePng = mkPng(64, 32);
+let didFetch = false;
+global.fetch = async () => { didFetch = true; return { ok: true, arrayBuffer: async () => capePng }; };
+ok('texture : hôte Mojang + PNG -> data URL', (await mc.fetchCapeTexture('http://textures.minecraft.net/texture/abc') || '').startsWith('data:image/png;base64,'));
+didFetch = false;
+ok('texture : hôte non-Mojang -> null SANS fetch (anti-SSRF)', (await mc.fetchCapeTexture('http://textures.minecraft.net.evil.com/x')) === null && didFetch === false);
+ok('texture : URL invalide -> null', (await mc.fetchCapeTexture('pas une url')) === null);
+global.fetch = async () => ({ ok: true, arrayBuffer: async () => Buffer.from('pas du png') });
+ok('texture : corps non-PNG -> null', (await mc.fetchCapeTexture('http://textures.minecraft.net/x')) === null);
+global.fetch = async () => ({ ok: true, arrayBuffer: async () => Buffer.alloc(600 * 1024) });
+ok('texture : trop lourde -> null', (await mc.fetchCapeTexture('http://textures.minecraft.net/x')) === null);
+
 global.fetch = realFetch;
 await mc.requestDeviceCode('').catch(() => {}); // ne doit pas planter le process
 ok('requestDeviceCode sans clientId -> rejette', await mc.requestDeviceCode('').then(() => false, () => true));

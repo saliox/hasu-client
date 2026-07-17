@@ -123,9 +123,10 @@ npm start          # lance l'app (Windows)
 - **Compte officiel** → **🔐 Se connecter avec Microsoft** (une page Microsoft s'ouvre,
   tu saisis le code affiché — aucun mot de passe demandé par Cap Hub) **ou** colle un
   **access token** Minecraft.
-- Tes **capes officielles Mojang** s'affichent : clique pour **activer** l'une d'elles ou
-  **masquer** ta cape. Le changement est appliqué **côté Mojang** immédiatement (API
-  officielle `api.minecraftservices.com`), visible sur tous les serveurs sans OptiFine.
+- Tes **capes officielles Mojang** s'affichent avec leur **vraie texture** (récupérée
+  côté app, hors CSP) et un **aperçu 3D** de la cape active : clique pour **activer** l'une
+  d'elles ou **masquer** ta cape. Le changement est appliqué **côté Mojang** immédiatement
+  (API officielle `api.minecraftservices.com`), visible sur tous les serveurs sans OptiFine.
 - Ta session (tokens) est **chiffrée** au repos via `safeStorage` (DPAPI). Cap Hub agit
   uniquement sur **ton** compte.
 
@@ -152,7 +153,7 @@ npm start          # lance l'app (Windows)
 ```bash
 npm install               # dépendances de build (Electron) — sur ton PC Windows
 npm run icon              # (re)génère build/icon.png + .ico (pur Node)
-npm test                  # 61 tests : capes (animées/HD), PNG, registre, réglages, fournisseur OptiFine, géométrie, proxy HTTP, compte Minecraft officiel
+npm test                  # 68 tests : capes (animées/HD), PNG, registre, réglages, fournisseur OptiFine, géométrie, proxy HTTP, compte Minecraft officiel (auth + texture anti-SSRF)
 npm run dist              # → dist/Cap Hub Setup <version>.exe (NSIS) + Cap Hub <version> portable.exe
 npm run publish:update    # SHA-256 + Release GitHub + maj cap-hub/version.json
 ```
