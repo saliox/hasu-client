@@ -895,9 +895,18 @@ window.cap.on('game-stop', () => {
 });
 window.cap.on('update-status', (u) => {
   if (u.state === 'available') {
-    if (confirm(`Cap Hub ${u.version} est disponible.\n\n${u.notes || ''}\n\nInstaller maintenant ?`)) window.cap.update.apply();
+    if (confirm(`Cap Hub ${u.version} est disponible.\n\n${u.notes || ''}\n\nInstaller maintenant ?`)) {
+      toast('Téléchargement de la mise à jour…');
+      window.cap.update.apply();
+    }
   } else if (u.state === 'uptodate') toast('Cap Hub est à jour.', 'ok');
   else if (u.state === 'error') toast('Mise à jour : ' + u.error, 'err');
+});
+// Progression du téléchargement de la mise à jour (le toast reste affiché tant qu'il se met à jour).
+window.cap.on('update-progress', (d) => {
+  if (d.pct == null) toast('Téléchargement de la mise à jour…');
+  else if (d.pct >= 100) toast('Vérification & installation… l’app va redémarrer.', 'ok');
+  else toast(`Téléchargement de la mise à jour… ${d.pct}%`);
 });
 
 function esc(s) {

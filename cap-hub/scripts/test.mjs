@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+import crypto from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -297,6 +298,35 @@ ok('installeur autorisé : release de notre dépôt (https)', up.isAllowedInstal
 ok('installeur refusé : autre hôte', !up.isAllowedInstallerUrl('https://evil.example/x.exe'));
 ok('installeur refusé : autre dépôt GitHub', !up.isAllowedInstallerUrl('https://github.com/evil/repo/releases/download/x/x.exe'));
 ok('installeur refusé : http non chiffré', !up.isAllowedInstallerUrl('http://github.com/saliox/hasu-client/releases/download/x/x.exe'));
+
+// Téléchargement en FLUX + vérification SHA + progression (mock réseau, hors ligne).
+const installer = Buffer.from('CAPHUB-INSTALLER-'.repeat(1000)); // ~17 Ko
+const instSha = crypto.createHash('sha256').update(installer).digest('hex');
+const manifest = { version: '9.9.9', url: 'https://github.com/saliox/hasu-client/releases/download/x/CapHub.exe', sha256: instSha, notes: 'test' };
+const realFetch2 = global.fetch;
+global.fetch = async (url) => {
+  url = String(url);
+  if (url.includes('version.json')) return { ok: true, status: 200, text: async () => JSON.stringify(manifest) };
+  let i = 0; const step = 4096;
+  const body = { getReader: () => ({ read: async () => { if (i >= installer.length) return { done: true }; const v = installer.subarray(i, i + step); i += step; return { done: false, value: v }; }, cancel: async () => {} }) };
+  return { ok: true, status: 200, headers: { get: (h) => (h === 'content-length' ? String(installer.length) : null) }, body, arrayBuffer: async () => installer };
+};
+await up.checkForUpdates('0.0.1');
+const upPcts = [];
+const upRes = await up.applyUpdate(() => {}, (p) => upPcts.push(p));
+global.fetch = realFetch2;
+ok('applyUpdate : télécharge + vérifie le SHA (OK)', upRes.ok === true);
+ok('applyUpdate : progression en flux (points intermédiaires + 100 %)', upPcts.includes(100) && upPcts.some((x) => x > 0 && x < 100));
+// SHA erroné -> refus.
+global.fetch = async (url) => {
+  url = String(url);
+  if (url.includes('version.json')) return { ok: true, status: 200, text: async () => JSON.stringify({ ...manifest, sha256: 'deadbeef' }) };
+  return { ok: true, status: 200, headers: { get: () => String(installer.length) }, body: null, arrayBuffer: async () => installer };
+};
+await up.checkForUpdates('0.0.1');
+const badRes = await up.applyUpdate(() => {});
+global.fetch = realFetch2;
+ok('applyUpdate : SHA-256 invalide -> refus', badRes.ok === false && /SHA-256/.test(badRes.error || ''));
 
 fs.rmSync(ud, { recursive: true, force: true });
 

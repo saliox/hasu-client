@@ -61,8 +61,9 @@
 - **☁️ 100 % GitHub, aucun serveur, aucune IP.** Lecture des capes en
   `raw.githubusercontent.com`, publication via l'API GitHub. Même philosophie que
   Hasu Client / Snipe Hub.
-- **🔄 Auto-update signé.** Chaque mise à jour est vérifiée par **SHA-256** avant
-  installation (Releases GitHub publiques).
+- **🔄 Auto-update signé.** Chaque mise à jour est **téléchargée avec barre de
+  progression** puis vérifiée par **SHA-256** avant installation (et l'installeur ne peut
+  venir que des Releases GitHub publiques du dépôt).
 
 ---
 
@@ -170,7 +171,7 @@ npm start          # lance l'app (Windows)
 ```bash
 npm install               # dépendances de build (Electron) — sur ton PC Windows
 npm run icon              # (re)génère build/icon.png + .ico (pur Node)
-npm test                  # 93 tests : capes (animées/HD + anti-traversée), PNG (décodeur borné), registre (fusion sûre + anti-traversée), réglages (écriture atomique), OptiFine, géométrie, proxy HTTP, détection Minecraft (anti faux-positifs), auto-update (URL restreinte), compte Minecraft officiel (auth + texture anti-SSRF)
+npm test                  # 96 tests : capes (animées/HD + anti-traversée), PNG (décodeur borné), registre (fusion sûre + anti-traversée), réglages (écriture atomique), OptiFine, géométrie, proxy HTTP, détection Minecraft (anti faux-positifs), auto-update (URL restreinte), compte Minecraft officiel (auth + texture anti-SSRF)
 npm run dist              # → dist/Cap Hub Setup <version>.exe (NSIS) + Cap Hub <version> portable.exe
 npm run publish:update    # SHA-256 + Release GitHub + maj cap-hub/version.json
 ```

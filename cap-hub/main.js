@@ -76,9 +76,11 @@ function createTray() {
       { label: 'Ouvrir Cap Hub', click: () => showWindow() },
       {
         label: 'Appliquer Cap Hub', click: async () => {
-          const r = await enableEverything();
-          send('proxy-changed', await proxyStatus());
-          notify('Cap Hub', r.ok ? 'Cap Hub appliqué ✔ — relance/rejoins un monde.' : 'Échec : ' + r.error);
+          try {
+            const r = await enableEverything();
+            send('proxy-changed', await proxyStatus());
+            notify('Cap Hub', r.ok ? 'Cap Hub appliqué ✔ — relance/rejoins un monde.' : 'Échec : ' + r.error);
+          } catch (e) { notify('Cap Hub', 'Échec : ' + (e.message || 'erreur')); }
         },
       },
       { type: 'separator' },
@@ -86,7 +88,13 @@ function createTray() {
     ]);
     tray.setContextMenu(menu);
     tray.on('double-click', () => showWindow());
-  } catch {}
+  } catch {
+    // Init partielle -> un tray non fonctionnel mais NON null piégerait l'app (fenêtre
+    // masquable sans moyen de la rouvrir/quitter). On repasse à null pour que les gardes
+    // de cycle de vie retombent sur « fenêtre visible + quitter à la fermeture ».
+    try { tray?.destroy(); } catch {}
+    tray = null;
+  }
 }
 
 function showWindow() {
@@ -134,6 +142,10 @@ app.whenReady().then(async () => {
 
   createWindow();
   createTray();
+  // Filet de sécurité : sans tray, on NE reste jamais invisible (sinon, démarré en
+  // --hidden, l'app tournerait sans fenêtre ni icône -> injoignable). Avec tray, on
+  // respecte le démarrage discret.
+  if (!tray) win.show();
   applyLoginItem(s0.launchAtStartup);
 
   // Relaie les logs du proxy vers l'UI.
@@ -160,14 +172,18 @@ app.whenReady().then(async () => {
 });
 
 // Avec la barre système, fermer la fenêtre ne quitte pas l'app (elle reste dans le tray).
-// On ne quitte sur window-all-closed que s'il n'y a pas de tray ou qu'on quitte vraiment.
-app.on('window-all-closed', () => { if (process.platform !== 'darwin' && (!tray || isQuitting)) app.quit(); });
+// On quitte si : pas de tray, quit explicite, OU l'option « réduire dans le tray » est
+// désactivée (sinon ce réglage serait inerte et laisserait un process fantôme).
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin' && (!tray || isQuitting || !getSettings().closeToTray)) app.quit();
+});
 app.on('before-quit', () => { isQuitting = true; try { stopWatcher(); } catch {} try { tray?.destroy(); } catch {} });
 
 // ---------- Détection de Minecraft -> proposition d'appliquer Cap Hub ----------
 let lastPrompt = 0;
 function wireWatcher() {
   watcherEvents.on('game-start', async (info) => {
+   try {
     send('game-start', info);
     send('log', { level: 'info', msg: `Minecraft détecté : ${info.client}${info.username ? ' (' + info.username + ')' : ''}`, t: Date.now() });
 
@@ -198,6 +214,9 @@ function wireWatcher() {
       send('proxy-changed', await proxyStatus());
       notify('Cap Hub', r.ok ? 'Cap Hub appliqué ✔ — relance/rejoins un monde pour voir les capes.' : 'Échec : ' + r.error);
     }
+   } catch (e) {
+    send('log', { level: 'error', msg: 'Détection Minecraft : ' + (e.message || 'erreur'), t: Date.now() });
+   }
   });
 
   watcherEvents.on('game-stop', () => send('game-stop', {}));
@@ -451,7 +470,10 @@ ipcMain.handle('proxy:selfTest', async () => {
 });
 
 ipcMain.handle('update:check', () => doUpdateCheck(false));
-ipcMain.handle('update:apply', () => applyUpdate(() => app.quit()));
+ipcMain.handle('update:apply', () => applyUpdate(
+  () => { isQuitting = true; app.quit(); },        // laisse l'app se fermer (pas de rétention tray)
+  (pct) => send('update-progress', { pct }),        // progression du téléchargement -> UI
+));
 
 // ---------- Compte Minecraft officiel (capes officielles) ----------
 // Vue publique d'une session : jamais de token vers l'UI, seulement le profil utile.
