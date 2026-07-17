@@ -21,10 +21,12 @@
   let canvas = null, ctx = null, raf = 0, t0 = 0;
   let img = null, imgW = 0, imgH = 0, frames = 1, curFrame = 0, lastSwap = 0;
   let cols = 0, rows = 0, grid = null; // grid[j*cols+i] = [r,g,b]
+  let gen = 0; // génération : invalide un chargement d'image en vol après clear()/setCape()
 
   function mount(el) { canvas = el; ctx = canvas.getContext('2d'); }
 
   function clear() {
+    gen++;
     cancelAnimationFrame(raf); raf = 0; img = null; grid = null;
     if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
@@ -50,16 +52,18 @@
   }
 
   function setCape(dataUrl) {
-    clear();
+    clear();                 // incrémente gen
     if (!dataUrl) return;
+    const myGen = gen;       // ce chargement n'est valide que tant que gen n'a pas rebougé
     const image = new Image();
     image.onload = () => {
+      if (myGen !== gen) return; // un clear()/setCape() est survenu pendant le chargement -> on abandonne
       img = image; imgW = image.naturalWidth; imgH = image.naturalHeight;
       frames = frameCount(imgW, imgH); curFrame = 0; lastSwap = 0; t0 = 0;
       buildGrid(0);
       raf = requestAnimationFrame(loop);
     };
-    image.onerror = () => clear();
+    image.onerror = () => { if (myGen === gen) clear(); };
     image.src = dataUrl;
   }
 

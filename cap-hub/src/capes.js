@@ -110,11 +110,14 @@ export function listCapes() {
   return [...read(DIR, false), ...read(BUILTIN_DIR, true)];
 }
 
-// id -> chemin absolu (protège contre la traversée de dossier).
+// id -> chemin absolu (protège contre la traversée de dossier). On compare via
+// path.relative pour éviter l'échappement vers un dossier FRÈRE dont le nom commence
+// comme DIR (ex. « capes-evil » vs « capes ») que startsWith laisserait passer.
 export function resolveCape(id) {
   if (!id) return null;
   const file = path.normalize(path.join(DIR, String(id)));
-  if (!file.startsWith(DIR) || !file.toLowerCase().endsWith('.png')) return null;
+  const rel = path.relative(DIR, file);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel) || !file.toLowerCase().endsWith('.png')) return null;
   return fs.existsSync(file) ? file : null;
 }
 

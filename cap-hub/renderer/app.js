@@ -12,6 +12,14 @@ function toast(msg, kind = '') {
   toast._t = setTimeout(() => t.classList.add('hidden'), 3200);
 }
 
+// Anti double-clic : désactive le bouton pendant l'opération async (évite deux invites
+// admin, deux publications, deux capes créées…). Ré-active dans un finally.
+async function guard(btnSel, fn) {
+  const btn = $(btnSel);
+  if (btn) { if (btn.disabled) return; btn.disabled = true; }
+  try { return await fn(); } finally { if (btn) btn.disabled = false; }
+}
+
 // ---------- Onglets ----------
 $$('.tab').forEach((tab) => {
   tab.addEventListener('click', () => {
@@ -127,14 +135,14 @@ function renderCapeGrid() {
     const el = document.createElement('div');
     el.className = 'cape' + (c.id === capeActive ? ' active' : '');
     el.innerHTML = `
-      <button class="fav ${fav ? 'on' : ''}" title="Favori">${fav ? '★' : '☆'}</button>
+      <button class="fav ${fav ? 'on' : ''}" title="Favori" aria-label="${fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}">${fav ? '★' : '☆'}</button>
       <div class="thumb"></div>
       ${c.id === capeActive ? '<span class="badge">active</span>' : ''}
       <div class="name" title="${esc(c.name)}">${esc(c.name)}${c.builtin ? ' <span class="muted">· intégrée</span>' : ''}</div>
-      <div class="catrow"><span class="cat-chip" title="Changer de dossier">🗂️ ${esc(catOf(c))}</span></div>
+      <div class="catrow"><span class="cat-chip" title="Changer de dossier" role="button" tabindex="0" aria-label="Changer de dossier (${esc(catOf(c))})">🗂️ ${esc(catOf(c))}</span></div>
       <div class="cape-actions">
         <button class="btn small act-use" title="${c.id === capeActive ? 'Cliquer pour désactiver' : 'Utiliser cette cape'}">${c.id === capeActive ? '✓ Active' : 'Utiliser'}</button>
-        ${c.builtin ? '' : '<button class="btn small act-rename" title="Renommer">✎</button><button class="btn small danger act-del" title="Supprimer">🗑</button>'}
+        ${c.builtin ? '' : '<button class="btn small act-rename" title="Renommer" aria-label="Renommer">✎</button><button class="btn small danger act-del" title="Supprimer" aria-label="Supprimer">🗑</button>'}
       </div>`;
     el.querySelector('.fav').addEventListener('click', () => toggleFav(c.id, !fav));
     el.querySelector('.act-use').addEventListener('click', () => setActive(c.id === capeActive ? '' : c.id));
@@ -218,7 +226,7 @@ async function capeDataUrl(id) {
   if (capeImgCache.has(id)) return capeImgCache.get(id);
   const r = await window.cap.capes.preview(id);
   const url = r.ok ? r.dataUrl : null;
-  capeImgCache.set(id, url);
+  if (url) capeImgCache.set(id, url); // ne pas mémoriser un échec transitoire (sinon miniature cassée à vie)
   return url;
 }
 
@@ -252,6 +260,8 @@ async function setActive(id) {
 }
 
 async function removeCape(id, name) {
+  // Suppression définitive (pas d'annulation) : on confirme pour éviter un clic malheureux.
+  if (!confirm(`Supprimer la cape « ${name} » ? Cette action est définitive.`)) return;
   const r = await window.cap.capes.remove(id);
   if (r.ok) { toast(`Cape « ${name} » supprimée.`, 'ok'); loadCapes(); }
   else toast(r.error || 'Erreur', 'err');
@@ -305,7 +315,7 @@ async function buildCapeFromFile(f) {
   return fitImageToCape(img); // sinon on recadre en 64×32
 }
 
-$('#btn-import').addEventListener('click', async () => {
+$('#btn-import').addEventListener('click', () => guard('#btn-import', async () => {
   const r = await window.cap.capes.import();
   if (!r.ok) { if (!r.canceled) toast(r.error || 'Import impossible', 'err'); return; }
   toast(`Traitement de ${r.files.length} fichier(s)…`);
@@ -320,15 +330,15 @@ $('#btn-import').addEventListener('click', async () => {
   }
   toast(`${ok} cape(s) importée(s) ✔${fail ? ` (${fail} rejetée(s))` : ''}`, ok ? 'ok' : 'err');
   if (ok) loadCapes();
-});
+}));
 
-$('#btn-apply').addEventListener('click', async () => {
+$('#btn-apply').addEventListener('click', () => guard('#btn-apply', async () => {
   toast('Application de Cap Hub… (une fenêtre admin peut apparaître)');
   const r = await window.cap.proxy.enableAll();
   if (!r.ok) return toast(r.error, 'err');
   toast('Cap Hub appliqué ✔ Relance/rejoins un monde pour voir les capes.', 'ok');
   refreshStatus();
-});
+}));
 
 // ---------- Créateur de capes ----------
 // État de l'éditeur pixel (planche 64x32) et de l'image importée.
@@ -432,7 +442,7 @@ $('#cr-random').addEventListener('click', () => {
   updateCreator();
 });
 
-$('#cr-create').addEventListener('click', async () => {
+$('#cr-create').addEventListener('click', () => guard('#cr-create', async () => {
   if ($('#cr-mode').value === 'image' && !creatorImg) return toast('Choisis d’abord une image.', 'err');
   const name = $('#cr-name').value.trim() || 'Ma cape';
   const url = drawCreator();
@@ -443,7 +453,7 @@ $('#cr-create').addEventListener('click', async () => {
   toast('Cape créée ✔', 'ok');
   await loadCapes();
   updateCreator();
-});
+}));
 
 // ---------- Compte Minecraft officiel ----------
 let mcBusy = false;
@@ -455,7 +465,7 @@ async function mcTexture(capeId) {
   if (mcTexCache.has(capeId)) return mcTexCache.get(capeId);
   const r = await window.cap.mc.capeTexture(capeId);
   const url = (r && r.ok) ? r.dataUrl : null;
-  mcTexCache.set(capeId, url);
+  if (url) mcTexCache.set(capeId, url); // idem : un échec ne doit pas casser la vignette définitivement
   return url;
 }
 async function mcLoadThumb(el, capeId) {
@@ -545,10 +555,13 @@ async function mcHide() {
 
 // Ajoute une cape officielle à la bibliothèque locale (utilisable via OptiFine, etc.).
 async function mcImportCape(id, alias) {
+  if (mcBusy) return; mcBusy = true;
   toast('Ajout à ta bibliothèque…');
-  const r = await window.cap.mc.importCape(id);
-  if (r.ok) { toast(`« ${alias} » ajoutée à Mes capes ✔`, 'ok'); loadCapes(); }
-  else toast(r.error || 'Ajout impossible', 'err');
+  try {
+    const r = await window.cap.mc.importCape(id);
+    if (r.ok) { toast(`« ${alias} » ajoutée à Mes capes ✔`, 'ok'); loadCapes(); }
+    else toast(r.error || 'Ajout impossible', 'err');
+  } finally { mcBusy = false; }
 }
 
 // Renseigne le pseudo du compte officiel comme pseudo Cap Hub (capes custom via OptiFine).
@@ -649,28 +662,28 @@ $('#btn-refresh-players').addEventListener('click', async () => {
   loadPlayers();
 });
 
-$('#btn-publish').addEventListener('click', async () => {
+$('#btn-publish').addEventListener('click', () => guard('#btn-publish', async () => {
   toast('Publication…');
   const r = await window.cap.capes.publish();
   toast(r.ok ? 'Ta cape est publiée dans le registre ✔' : r.error, r.ok ? 'ok' : 'err');
   if (r.ok) loadPlayers();
-});
+}));
 
 // ---------- État : boutons ----------
-$('#btn-proxy-toggle').addEventListener('click', async () => {
+$('#btn-proxy-toggle').addEventListener('click', () => guard('#btn-proxy-toggle', async () => {
   const s = await window.cap.proxy.status();
   const r = s.running ? await window.cap.proxy.stop() : await window.cap.proxy.start();
   if (!r.ok) toast(r.error, 'err');
   refreshStatus();
-});
-$('#btn-hosts-toggle').addEventListener('click', async () => {
+}));
+$('#btn-hosts-toggle').addEventListener('click', () => guard('#btn-hosts-toggle', async () => {
   const s = await window.cap.proxy.status();
   toast('Modification du fichier hosts… (fenêtre admin)');
   const r = s.hostsApplied ? await window.cap.proxy.removeRedirect() : await window.cap.proxy.applyRedirect();
   if (!r.ok) toast(r.error, 'err');
   else toast('Redirection ' + (s.hostsApplied ? 'retirée.' : 'activée.'), 'ok');
   refreshStatus();
-});
+}));
 
 // ---------- Thème ----------
 function applyTheme(name) {

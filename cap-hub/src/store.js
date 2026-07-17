@@ -13,10 +13,21 @@ export function initStore(userDataDir, safeStorage) {
 }
 
 function read() {
-  try { return JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { return {}; }
+  try { return JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch {}
+  // Repli sur la sauvegarde si le fichier principal est absent/corrompu (crash en pleine
+  // écriture) — évite de perdre token + session MC d'un coup.
+  try { return JSON.parse(fs.readFileSync(FILE + '.bak', 'utf8')); } catch { return {}; }
 }
+// Écriture ATOMIQUE : tmp -> rename (le rename est atomique sur le même volume), avec
+// une copie .bak de l'ancien contenu. Une coupure en plein write ne tronque donc jamais
+// settings.json (qui contient aussi le token et la session Minecraft chiffrés).
 function write(obj) {
-  try { fs.writeFileSync(FILE, JSON.stringify(obj, null, 2)); } catch {}
+  try {
+    const tmp = FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(obj, null, 2));
+    try { if (fs.existsSync(FILE)) fs.copyFileSync(FILE, FILE + '.bak'); } catch {}
+    fs.renameSync(tmp, FILE);
+  } catch {}
 }
 
 const encAvailable = () => { try { return safe && safe.isEncryptionAvailable(); } catch { return false; } };

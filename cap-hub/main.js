@@ -449,26 +449,29 @@ ipcMain.handle('mc:setCape', async (_e, capeId) => {
 // L'URL n'est JAMAIS fournie par le renderer : on la lit dans le profil du compte
 // connecté, puis fetchCapeTexture filtre l'hôte (anti-SSRF) et exige un vrai PNG.
 ipcMain.handle('mc:capeTexture', async (_e, capeId) => {
-  const session = getMcSession();
-  if (!session || !session.profile) return { ok: false };
-  const cape = (session.profile.capes || []).find((c) => c.id === capeId);
-  if (!cape || !cape.url) return { ok: false };
-  const dataUrl = await mc.fetchCapeTexture(cape.url);
-  return dataUrl ? { ok: true, dataUrl } : { ok: false };
+  try {
+    const session = getMcSession();
+    if (!session || !session.profile) return { ok: false };
+    const cape = (session.profile.capes || []).find((c) => c.id === capeId);
+    if (!cape || !cape.url) return { ok: false };
+    const dataUrl = await mc.fetchCapeTexture(cape.url);
+    return dataUrl ? { ok: true, dataUrl } : { ok: false };
+  } catch { return { ok: false }; }
 });
 
 // Ajoute une cape officielle à la bibliothèque locale (utilisable sur le canal OptiFine,
 // dans le créateur et l'aperçu) : récupère la texture et l'enregistre comme cape custom.
 ipcMain.handle('mc:importCape', async (_e, capeId) => {
-  const session = getMcSession();
-  if (!session || !session.profile) return { ok: false, error: 'Non connecté.' };
-  const cape = (session.profile.capes || []).find((c) => c.id === capeId);
-  if (!cape || !cape.url) return { ok: false, error: 'Cape introuvable.' };
-  const dataUrl = await mc.fetchCapeTexture(cape.url);
-  if (!dataUrl) return { ok: false, error: 'Texture indisponible.' };
-  let buf;
-  try { buf = Buffer.from(dataUrl.split(',')[1], 'base64'); } catch { return { ok: false, error: 'Décodage impossible.' }; }
-  return importCapeBuffer(buf, cape.alias || 'Cape officielle');
+  try {
+    const session = getMcSession();
+    if (!session || !session.profile) return { ok: false, error: 'Non connecté.' };
+    const cape = (session.profile.capes || []).find((c) => c.id === capeId);
+    if (!cape || !cape.url) return { ok: false, error: 'Cape introuvable.' };
+    const dataUrl = await mc.fetchCapeTexture(cape.url);
+    if (!dataUrl) return { ok: false, error: 'Texture indisponible.' };
+    const buf = Buffer.from(dataUrl.split(',')[1], 'base64');
+    return importCapeBuffer(buf, cape.alias || 'Cape officielle');
+  } catch (e) { return { ok: false, error: e.message || 'Import impossible.' }; }
 });
 
 // Masque la cape officielle (aucune cape).
