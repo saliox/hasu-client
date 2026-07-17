@@ -116,11 +116,15 @@
               <label>Pinceau <input id="px-color" type="color" value="#7c5cff" /></label>
               <label>Fond <input id="px-bg" type="color" value="#1a2233" /></label>
               <label class="check"><input id="px-erase" type="checkbox" /> Gomme (fond)</label>
+              <label class="check"><input id="px-mirror" type="checkbox" /> Miroir ⇔</label>
+              <button id="px-pick" class="btn small" title="Pipette : clique une case pour récupérer sa couleur">🎯 Pipette</button>
+              <button id="px-undo" class="btn small" title="Annuler (Ctrl+Z)" aria-label="Annuler" disabled>↶</button>
+              <button id="px-redo" class="btn small" title="Rétablir (Ctrl+Y)" aria-label="Rétablir" disabled>↷</button>
               <button id="px-fill" class="btn small">Remplir</button>
               <button id="px-reset" class="btn small">Vider</button>
             </div>
             <canvas id="px-canvas" width="512" height="256"></canvas>
-            <div class="muted">Clique / glisse pour peindre la planche 64×32 (le devant de la cape est la zone centrale gauche).</div>
+            <div class="muted">Clique / glisse pour peindre la planche 64×32 (le devant de la cape est la zone centrale gauche). <b>Ctrl+Z</b> annule, <b>Miroir</b> peint en symétrie.</div>
           </div>
 
           <div id="cr-image" class="hidden">

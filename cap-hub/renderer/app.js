@@ -431,14 +431,42 @@ function schedulePxPreview() {
   if (pxPreviewRaf || !window.CapePreview) return;
   pxPreviewRaf = requestAnimationFrame(() => { pxPreviewRaf = 0; window.CapePreview.setCape(drawCreator()); });
 }
-function paintPx(e) {
+// Coordonnées case (x,y) sous le pointeur, ou null hors planche.
+function pxCoord(e) {
   const cv = $('#px-canvas'), rect = cv.getBoundingClientRect();
   const x = Math.floor((e.clientX - rect.left) / (rect.width / PX_W));
   const y = Math.floor((e.clientY - rect.top) / (rect.height / PX_H));
-  if (x < 0 || y < 0 || x >= PX_W || y >= PX_H) return;
-  pxGrid[y * PX_W + x] = $('#px-erase').checked ? $('#px-bg').value : $('#px-color').value;
+  return (x < 0 || y < 0 || x >= PX_W || y >= PX_H) ? null : { x, y };
+}
+function paintPx(e) {
+  const p = pxCoord(e); if (!p) return;
+  const col = $('#px-erase').checked ? $('#px-bg').value : $('#px-color').value;
+  pxGrid[p.y * PX_W + p.x] = col;
+  if ($('#px-mirror').checked) pxGrid[p.y * PX_W + (PX_W - 1 - p.x)] = col; // symétrie horizontale
   renderPxCanvas();
   schedulePxPreview();
+}
+// Pipette : récupère la couleur de la case cliquée dans le pinceau.
+function pickPx(e) {
+  const p = pxCoord(e); if (!p) return;
+  $('#px-color').value = pxGrid[p.y * PX_W + p.x];
+  setEyedrop(false); // pipette « un coup »
+}
+
+// ----- Historique (annuler / rétablir) de l'éditeur pixel -----
+let pxUndoStack = [], pxRedoStack = [], pxEyedrop = false;
+function pxSnapshot() { pxUndoStack.push(pxGrid.slice()); if (pxUndoStack.length > 60) pxUndoStack.shift(); pxRedoStack.length = 0; updatePxButtons(); }
+function updatePxButtons() {
+  const u = $('#px-undo'), r = $('#px-redo');
+  if (u) u.disabled = !pxUndoStack.length;
+  if (r) r.disabled = !pxRedoStack.length;
+}
+function pxUndo() { if (!pxUndoStack.length) return; pxRedoStack.push(pxGrid.slice()); pxGrid = pxUndoStack.pop(); renderPxCanvas(); schedulePxPreview(); updatePxButtons(); }
+function pxRedo() { if (!pxRedoStack.length) return; pxUndoStack.push(pxGrid.slice()); pxGrid = pxRedoStack.pop(); renderPxCanvas(); schedulePxPreview(); updatePxButtons(); }
+function setEyedrop(on) {
+  pxEyedrop = on;
+  const btn = $('#px-pick'); if (btn) btn.classList.toggle('active', on);
+  const cv = $('#px-canvas'); if (cv) cv.style.cursor = on ? 'copy' : 'crosshair';
 }
 
 function updateCreator() {
@@ -459,12 +487,28 @@ function updateCreator() {
 
 // Éditeur pixel : peinture au pointeur (souris, tactile ET stylet via Pointer Events).
 const pxCanvas = $('#px-canvas');
-pxCanvas.addEventListener('pointerdown', (e) => { pxPainting = true; try { pxCanvas.setPointerCapture(e.pointerId); } catch {} paintPx(e); });
+pxCanvas.addEventListener('pointerdown', (e) => {
+  if (pxEyedrop) { pickPx(e); return; }
+  pxPainting = true; try { pxCanvas.setPointerCapture(e.pointerId); } catch {}
+  pxSnapshot(); // une entrée d'historique par TRAIT (pas par pixel)
+  paintPx(e);
+});
 pxCanvas.addEventListener('pointermove', (e) => { if (pxPainting) paintPx(e); });
 window.addEventListener('pointerup', () => { pxPainting = false; });
 pxCanvas.addEventListener('pointercancel', () => { pxPainting = false; });
-$('#px-fill').addEventListener('click', () => { pxGrid.fill($('#px-color').value); renderPxCanvas(); updateCreator(); });
-$('#px-reset').addEventListener('click', () => { pxGrid.fill($('#px-bg').value); renderPxCanvas(); updateCreator(); });
+$('#px-pick').addEventListener('click', () => setEyedrop(!pxEyedrop));
+$('#px-undo').addEventListener('click', pxUndo);
+$('#px-redo').addEventListener('click', pxRedo);
+$('#px-fill').addEventListener('click', () => { pxSnapshot(); pxGrid.fill($('#px-color').value); renderPxCanvas(); updateCreator(); });
+$('#px-reset').addEventListener('click', () => { pxSnapshot(); pxGrid.fill($('#px-bg').value); renderPxCanvas(); updateCreator(); });
+// Raccourcis Annuler/Rétablir (uniquement sur le créateur en mode pixel).
+window.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  if (!$('#tab-creator').classList.contains('active') || $('#cr-mode').value !== 'pixel') return;
+  const k = e.key.toLowerCase();
+  if (k === 'z' && !e.shiftKey) { e.preventDefault(); pxUndo(); }
+  else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); pxRedo(); }
+});
 
 // Import d'image quelconque.
 $('#img-pick').addEventListener('click', async () => {
