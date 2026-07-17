@@ -262,6 +262,19 @@ code { background: var(--bg-3); padding: 1px 6px; border-radius: 6px; font-size:
 .mc-code-actions { display: flex; gap: 8px; justify-content: center; margin-top: 8px; }
 .banner .btn { margin-left: 10px; }
 
+/* Auto-diagnostic */
+.diag { margin-top: 18px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+.diag h3 { margin: 0; }
+.diag-steps { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.diag-step { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; background: var(--bg-3); border: 1px solid var(--line); }
+.diag-step.ko { border-color: var(--warn); }
+.diag-step .ic { font-size: 16px; line-height: 1.4; }
+.diag-step .dl { font-weight: 600; font-size: 13px; }
+.diag-step .dd { font-size: 12px; margin-top: 2px; }
+.diag-summary { margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-weight: 600; font-size: 13px; }
+.diag-summary.ok { background: rgba(59,165,93,.14); border: 1px solid #3ba55d; }
+.diag-summary.ko { background: rgba(214,60,90,.12); border: 1px solid var(--warn); }
+
 /* Journal */
 .log {
   background: #070a12; border: 1px solid var(--line); border-radius: 12px;

@@ -47,6 +47,10 @@
   et éclairage — sans lancer Minecraft ; les capes **animées** (images empilées, ex.
   64×64) défilent toutes seules.
 - **🎨 6 thèmes d'interface.** Nuit, Clair, Cyber, Sang, Océan, Forêt (Réglages).
+- **🩺 Auto-diagnostic.** Un bouton *Tester ma configuration* (onglet **État**) vérifie
+  toute la chaîne — proxy, redirection `hosts`, pseudo, cape active — et fait une **vraie
+  requête à travers le proxy** pour confirmer que ta cape est bien servie, avec un rapport
+  étape par étape. Fini le « pourquoi ma cape ne s'affiche pas ? ».
 - **🚀 Détection automatique.** Cap Hub surveille le lancement de Minecraft (launcher
   officiel, Lunar, Badlion, Prism, MultiMC, Hasu Launcher, `java`/`javaw`…) et te
   **propose d'appliquer** ta cape en **un clic** au bon moment.
@@ -162,7 +166,7 @@ npm start          # lance l'app (Windows)
 ```bash
 npm install               # dépendances de build (Electron) — sur ton PC Windows
 npm run icon              # (re)génère build/icon.png + .ico (pur Node)
-npm test                  # 90 tests : capes (animées/HD + anti-traversée), PNG (décodeur borné), registre (fusion sûre + anti-traversée), réglages (écriture atomique), OptiFine, géométrie, proxy HTTP, détection Minecraft (anti faux-positifs), auto-update (URL restreinte), compte Minecraft officiel (auth + texture anti-SSRF)
+npm test                  # 91 tests : capes (animées/HD + anti-traversée), PNG (décodeur borné), registre (fusion sûre + anti-traversée), réglages (écriture atomique), OptiFine, géométrie, proxy HTTP, détection Minecraft (anti faux-positifs), auto-update (URL restreinte), compte Minecraft officiel (auth + texture anti-SSRF)
 npm run dist              # → dist/Cap Hub Setup <version>.exe (NSIS) + Cap Hub <version> portable.exe
 npm run publish:update    # SHA-256 + Release GitHub + maj cap-hub/version.json
 ```

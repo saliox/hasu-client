@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('cap', {
     applyRedirect: () => invoke('proxy:applyRedirect'),
     removeRedirect: () => invoke('proxy:removeRedirect'),
     enableAll: () => invoke('proxy:enableAll'),
+    selfTest: () => invoke('proxy:selfTest'),
   },
 
   registry: {
