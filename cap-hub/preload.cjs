@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('cap', {
     pickImage: () => invoke('capes:pickImage'),
     setActive: (id) => invoke('capes:setActive', id),
     preview: (id) => invoke('capes:preview', id), // -> data URL
+    duplicate: (id) => invoke('capes:duplicate', id),
+    export: (id) => invoke('capes:export', id),
     publish: () => invoke('capes:publish'),
   },
 
@@ -39,6 +41,7 @@ contextBridge.exposeInMainWorld('cap', {
   registry: {
     refresh: () => invoke('registry:refresh'),
     players: () => invoke('registry:players'),
+    cape: (name) => invoke('registry:cape', name), // -> data URL de la cape d'un joueur
   },
 
   games: {

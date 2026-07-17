@@ -11,7 +11,7 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 // import() dynamique : sur Windows un chemin absolu (D:\...) doit être une URL file://.
 const S = (f) => pathToFileURL(path.join(root, 'src', f)).href;
 
-const { initCapes, listCapes, importCape, importCapeBuffer, validateCape, readCape, resolveCape, renameCape } = await import(S('capes.js'));
+const { initCapes, listCapes, importCape, importCapeBuffer, validateCape, readCape, resolveCape, renameCape, duplicateCape } = await import(S('capes.js'));
 const { isPng, readPngSize, encodePNG, decodePNG, firstFrameIfAnimated, capeFrames } = await import(S('png.js'));
 const providers = await import(S('providers.js'));
 const proxy = await import(S('proxy.js'));
@@ -59,6 +59,10 @@ ok('refuse de renommer une intégrée', renameCape(capes.find((c) => c.builtin).
 const cr = importCapeBuffer(mkPng(64, 32), 'Cape créée');
 ok('crée une cape depuis un buffer', cr.ok && !!resolveCape(cr.id));
 ok('rejette un buffer non-cape', importCapeBuffer(Buffer.from('nope'), 'X').ok === false);
+// Duplication (copie modifiable, nouvel id).
+const dup = duplicateCape(cr.id);
+ok('duplique une cape en un nouvel id', dup.ok && dup.id !== cr.id && !!resolveCape(dup.id));
+ok('duplique une cape INTÉGRÉE aussi', duplicateCape(capes.find((c) => c.builtin).id).ok === true);
 
 console.log('\n# Réglages (favoris / catégories)');
 const store = await import(S('store.js'));

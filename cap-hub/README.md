@@ -33,6 +33,10 @@
 - **👥 Vous vous voyez entre vous.** Tous les joueurs Cap Hub partagent un **registre
   commun** : leurs capes s'affichent chez toi, la tienne s'affiche chez eux — sur
   **tous les serveurs**, en même temps que les capes OptiFine officielles des autres.
+  Dans l'onglet **Joueurs**, chaque joueur a sa **vignette** et un clic affiche sa cape
+  en **3D**.
+- **🔁 Exporter / dupliquer.** Sauvegarde n'importe quelle cape en **PNG** (⬇) ou
+  **duplique**-la (⧉) pour partir d'une base et la modifier.
 - **🎖️ Tes capes officielles Mojang.** Connecte **ton** compte Minecraft (**Microsoft**
   en device-code comme le launcher, ou **token** direct) et **active/masque** tes capes
   officielles (Migrator, MineCon, Vanilla…) via l'**API officielle** Mojang — visibles
@@ -157,7 +161,7 @@ npm start          # lance l'app (Windows)
 ```bash
 npm install               # dépendances de build (Electron) — sur ton PC Windows
 npm run icon              # (re)génère build/icon.png + .ico (pur Node)
-npm test                  # 88 tests : capes (animées/HD + anti-traversée), PNG (décodeur borné), registre (fusion sûre + anti-traversée), réglages (écriture atomique), OptiFine, géométrie, proxy HTTP, détection Minecraft (anti faux-positifs), auto-update (URL restreinte), compte Minecraft officiel (auth + texture anti-SSRF)
+npm test                  # 90 tests : capes (animées/HD + anti-traversée), PNG (décodeur borné), registre (fusion sûre + anti-traversée), réglages (écriture atomique), OptiFine, géométrie, proxy HTTP, détection Minecraft (anti faux-positifs), auto-update (URL restreinte), compte Minecraft officiel (auth + texture anti-SSRF)
 npm run dist              # → dist/Cap Hub Setup <version>.exe (NSIS) + Cap Hub <version> portable.exe
 npm run publish:update    # SHA-256 + Release GitHub + maj cap-hub/version.json
 ```

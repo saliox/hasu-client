@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { initCapes, listCapes, importCape, importCapeBuffer, deleteCape, renameCape, resolveCape, readCape } from './src/capes.js';
+import { initCapes, listCapes, importCape, importCapeBuffer, deleteCape, renameCape, resolveCape, readCape, duplicateCape } from './src/capes.js';
 import { initStore, getSettings, saveSettings, setToken, getToken, setMcSession, getMcSession, clearMcSession } from './src/store.js';
 import * as mc from './src/mcaccount.js';
 import { startProxy, stopProxy, isRunning, getStats, proxyEvents, redirectHosts } from './src/proxy.js';
@@ -281,6 +281,22 @@ ipcMain.handle('capes:preview', (_e, id) => {
   if (!buf) return { ok: false, error: 'Cape introuvable.' };
   return { ok: true, dataUrl: 'data:image/png;base64,' + buf.toString('base64') };
 });
+// Duplique une cape (intégrée ou importée) en une copie modifiable.
+ipcMain.handle('capes:duplicate', (_e, id) => duplicateCape(id));
+// Exporte une cape vers un fichier PNG choisi par l'utilisateur (inverse de l'import).
+ipcMain.handle('capes:export', async (_e, id) => {
+  const buf = readCape(id);
+  if (!buf) return { ok: false, error: 'Cape introuvable.' };
+  const src = listCapes().find((c) => c.id === id);
+  const r = await dialog.showSaveDialog(win, {
+    title: 'Exporter la cape',
+    defaultPath: `${(src?.name || 'cape').replace(/[\\/:*?"<>|]/g, '_')}.png`,
+    filters: [{ name: 'PNG', extensions: ['png'] }],
+  });
+  if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+  try { fs.writeFileSync(r.filePath, buf); return { ok: true, path: r.filePath }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
 ipcMain.handle('capes:publish', async () => {
   const s = getSettings();
   if (!s.username) return { ok: false, error: 'Renseigne ton pseudo Minecraft (Réglages).' };
@@ -325,6 +341,14 @@ ipcMain.handle('registry:refresh', async () => {
   return { ...r, players: listPlayers() };
 });
 ipcMain.handle('registry:players', () => ({ ok: true, players: listPlayers() }));
+// Cape d'un joueur du registre en data URL, pour l'afficher dans l'onglet Joueurs.
+ipcMain.handle('registry:cape', async (_e, name) => {
+  try {
+    const buf = await getRegistryCape(String(name || '').toLowerCase());
+    if (!buf) return { ok: false };
+    return { ok: true, dataUrl: 'data:image/png;base64,' + buf.toString('base64') };
+  } catch { return { ok: false }; }
+});
 
 ipcMain.handle('games:current', () => ({ ok: true, games: currentGames() }));
 
