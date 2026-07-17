@@ -278,6 +278,16 @@
           <div id="games-now" class="muted">Aucun jeu détecté.</div>
         </div>
       </div>
+
+      <div class="diag">
+        <div class="row between">
+          <h3>🩺 Ma cape ne s'affiche pas ?</h3>
+          <button id="btn-selftest" class="btn primary">Tester ma configuration</button>
+        </div>
+        <p class="muted">Un test complet de la chaîne : proxy, redirection, pseudo, et une <b>vraie requête</b> à travers le proxy pour confirmer que ta cape est bien servie sur le canal OptiFine.</p>
+        <div id="selftest-result" class="diag-steps"></div>
+      </div>
+
       <h3>Journal</h3>
       <div id="log" class="log"></div>
     </section>

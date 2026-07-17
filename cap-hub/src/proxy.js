@@ -150,6 +150,7 @@ async function handle(req, res) {
 
 export function isRunning() { return !!server; }
 export function getStats() { return { running: !!server, ...stats }; }
+export function getPort() { return server ? (server.address()?.port ?? null) : null; }
 
 // OptiFine interroge s.optifine.net en HTTP sur le port 80 : on écoute uniquement sur
 // 127.0.0.1:80. opts.port (défaut 80) sert aux tests (0 = éphémère).

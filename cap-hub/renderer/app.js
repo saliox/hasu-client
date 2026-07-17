@@ -800,6 +800,25 @@ $('#btn-hosts-toggle').addEventListener('click', () => guard('#btn-hosts-toggle'
   refreshStatus();
 }));
 
+// Auto-diagnostic : teste toute la chaîne et affiche un rapport étape par étape.
+$('#btn-selftest').addEventListener('click', () => guard('#btn-selftest', async () => {
+  const box = $('#selftest-result');
+  box.innerHTML = '<p class="muted">Test en cours…</p>';
+  const r = await window.cap.proxy.selfTest();
+  if (!r.ok) { box.innerHTML = '<p class="muted">Test impossible.</p>'; return; }
+  box.innerHTML = r.steps.map((s) => `
+    <div class="diag-step ${s.ok ? 'ok' : 'ko'}">
+      <span class="ic" aria-hidden="true">${s.ok ? '✅' : '❌'}</span>
+      <div><div class="dl">${esc(s.label)}</div>${s.detail ? `<div class="dd muted">${esc(s.detail)}</div>` : ''}</div>
+    </div>`).join('');
+  const summary = document.createElement('div');
+  summary.className = 'diag-summary ' + (r.allOk ? 'ok' : 'ko');
+  summary.textContent = r.allOk
+    ? '🎉 Tout est bon — relance/rejoins un monde, ta cape doit apparaître.'
+    : '⚠️ Un ou plusieurs points bloquent l’affichage — corrige les ❌ ci-dessus.';
+  box.appendChild(summary);
+}));
+
 // ---------- Thème ----------
 function applyTheme(name) {
   document.body.dataset.theme = name || 'nuit';

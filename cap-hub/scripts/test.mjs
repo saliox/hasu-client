@@ -112,6 +112,9 @@ const a = await get('s.optifine.net', '/capes/Notch.png');
 ok('sert MA cape (PNG 200)', a.status === 200 && isPng(a.buf));
 const aq = await get('s.optifine.net', '/capes/Notch.png?ts=12345');
 ok('sert MA cape malgré une query (cache-buster)', aq.status === 200 && isPng(aq.buf));
+// L'auto-diagnostic compare l'octet-à-octet avec firstFrameIfAnimated(cape active) : on
+// vérifie que ce que sert le proxy correspond bien.
+ok('cape servie == 1re frame de MA cape (base de l’auto-test)', a.buf.equals(firstFrameIfAnimated(myCape)));
 const b = await get('s.optifine.net', '/capes/Dieu.png');
 ok('sert cape registre (PNG 200)', b.status === 200 && isPng(b.buf));
 const an = await get('s.optifine.net', '/capes/Anim.png');

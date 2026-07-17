@@ -10,12 +10,14 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, Notification, safeStorage } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
+import http from 'node:http';
 import { fileURLToPath } from 'node:url';
+import { isPng, firstFrameIfAnimated } from './src/png.js';
 
 import { initCapes, listCapes, importCape, importCapeBuffer, deleteCape, renameCape, resolveCape, readCape, duplicateCape } from './src/capes.js';
 import { initStore, getSettings, saveSettings, setToken, getToken, setMcSession, getMcSession, clearMcSession } from './src/store.js';
 import * as mc from './src/mcaccount.js';
-import { startProxy, stopProxy, isRunning, getStats, proxyEvents, redirectHosts } from './src/proxy.js';
+import { startProxy, stopProxy, isRunning, getStats, getPort, proxyEvents, redirectHosts } from './src/proxy.js';
 import { isApplied, applyRedirect, removeRedirect, appliedHosts } from './src/hosts.js';
 import { initRegistry, configureRegistry, refreshIndex, listPlayers, getRegistryCape, publishCape } from './src/registry.js';
 import { startWatcher, stopWatcher, currentGames, watcherEvents } from './src/watcher.js';
@@ -351,6 +353,50 @@ ipcMain.handle('registry:cape', async (_e, name) => {
 });
 
 ipcMain.handle('games:current', () => ({ ok: true, games: currentGames() }));
+
+// Auto-diagnostic « pourquoi ma cape ne s'affiche pas ? » : vérifie toute la chaîne et,
+// surtout, fait une VRAIE requête à travers le proxy (comme OptiFine) pour confirmer que
+// ta cape est bien servie sur ton pseudo.
+ipcMain.handle('proxy:selfTest', async () => {
+  const s = getSettings();
+  const steps = [];
+  const add = (ok, label, detail) => steps.push({ ok, label, detail: detail || '' });
+
+  add(isRunning(), 'Proxy de capes démarré', isRunning() ? '' : 'Démarre-le (onglet État) ou clique « Appliquer Cap Hub ».');
+  add(isApplied(), 'Redirection s.optifine.net active', isApplied() ? '' : 'Clique « Appliquer Cap Hub » (fenêtre admin).');
+  add(!!s.username, 'Pseudo Minecraft renseigné', s.username ? `« ${s.username} »` : 'Renseigne ton pseudo (Réglages).');
+  add(!!s.activeCape, 'Cape active choisie', s.activeCape ? '' : 'Choisis une cape et clique « Utiliser ».');
+
+  // Requête de bout en bout à travers le proxy local (même chemin qu'OptiFine).
+  let served = false, detail = 'Proxy arrêté ou pseudo manquant — étapes précédentes à corriger d’abord.';
+  if (isRunning() && s.username) {
+    const port = getPort() || 80;
+    try {
+      const res = await new Promise((resolve, reject) => {
+        const req = http.get(
+          { host: '127.0.0.1', port, path: `/capes/${encodeURIComponent(s.username)}.png`, headers: { Host: 's.optifine.net' }, timeout: 5000 },
+          (r) => { const ch = []; r.on('data', (c) => ch.push(c)); r.on('end', () => resolve({ status: r.statusCode, buf: Buffer.concat(ch) })); }
+        );
+        req.on('timeout', () => req.destroy(new Error('délai dépassé')));
+        req.on('error', reject);
+      });
+      if (res.status === 200 && isPng(res.buf)) {
+        served = true;
+        const own = s.activeCape ? firstFrameIfAnimated(readCape(s.activeCape) || Buffer.alloc(0)) : null;
+        detail = own && res.buf.equals(own)
+          ? 'Ta cape active est servie correctement ✔'
+          : 'Une cape est servie pour ton pseudo (via le registre ou le relais OptiFine).';
+      } else {
+        detail = `Le proxy a répondu HTTP ${res.status} — ta cape n’est pas servie. As-tu bien choisi une cape active ?`;
+      }
+    } catch (e) {
+      detail = 'Le proxy local n’a pas répondu : ' + (e.message || 'erreur') + '. Le port 80 est-il pris par un autre logiciel ?';
+    }
+  }
+  add(served, 'Ta cape est servie sur le canal OptiFine', detail);
+
+  return { ok: true, allOk: steps.every((x) => x.ok), steps };
+});
 
 ipcMain.handle('update:check', () => doUpdateCheck(false));
 ipcMain.handle('update:apply', () => applyUpdate(() => app.quit()));
