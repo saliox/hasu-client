@@ -23,9 +23,10 @@
   *(Les capes animées défilent dans l'aperçu 3D ; en jeu via OptiFine, la 1ʳᵉ image est
   affichée — OptiFine n'anime pas les capes.)*
 - **✨ Créateur de capes.** Compose ta propre cape dans l'app : motifs (uni, dégradé,
-  rayures, damier, diagonales), **éditeur pixel par pixel** (pinceau/gomme/remplir), ou
-  **depuis n'importe quelle image** (recadrée : remplir/contenir/étirer) — **aperçu 3D en
-  direct**, puis ajoute-la à ta bibliothèque.
+  rayures, damier, diagonales), **éditeur pixel par pixel** (pinceau/gomme/remplir,
+  **annuler/rétablir** `Ctrl+Z`/`Ctrl+Y`, **pipette**, **mode miroir** pour les capes
+  symétriques, souris/tactile/stylet), ou **depuis n'importe quelle image** (recadrée :
+  remplir/contenir/étirer) — **aperçu 3D en direct**, puis ajoute-la à ta bibliothèque.
 - **🗂️ Bibliothèque en dossiers.** Range tes capes par **catégorie** (auto pour les
   intégrées : Unis / Dégradés / Motifs, éditables), importe **plusieurs PNG d'un coup**,
   mets-les en **favori** (★), **renomme**-les, et retrouve-les par **recherche**, **dossier**
