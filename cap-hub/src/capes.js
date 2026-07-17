@@ -121,6 +121,14 @@ export function resolveCape(id) {
   return fs.existsSync(file) ? file : null;
 }
 
+// Duplique une cape (intégrée ou importée) dans une nouvelle cape modifiable.
+export function duplicateCape(id) {
+  const buf = readCape(id);
+  if (!buf) return { ok: false, error: 'Cape introuvable.' };
+  const src = listCapes().find((c) => c.id === id);
+  return importCapeBuffer(buf, `${src ? src.name : 'cape'} copie`);
+}
+
 export function readCape(id) {
   const file = resolveCape(id);
   return file ? fs.readFileSync(file) : null;

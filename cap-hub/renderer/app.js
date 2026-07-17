@@ -157,10 +157,14 @@ function renderCapeGrid() {
       <div class="catrow"><span class="cat-chip" title="Changer de dossier" role="button" tabindex="0" aria-label="Changer de dossier (${esc(catOf(c))})">🗂️ ${esc(catOf(c))}</span></div>
       <div class="cape-actions">
         <button class="btn small act-use" title="${c.id === capeActive ? 'Cliquer pour désactiver' : 'Utiliser cette cape'}">${c.id === capeActive ? '✓ Active' : 'Utiliser'}</button>
+        <button class="btn small act-dup" title="Dupliquer" aria-label="Dupliquer">⧉</button>
+        <button class="btn small act-export" title="Exporter en PNG" aria-label="Exporter en PNG">⬇</button>
         ${c.builtin ? '' : '<button class="btn small act-rename" title="Renommer" aria-label="Renommer">✎</button><button class="btn small danger act-del" title="Supprimer" aria-label="Supprimer">🗑</button>'}
       </div>`;
     el.querySelector('.fav').addEventListener('click', () => toggleFav(c.id, !fav));
     el.querySelector('.act-use').addEventListener('click', () => setActive(c.id === capeActive ? '' : c.id));
+    el.querySelector('.act-dup').addEventListener('click', () => dupCape(c.id));
+    el.querySelector('.act-export').addEventListener('click', () => exportCape(c.id, c.name));
     el.querySelector('.cat-chip').addEventListener('click', () => startCatEdit(el, c));
     const rn = el.querySelector('.act-rename');
     if (rn) rn.addEventListener('click', () => startRename(el, c));
@@ -280,6 +284,20 @@ async function removeCape(id, name) {
   const r = await window.cap.capes.remove(id);
   if (r.ok) { toast(`Cape « ${name} » supprimée.`, 'ok'); loadCapes(); }
   else toast(r.error || 'Erreur', 'err');
+}
+
+// Duplique une cape (intégrée ou importée) en une copie modifiable.
+async function dupCape(id) {
+  const r = await window.cap.capes.duplicate(id);
+  if (r.ok) { toast('Cape dupliquée ✔', 'ok'); loadCapes(); }
+  else toast(r.error || 'Duplication impossible', 'err');
+}
+
+// Exporte une cape vers un fichier PNG (inverse de l'import — pratique pour sauvegarder/partager).
+async function exportCape(id, name) {
+  const r = await window.cap.capes.export(id);
+  if (r.ok) toast(`« ${name} » exportée ✔`, 'ok');
+  else if (!r.canceled) toast(r.error || 'Export impossible', 'err');
 }
 
 // ---------- Import (PNG / GIF animé / image recadrée) ----------
@@ -672,19 +690,48 @@ async function loadPlayers() {
   for (const p of players) {
     const el = document.createElement('div');
     el.className = 'player';
+    el.setAttribute('role', 'button');
+    el.setAttribute('tabindex', '0');
+    el.title = 'Voir la cape en 3D';
     el.innerHTML = `
       <div class="av"></div>
       <div><div class="pn">${esc(p.name)}</div>
       <div class="pd">${p.updated ? 'maj ' + esc(p.updated) : ''}</div></div>`;
+    el.addEventListener('click', () => showPlayerCape(p.name));
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showPlayerCape(p.name); } });
     list.appendChild(el);
+    loadPlayerThumb(el.querySelector('.av'), p.name);
   }
 }
 
-$('#btn-refresh-players').addEventListener('click', async () => {
+// Cache des capes du registre (data URL). Vidé au rafraîchissement (une cape peut changer).
+const playerCapeCache = new Map();
+async function playerCape(name) {
+  if (playerCapeCache.has(name)) return playerCapeCache.get(name);
+  const r = await window.cap.registry.cape(name);
+  const url = (r && r.ok) ? r.dataUrl : null;
+  if (url) playerCapeCache.set(name, url); // ne mémorise pas un échec transitoire
+  return url;
+}
+async function loadPlayerThumb(el, name) {
+  const url = await playerCape(name);
+  if (url) el.style.backgroundImage = `url(${url})`;
+}
+async function showPlayerCape(name) {
+  if (!window.CapePreview) return;
+  window.CapePreview.mount($('#player-preview'));
+  const label = $('#player-preview-label');
+  const url = await playerCape(name);
+  if (url) { window.CapePreview.setCape(url); if (label) label.textContent = name; }
+  else { window.CapePreview.clear(); if (label) label.textContent = `${name} (cape indisponible hors-ligne)`; }
+}
+
+$('#btn-refresh-players').addEventListener('click', () => guard('#btn-refresh-players', async () => {
   const r = await window.cap.registry.refresh();
   toast(r.ok ? `Registre à jour (${(r.players || []).length} joueurs).` : r.error, r.ok ? 'ok' : 'err');
+  playerCapeCache.clear(); // une cape a pu changer -> on relit
   loadPlayers();
-});
+}));
 
 $('#btn-publish').addEventListener('click', () => guard('#btn-publish', async () => {
   toast('Publication…');

@@ -216,7 +216,9 @@ code { background: var(--bg-3); padding: 1px 6px; border-radius: 6px; font-size:
 }
 .cape .cape-actions { display: flex; gap: 6px; }
 .cape .cape-actions .btn { flex: 1; padding: 6px; font-size: 12px; }
-.cape .cape-actions .act-rename, .cape .cape-actions .act-del { flex: 0 0 auto; }
+.cape .cape-actions .act-rename, .cape .cape-actions .act-del,
+.cape .cape-actions .act-dup, .cape .cape-actions .act-export { flex: 0 0 auto; }
+.cape .cape-actions { flex-wrap: wrap; }
 /* Étoile favori */
 .cape .fav {
   position: absolute; top: 6px; left: 6px; z-index: 2;
@@ -233,7 +235,9 @@ code { background: var(--bg-3); padding: 1px 6px; border-radius: 6px; font-size:
 .player {
   display: flex; align-items: center; gap: 12px; padding: 10px 12px;
   background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px;
+  cursor: pointer; transition: border-color .12s, background .12s;
 }
+.player:hover, .player:focus-visible { border-color: var(--accent); background: var(--bg-3); outline: none; }
 .player .av { width: 40px; height: 60px; border-radius: 6px; background: #0a0e18 center/contain no-repeat; image-rendering: pixelated; border: 1px solid var(--line); }
 .player .pn { font-weight: 600; }
 .player .pd { color: var(--muted); font-size: 12px; }
