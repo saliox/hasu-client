@@ -43,10 +43,11 @@
   officielles (Migrator, MineCon, Vanilla…) via l'**API officielle** Mojang — visibles
   partout, **sans OptiFine ni redirection**. Ta session est **chiffrée** au repos ; Cap Hub
   ne gère que **ton** compte, jamais celui d'un tiers.
-- **🧊 Aperçu 3D dans l'app.** Vois ta cape en **3D** **portée sur un personnage**
-  (mannequin bloc, vue de dos) ou **seule** — tissu qui ondule, rotation douce et
-  éclairage — sans lancer Minecraft ; les capes **animées** défilent toutes seules.
-  Bascule perso / cape seule sous l'aperçu.
+- **🧊 Aperçu façon Minecraft.** Vois ta cape sur le **modèle joueur** texturé
+  **exactement comme en jeu** (boîtes UV, échantillonnage pixel), **avec ton vrai skin**
+  si tu connectes ton compte (récupéré chez Mojang, mis à jour si tu changes de skin), ou
+  un mannequin par défaut sinon. Bascule **perso / cape seule** ; les capes **animées**
+  défilent toutes seules — sans lancer Minecraft.
 - **🎨 6 thèmes d'interface.** Nuit, Clair, Cyber, Sang, Océan, Forêt (Réglages).
 - **🩺 Auto-diagnostic.** Un bouton *Tester ma configuration* (onglet **État**) vérifie
   toute la chaîne — proxy, redirection `hosts`, pseudo, cape active — et fait une **vraie

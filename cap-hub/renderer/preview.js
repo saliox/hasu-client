@@ -1,216 +1,276 @@
 'use strict';
-// Aperçu 3D d'une cape (canvas 2D, sans dépendance). On échantillonne le devant de la
-// cape en une grille de couleurs, puis on rend un maillage de tissu : ondulation
-// (vague), rotation douce autour de l'axe vertical, projection en perspective et
-// éclairage directionnel (Lambert). Gère les capes animées (images empilées).
+// Aperçu 3D « façon Minecraft » : le personnage (modèle joueur standard) est rendu avec
+// le VRAI skin du joueur (texturé, échantillonnage au plus proche = look pixel du jeu),
+// et la cape est mappée sur le modèle de cape avec les UV officielles. Canvas 2D, zéro
+// dépendance : chaque face de boîte est texturée par 2 triangles affines.
 //
-// Expose window.CapePreview.{ mount(canvas), setCape(dataUrl), clear() }.
+// API : window.CapePreview.{ mount(canvas), setCape(dataUrl), setSkin(dataUrl, slim),
+//                            clear(), setShowBody(bool), frameCount(w,h) }
 
 (function () {
-  // Géométrie (identique à src/capegeom.js, dupliquée pour le contexte navigateur).
+  let canvas = null, ctx = null, raf = 0, t0 = 0, gen = 0;
+  let capeImg = null, capeW = 0, capeH = 0, frames = 1, curFrame = 0, lastSwap = 0;
+  let skinImg = null, slim = false;
+  let showBody = true;
+
+  function mount(el) { canvas = el; ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false; }
+  function clear() {
+    gen++; cancelAnimationFrame(raf); raf = 0; capeImg = null;
+    tileCache.clear();
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // Géométrie de cape (identique à src/capegeom.js).
   function frameCount(w, h) {
     if (!w || !h) return 1;
     const n = Math.round((2 * h) / w);
     return n >= 1 && Math.abs(n * (w / 2) - h) <= Math.max(1, w * 0.03) ? n : 1;
   }
   function capeFrontRect(w, h, frame) {
-    // OptiFine 46×22 (planche plus étroite) -> s=w/46 ; sinon vanilla/HD -> s=w/64.
     const s = (w % 46 === 0 && w % 64 !== 0) ? w / 46 : w / 64;
-    const fh = 32 * s;
-    return { x: Math.round(s), y: Math.round(frame * fh + s), w: Math.round(10 * s), h: Math.round(16 * s) };
+    return { x: 1 * s, y: frame * 32 * s + 1 * s, w: 10 * s, h: 16 * s, s };
   }
 
-  let canvas = null, ctx = null, raf = 0, t0 = 0;
-  let img = null, imgW = 0, imgH = 0, frames = 1, curFrame = 0, lastSwap = 0;
-  let cols = 0, rows = 0, grid = null; // grid[j*cols+i] = [r,g,b]
-  let gen = 0; // génération : invalide un chargement d'image en vol après clear()/setCape()
-
-  function mount(el) { canvas = el; ctx = canvas.getContext('2d'); }
-
-  function clear() {
-    gen++;
-    cancelAnimationFrame(raf); raf = 0; img = null; grid = null;
-    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // ---------- Skin par défaut (procédural, 64×64) quand aucun skin connecté ----------
+  let defaultSkin = null;
+  function makeDefaultSkin() {
+    const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64;
+    const c = cv.getContext('2d');
+    const rect = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const SKIN = '#d8b083', SKIN_D = '#c49a6c', SHIRT = '#3f7fbf', PANTS = '#3a3f57', HAIR = '#4a3526';
+    // Tête (toutes faces peau, dessus cheveux)
+    rect(0, 8, 32, 8, SKIN); rect(8, 0, 16, 8, HAIR);
+    // Visage (face avant tête : 8,8 8x8)
+    rect(9, 11, 2, 2, '#fff'); rect(10, 11, 1, 2, '#3a2f6b'); // œil gauche
+    rect(13, 11, 2, 2, '#fff'); rect(13, 11, 1, 2, '#3a2f6b'); // œil droit
+    rect(10, 14, 4, 1, SKIN_D); // bouche
+    rect(8, 8, 16, 1, HAIR); // frange
+    // Corps
+    rect(16, 16, 24, 16, SHIRT);
+    // Bras (peau + manche)
+    rect(40, 16, 16, 16, SKIN); rect(40, 20, 16, 4, SHIRT);
+    rect(32, 48, 16, 16, SKIN); rect(32, 52, 16, 4, SHIRT);
+    // Jambes
+    rect(0, 16, 16, 16, PANTS); rect(16, 48, 16, 16, PANTS);
+    const img = new Image(); img.src = cv.toDataURL('image/png');
+    return img;
   }
 
-  // Échantillonne le devant de la frame en grille de couleurs (résolution native, plafonnée).
-  function buildGrid(frame) {
-    const r = capeFrontRect(imgW, imgH, frame);
-    const off = document.createElement('canvas');
-    off.width = r.w; off.height = r.h;
-    const o = off.getContext('2d');
-    o.imageSmoothingEnabled = false;
-    o.drawImage(img, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
-    const data = o.getImageData(0, 0, r.w, r.h).data;
-    cols = Math.min(r.w, 32); rows = Math.min(r.h, 48);
-    grid = new Array(cols * rows);
-    for (let j = 0; j < rows; j++) {
-      for (let i = 0; i < cols; i++) {
-        const sx = Math.floor((i / cols) * r.w), sy = Math.floor((j / rows) * r.h);
-        const k = (sy * r.w + sx) * 4;
-        grid[j * cols + i] = [data[k], data[k + 1], data[k + 2]];
-      }
+  // ---------- Triangle texturé (mapping affine + découpe) ----------
+  function texTri(img, s0, s1, s2, d0, d1, d2) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(d0[0], d0[1]); ctx.lineTo(d1[0], d1[1]); ctx.lineTo(d2[0], d2[1]); ctx.closePath();
+    ctx.clip();
+    const x0 = s0[0], y0 = s0[1], x1 = s1[0], y1 = s1[1], x2 = s2[0], y2 = s2[1];
+    const u0 = d0[0], v0 = d0[1], u1 = d1[0], v1 = d1[1], u2 = d2[0], v2 = d2[1];
+    // Transformation affine SOURCE -> DEST (formule standard vérifiée).
+    const den = x0 * (y1 - y2) + x1 * (y2 - y0) + x2 * (y0 - y1);
+    if (den === 0) { ctx.restore(); return; }
+    const a = (u0 * (y1 - y2) + u1 * (y2 - y0) + u2 * (y0 - y1)) / den;
+    const b = (v0 * (y1 - y2) + v1 * (y2 - y0) + v2 * (y0 - y1)) / den;
+    const cc = (u0 * (x2 - x1) + u1 * (x0 - x2) + u2 * (x1 - x0)) / den;
+    const dd = (v0 * (x2 - x1) + v1 * (x0 - x2) + v2 * (x1 - x0)) / den;
+    const e = u0 - a * x0 - cc * y0;
+    const f = v0 - b * x0 - dd * y0;
+    ctx.setTransform(a, b, cc, dd, e, f);
+    ctx.drawImage(img, 0, 0);
+    ctx.restore();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  // ---------- Projection ----------
+  const DEPTH = 62;
+  function project(p, ang, tilt, cx, cy, unit) {
+    let x = p[0], y = p[1] - 16, z = p[2]; // centre modèle ~ y16
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    let xr = x * ca - z * sa, zr = x * sa + z * ca;
+    const ct = Math.cos(tilt), st = Math.sin(tilt);
+    const yr = y * ct - zr * st, zr2 = y * st + zr * ct;
+    const s = DEPTH / (DEPTH + zr2);
+    return [cx + xr * unit * s, cy - yr * unit * s, zr2];
+  }
+
+  // ---------- Modèle joueur (unités = pixels de skin ; +x=gauche joueur, front=-z) ----------
+  // Chaque boîte : dimensions + UV par face (en px de la texture 64×64).
+  function box(x0, x1, y0, y1, z0, z1, uv, tex) { return { x0, x1, y0, y1, z0, z1, uv, tex }; }
+  function skinBoxes() {
+    const armW = slim ? 3 : 4;
+    const aOff = slim ? 1 : 0; // décalage UV largeur bras slim
+    return [
+      // Tête 8×8×8, centrée, base y=24..32
+      box(-4, 4, 24, 32, -4, 4, {
+        top: [8, 0, 8, 8], bottom: [16, 0, 8, 8], front: [8, 8, 8, 8],
+        back: [24, 8, 8, 8], right: [0, 8, 8, 8], left: [16, 8, 8, 8],
+      }, 'skin'),
+      // Corps 8×12×4, y=12..24
+      box(-4, 4, 12, 24, -2, 2, {
+        top: [20, 16, 8, 4], bottom: [28, 16, 8, 4], front: [20, 20, 8, 12],
+        back: [32, 20, 8, 12], right: [16, 20, 4, 12], left: [28, 20, 4, 12],
+      }, 'skin'),
+      // Bras droit (côté -x écran) armW×12×4, y=12..24
+      box(-4 - armW, -4, 12, 24, -2, 2, {
+        top: [44, 16, armW, 4], bottom: [44 + armW, 16, armW, 4], front: [44, 20, armW, 12],
+        back: [52 - aOff, 20, armW, 12], right: [40, 20, 4, 12], left: [48 - aOff, 20, 4, 12],
+      }, 'skin'),
+      // Bras gauche
+      box(4, 4 + armW, 12, 24, -2, 2, {
+        top: [36, 48, armW, 4], bottom: [36 + armW, 48, armW, 4], front: [36, 52, armW, 12],
+        back: [44 - aOff, 52, armW, 12], right: [32, 52, 4, 12], left: [40 - aOff, 52, 4, 12],
+      }, 'skin'),
+      // Jambe droite 4×12×4, y=0..12, x -4..0
+      box(-4, 0, 0, 12, -2, 2, {
+        top: [4, 16, 4, 4], bottom: [8, 16, 4, 4], front: [4, 20, 4, 12],
+        back: [12, 20, 4, 12], right: [0, 20, 4, 12], left: [8, 20, 4, 12],
+      }, 'skin'),
+      // Jambe gauche x 0..4
+      box(0, 4, 0, 12, -2, 2, {
+        top: [20, 48, 4, 4], bottom: [24, 48, 4, 4], front: [20, 52, 4, 12],
+        back: [28, 52, 4, 12], right: [16, 52, 4, 12], left: [24, 52, 4, 12],
+      }, 'skin'),
+    ];
+  }
+
+  // 8 sommets d'une boîte, indexés : 0..3 = face z0 (front), 4..7 = face z1 (back).
+  function corners(b) {
+    return [
+      [b.x0, b.y0, b.z0], [b.x1, b.y0, b.z0], [b.x1, b.y1, b.z0], [b.x0, b.y1, b.z0],
+      [b.x0, b.y0, b.z1], [b.x1, b.y0, b.z1], [b.x1, b.y1, b.z1], [b.x0, b.y1, b.z1],
+    ];
+  }
+  // Faces : indices de sommets (ordre horaire vu de l'extérieur) + clé UV.
+  const BOX_FACES = [
+    { k: 'front', c: [3, 2, 1, 0] }, // -z, vue de face : haut-gauche, haut-droite, bas-droite, bas-gauche
+    { k: 'back', c: [6, 7, 4, 5] },  // +z
+    { k: 'right', c: [7, 3, 0, 4] }, // -x (droite du joueur)
+    { k: 'left', c: [2, 6, 5, 1] },  // +x
+    { k: 'top', c: [3, 7, 6, 2] },   // +y
+    { k: 'bottom', c: [0, 1, 5, 4] },// -y
+  ];
+
+  // Une face tournée VERS la caméra a une aire signée écran < 0 (ordre horaire dans notre
+  // repère). On élimine les faces arrière (évite le voir-au-travers et les coutures).
+  function frontFacing(P) {
+    return (P[1][0] - P[0][0]) * (P[2][1] - P[0][1]) - (P[2][0] - P[0][0]) * (P[1][1] - P[0][1]) > 0;
+  }
+
+  function pushBoxFaces(b, polys, tex, ang, tilt, cx, cy, unit) {
+    const C = corners(b);
+    for (const face of BOX_FACES) {
+      const uv = b.uv[face.k]; if (!uv) continue;
+      const P = face.c.map((i) => project(C[i], ang, tilt, cx, cy, unit));
+      if (!frontFacing(P)) continue; // backface culling
+      const depth = (P[0][2] + P[1][2] + P[2][2] + P[3][2]) / 4;
+      polys.push({ P, uv, tex, key: tex + ':' + face.k, depth });
     }
   }
 
+  // Cape : quad (face extérieure) mappé avec la région avant de la cape (frame courante),
+  // accrochée au dos, légèrement inclinée (comme au repos dans le jeu).
+  function pushCape(polys, ang, tilt, cx, cy, unit) {
+    if (!capeImg) return;
+    const r = capeFrontRect(capeW, capeH, curFrame);
+    // Modèle cape 10 large × 16 haut, dos du corps (z≈2), flare vers l'arrière en bas.
+    const zTop = 2.2, zBot = 3.6, yTop = 23.5, yBot = 7.5, xL = 5, xR = -5;
+    // Coins 3D : haut-gauche, haut-droite, bas-droite, bas-gauche (vue de derrière).
+    const c3 = [[xL, yTop, zTop], [xR, yTop, zTop], [xR, yBot, zBot], [xL, yBot, zBot]];
+    const P = c3.map((p) => project(p, ang, tilt, cx, cy, unit));
+    const depth = (P[0][2] + P[1][2] + P[2][2] + P[3][2]) / 4;
+    polys.push({ P, uv: [r.x, r.y, r.w, r.h], tex: 'cape', key: 'cape:' + curFrame, depth });
+  }
+
+  // Cache de tuiles : chaque région source est recadrée à sa résolution native une fois,
+  // puis mappée sur le quad (upscale au plus proche = pixels nets). Vidé si skin/cape change.
+  const tileCache = new Map();
+  function getTile(img, uv, key) {
+    let tile = tileCache.get(key);
+    if (tile) return tile;
+    if (!img.complete || !img.naturalWidth) return null; // image pas prête -> on ne cache pas de tuile vide
+    const [sx, sy, sw, sh] = uv;
+    tile = document.createElement('canvas');
+    tile.width = Math.max(1, Math.round(sw)); tile.height = Math.max(1, Math.round(sh));
+    const c = tile.getContext('2d'); c.imageSmoothingEnabled = false;
+    c.drawImage(img, sx, sy, sw, sh, 0, 0, tile.width, tile.height);
+    tileCache.set(key, tile);
+    return tile;
+  }
+  // Dilate légèrement un quad (chaque coin s'écarte du centre) pour que les faces se
+  // chevauchent d'~1px et masquer les coutures d'anti-aliasing.
+  function expand(P, px) {
+    const cx = (P[0][0] + P[1][0] + P[2][0] + P[3][0]) / 4, cy = (P[0][1] + P[1][1] + P[2][1] + P[3][1]) / 4;
+    return P.map((p) => { const dx = p[0] - cx, dy = p[1] - cy, d = Math.hypot(dx, dy) || 1; return [p[0] + dx / d * px, p[1] + dy / d * px]; });
+  }
+  function drawPoly(poly) {
+    const img = poly.tex === 'cape' ? capeImg : (skinImg || defaultSkin);
+    if (!img) return;
+    const tile = getTile(img, poly.uv, poly.key + (poly.tex === 'cape' ? '' : (skinImg ? ':s' : ':d')));
+    if (!tile) return;
+    const w = tile.width, h = tile.height, P = expand(poly.P, 0.75);
+    const S = [[0, 0], [w, 0], [w, h], [0, h]];
+    texTri(tile, S[0], S[1], S[2], P[0], P[1], P[2]);
+    texTri(tile, S[0], S[2], S[3], P[0], P[2], P[3]);
+  }
+
+  function loop(ts) {
+    if (!ctx || !capeImg) return;
+    if (!t0) t0 = ts;
+    const t = (ts - t0) / 1000;
+    if (frames > 1 && ts - lastSwap > 120) { curFrame = (curFrame + 1) % frames; lastSwap = ts; }
+
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    ctx.imageSmoothingEnabled = false;
+    const cx = W / 2, cy = H / 2 + (showBody ? 6 : 0);
+    const unit = showBody ? Math.min(W / 20, H / 42) : Math.min(W / 13, H / 20);
+    // Rotation lente montrant surtout le DOS (pour voir la cape), avec léger va-et-vient.
+    const ang = Math.PI + Math.sin(t * 0.5) * 0.6;
+    const tilt = 0.12;
+
+    // Ombre au sol.
+    const foot = project([0, 0, 0], ang, tilt, cx, cy, unit);
+    ctx.save(); ctx.globalAlpha = 0.22; ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.ellipse(cx, foot[1] + 4, unit * (showBody ? 7 : 5), 7, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    const polys = [];
+    if (showBody) for (const b of skinBoxes()) pushBoxFaces(b, polys, b.tex, ang, tilt, cx, cy, unit);
+    pushCape(polys, ang, tilt, cx, cy, unit);
+    // Peintre : du plus loin au plus proche.
+    polys.sort((p, q) => q.depth - p.depth);
+    for (const poly of polys) drawPoly(poly);
+
+    raf = requestAnimationFrame(loop);
+  }
+
+  function start() { if (!raf) { t0 = 0; raf = requestAnimationFrame(loop); } }
+
   function setCape(dataUrl) {
-    clear();                 // incrémente gen
+    clear();
     if (!dataUrl) return;
-    const myGen = gen;       // ce chargement n'est valide que tant que gen n'a pas rebougé
+    const myGen = gen;
+    if (!defaultSkin) defaultSkin = makeDefaultSkin();
     const image = new Image();
     image.onload = () => {
-      if (myGen !== gen) return; // un clear()/setCape() est survenu pendant le chargement -> on abandonne
-      img = image; imgW = image.naturalWidth; imgH = image.naturalHeight;
-      frames = frameCount(imgW, imgH); curFrame = 0; lastSwap = 0; t0 = 0;
-      buildGrid(0);
-      raf = requestAnimationFrame(loop);
+      if (myGen !== gen) return;
+      capeImg = image; capeW = image.naturalWidth; capeH = image.naturalHeight;
+      frames = frameCount(capeW, capeH); curFrame = 0; lastSwap = 0;
+      start();
     };
     image.onerror = () => { if (myGen === gen) clear(); };
     image.src = dataUrl;
   }
 
-  // Position 3D d'un sommet de la grille (u,v dans [0,1]) au temps t.
-  // Le tissu est fixé en haut ; l'ondulation croît vers le bas et le bord libre.
-  function vertex(u, v, t) {
-    const Wm = 10, Hm = 16;
-    const x = (u - 0.5) * Wm;
-    const y = (0.5 - v) * Hm;
-    const sway = Math.sin(u * 3.0 + t * 2.0) * 0.5 + Math.sin(v * 2.3 - t * 1.6) * 0.5;
-    let z = sway * 1.9 * (0.25 + 0.75 * v);
-    // Rotation douce autour de l'axe vertical.
-    const ang = Math.sin(t * 0.6) * 0.45;
-    const ca = Math.cos(ang), sa = Math.sin(ang);
-    const xr = x * ca - z * sa;
-    const zr = x * sa + z * ca;
-    return [xr, y, zr];
+  function setSkin(dataUrl, isSlim) {
+    slim = !!isSlim;
+    tileCache.clear();
+    if (!dataUrl) { skinImg = null; return; }
+    const image = new Image();
+    image.onload = () => { skinImg = image; tileCache.clear(); };
+    image.onerror = () => { skinImg = null; };
+    image.src = dataUrl;
   }
 
-  const DEPTH = 34;
-  function project(p, cx, cy, unit) {
-    const s = DEPTH / (DEPTH + p[2]);
-    return [cx + p[0] * unit * s, cy - p[1] * unit * s, p[2]];
-  }
+  function setShowBody(b) { showBody = !!b; }
 
-  function norm(a) { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; }
-  const LIGHT = norm([-0.35, 0.45, -1]);
-
-  // --- Personnage porteur (mannequin bloc, style Minecraft) rendu DERRIÈRE la cape ---
-  // On voit le dos du perso ; la cape drape le torse, tête/bras/jambes dépassent.
-  let SHOW_BODY = true;
-  const SKIN = [214, 176, 140], SHIRT = [56, 66, 88], PANTS = [40, 46, 60];
-  // Boîtes en unités de cape (cape : x∈[-5,5], y∈[-8,8]) ; z>0 = derrière la cape (~z 0).
-  const BODY = [
-    { box: [-3.2, 3.2, 8, 14.2, 2.4, 8.8], col: SKIN },   // tête (au-dessus de la cape)
-    { box: [-4, 4, -2, 8, 3, 7], col: SHIRT },            // torse (masqué par la cape)
-    { box: [4, 6.3, -2, 8, 3, 7], col: SKIN },            // bras (dos, à droite)
-    { box: [-6.3, -4, -2, 8, 3, 7], col: SKIN },          // bras (dos, à gauche)
-    { box: [0.2, 3.7, -14, -2, 3, 7], col: PANTS },       // jambe droite (dépasse en bas)
-    { box: [-3.7, -0.2, -14, -2, 3, 7], col: PANTS },     // jambe gauche
-  ];
-  const FACES = [[0, 1, 2, 3], [1, 5, 6, 2], [5, 4, 7, 6], [4, 0, 3, 7], [3, 2, 6, 7], [4, 5, 1, 0]];
-  // Rotation autour de l'axe vertical, identique à celle de la cape (synchronisée).
-  function rot(x, y, z, t) {
-    const ang = Math.sin(t * 0.6) * 0.45;
-    const ca = Math.cos(ang), sa = Math.sin(ang);
-    return [x * ca - z * sa, y, x * sa + z * ca];
-  }
-  function drawCharacter(t, cx, cy, unit) {
-    const polys = [];
-    for (const part of BODY) {
-      const [x0, x1, y0, y1, z0, z1] = part.box;
-      const c = [
-        [x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0],
-        [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1],
-      ].map((p) => rot(p[0], p[1], p[2], t));
-      for (const f of FACES) {
-        const a = c[f[0]], b = c[f[1]], d = c[f[3]];
-        const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
-        const e2 = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
-        const n = norm([e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]]);
-        const sh = 0.55 + 0.5 * Math.max(0, n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2]);
-        const depth = (c[f[0]][2] + c[f[1]][2] + c[f[2]][2] + c[f[3]][2]) / 4;
-        polys.push({ pts: f.map((i) => project(c[i], cx, cy, unit)), col: part.col, sh, depth });
-      }
-    }
-    polys.sort((a, b) => b.depth - a.depth);
-    for (const p of polys) {
-      const r = Math.min(255, p.col[0] * p.sh) | 0, g = Math.min(255, p.col[1] * p.sh) | 0, b = Math.min(255, p.col[2] * p.sh) | 0;
-      ctx.fillStyle = `rgb(${r},${g},${b})`;
-      ctx.beginPath(); ctx.moveTo(p.pts[0][0], p.pts[0][1]);
-      for (let i = 1; i < 4; i++) ctx.lineTo(p.pts[i][0], p.pts[i][1]);
-      ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 0.6; ctx.stroke();
-    }
-  }
-
-  function loop(ts) {
-    if (!grid || !ctx) return;
-    if (!t0) t0 = ts;
-    const t = (ts - t0) / 1000;
-
-    if (frames > 1 && ts - lastSwap > 120) { curFrame = (curFrame + 1) % frames; buildGrid(curFrame); lastSwap = ts; }
-
-    const W = canvas.width, H = canvas.height;
-    ctx.clearRect(0, 0, W, H);
-    // Avec le personnage la scène est plus haute (tête + jambes) -> on dézoome et recentre.
-    const cx = W / 2, cy = SHOW_BODY ? H / 2 - 4 : H / 2 + 8;
-    const unit = SHOW_BODY ? Math.min(W / 17, H / 33) : Math.min(W / 15, H / 20);
-
-    // Sommets projetés (cols+1 x rows+1).
-    const nx = cols + 1, ny = rows + 1;
-    const P = new Array(nx * ny), V = new Array(nx * ny);
-    for (let j = 0; j < ny; j++) {
-      for (let i = 0; i < nx; i++) {
-        const v3 = vertex(i / cols, j / rows, t);
-        V[j * nx + i] = v3;
-        P[j * nx + i] = project(v3, cx, cy, unit);
-      }
-    }
-
-    // Ombre portée au sol (sous les pieds si le perso est visible, sinon sous la cape).
-    const groundY = SHOW_BODY ? cy + 14 * unit * 0.86 + 6 : cy + rows * unit * 0.5 + 14;
-    ctx.save();
-    ctx.globalAlpha = 0.22; ctx.fillStyle = '#000';
-    ctx.beginPath(); ctx.ellipse(cx, groundY, unit * (SHOW_BODY ? 6.5 : cols * 0.42), 8, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-
-    // Le personnage est ENTIÈREMENT derrière la cape (z>0) : on le dessine d'abord, la
-    // cape par-dessus le masque au niveau du torse ; tête/bras/jambes restent visibles.
-    if (SHOW_BODY) drawCharacter(t, cx, cy, unit);
-
-    // Quads triés du plus loin au plus proche (painter).
-    const quads = [];
-    for (let j = 0; j < rows; j++) {
-      for (let i = 0; i < cols; i++) {
-        const a = V[j * nx + i], b = V[j * nx + i + 1], c = V[(j + 1) * nx + i + 1], d = V[(j + 1) * nx + i];
-        const depth = (a[2] + b[2] + c[2] + d[2]) / 4;
-        quads.push({ i, j, depth });
-      }
-    }
-    quads.sort((q1, q2) => q2.depth - q1.depth);
-
-    for (const q of quads) {
-      const { i, j } = q;
-      const A = P[j * nx + i], B = P[j * nx + i + 1], C = P[(j + 1) * nx + i + 1], D = P[(j + 1) * nx + i];
-      const a = V[j * nx + i], b = V[j * nx + i + 1], d = V[(j + 1) * nx + i];
-      // Normale (produit vectoriel) pour l'éclairage.
-      const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
-      const e2 = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
-      const n = norm([e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]]);
-      const diff = Math.max(0, n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2]);
-      const sh = 0.5 + 0.55 * diff;
-      const col = grid[j * cols + i];
-      const r = Math.min(255, col[0] * sh) | 0, g = Math.min(255, col[1] * sh) | 0, bl = Math.min(255, col[2] * sh) | 0;
-      ctx.fillStyle = `rgb(${r},${g},${bl})`;
-      ctx.beginPath();
-      ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); ctx.lineTo(C[0], C[1]); ctx.lineTo(D[0], D[1]); ctx.closePath();
-      ctx.fill();
-      // Léger contour de la même couleur pour masquer les coutures anti-alias.
-      ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 0.6; ctx.stroke();
-    }
-
-    raf = requestAnimationFrame(loop);
-  }
-
-  window.CapePreview = { mount, setCape, clear, frameCount, setShowBody: (b) => { SHOW_BODY = !!b; } };
+  window.CapePreview = { mount, setCape, setSkin, clear, frameCount, setShowBody };
 })();
