@@ -1,7 +1,7 @@
 {
-  "version": "0.8.2",
-  "url": "https://github.com/saliox/hasu-client/releases/download/cap-hub-v0.8.2/Cap.Hub.Setup.0.8.2.exe",
-  "sha256": "669efc1cf2e805363d6f2c8df0c505de07b9f66f3e2041d7089ed6dc6b316d4c",
-  "notes": "Cap Hub 0.8.2 — import de capes GIF (animées) et PNG HD/4K ; le proxy sert la 1re image aux clients OptiFine.",
-  "pubDate": "2026-07-16T10:19:27.343Z"
+  "version": "0.9.0",
+  "url": "https://github.com/saliox/hasu-client/releases/download/cap-hub-v0.9.0/Cap.Hub.Setup.0.9.0.exe",
+  "sha256": "647652b7aafaaab82cd83deffa0b134753b643e0cf070907c853c7927bc2884c",
+  "notes": "Cap Hub 0.9.0",
+  "pubDate": "2026-07-17T08:25:55.210Z"
 }
