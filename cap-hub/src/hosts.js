@@ -40,10 +40,15 @@ function buildScript(domains) {
        ...domains.map((d) => `$out.Add('127.0.0.1 ${String(d).replace(/[^A-Za-z0-9.-]/g, '')}')`),
        `$out.Add('${MARK_END}')`].join('\r\n')
     : '';
+  // Lecture/écriture via .NET en UTF-8 SANS BOM : on préserve fidèlement les lignes
+  // existantes (y compris d'éventuels caractères non-ASCII). Set-Content -Encoding ASCII
+  // remplaçait chaque octet non-ASCII par « ? » -> corruption d'entrées qu'on ne doit
+  // PAS toucher.
   return [
     `$ErrorActionPreference = 'Stop'`,
     `$hosts = Join-Path $env:SystemRoot 'System32\\drivers\\etc\\hosts'`,
-    `$lines = @(); if (Test-Path $hosts) { $lines = @(Get-Content $hosts) }`,
+    `$enc = New-Object System.Text.UTF8Encoding($false)`,
+    `$lines = @(); if (Test-Path $hosts) { $lines = [System.IO.File]::ReadAllLines($hosts) }`,
     `$out = New-Object System.Collections.Generic.List[string]`,
     `$in = $false`,
     `foreach ($l in $lines) {`,
@@ -52,7 +57,7 @@ function buildScript(domains) {
     `  if (-not $in) { $out.Add($l) }`,
     `}`,
     add,
-    `Set-Content -Path $hosts -Value $out -Encoding ASCII`,
+    `[System.IO.File]::WriteAllLines($hosts, $out, $enc)`,
     `ipconfig /flushdns | Out-Null`,
   ].filter(Boolean).join('\r\n');
 }

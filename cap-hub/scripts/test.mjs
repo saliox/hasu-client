@@ -40,10 +40,17 @@ ok('capeFrames 64x64=2, 128x64=1', capeFrames(64, 64) === 2 && capeFrames(128, 6
 ok('firstFrameIfAnimated 64x64 -> 64x32', (() => { const ff = firstFrameIfAnimated(mkPng(64, 64)); const s = readPngSize(ff); return s.width === 64 && s.height === 32; })());
 ok('firstFrameIfAnimated laisse une cape fixe intacte', (() => { const p = mkPng(64, 32); return firstFrameIfAnimated(p) === p; })());
 ok('decodePNG round-trip couleur', (() => { const p = encodePNG(2, 1, Buffer.from([10, 20, 30, 255, 40, 50, 60, 255])); const d = decodePNG(p); return d && d.rgba[0] === 10 && d.rgba[6] === 60; })());
+ok('decodePNG borne un chunk corrompu (null, pas d’exception)', (() => { try { const bad = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from([0xff, 0xff, 0xff, 0xf0]), Buffer.from('IHDR')]); return decodePNG(bad) === null; } catch { return false; } })());
 const src = path.join(ud, 'in.png'); fs.writeFileSync(src, mkPng(64, 32));
 const imp = importCape(src, 'x/../y');
 ok('import assaini (pas de ..)', imp.ok && !imp.id.includes('..'));
 ok('resolveCape bloque la traversée', resolveCape('../../etc/passwd') === null);
+// Échappement vers un dossier FRÈRE (« capes-sibling ») dont le nom commence comme DIR :
+// on crée le fichier pour prouver que c'est bien le contrôle de chemin (pas l'absence de
+// fichier) qui bloque.
+fs.mkdirSync(path.join(ud, 'capes-sibling'), { recursive: true });
+fs.writeFileSync(path.join(ud, 'capes-sibling', 'x.png'), mkPng(64, 32));
+ok('resolveCape bloque l’échappement vers un dossier frère', resolveCape('../capes-sibling/x.png') === null);
 // Renommage (multi-capes)
 const rn = renameCape(imp.id, 'Ma Belle Cape');
 ok('renomme une cape importée', rn.ok && rn.id === 'Ma Belle Cape.png' && !!resolveCape(rn.id));
@@ -61,6 +68,8 @@ ok('favoris dédupliqués + persistés', ss.favorites.length === 2 && store.getS
 ss = store.saveSettings({ categories: { 'x.png': 'Cool', 'y.png': '  ' } });
 ok('catégories nettoyées (vide ignoré)', ss.categories['x.png'] === 'Cool' && !('y.png' in ss.categories));
 ok('thème par défaut = nuit', store.getSettings().theme === 'nuit');
+ok('écriture atomique : pas de .tmp résiduel', !fs.existsSync(path.join(ud, 'settings.json.tmp')));
+ok('écriture atomique : sauvegarde .bak après ré-écriture', fs.existsSync(path.join(ud, 'settings.json.bak')));
 
 console.log('\n# Fournisseur OptiFine (seul canal)');
 ok('un seul fournisseur : optifine', providers.PROVIDERS.length === 1 && providers.PROVIDERS[0].id === 'optifine');
@@ -97,6 +106,8 @@ const get = (host, p) => new Promise((resolve) => {
 
 const a = await get('s.optifine.net', '/capes/Notch.png');
 ok('sert MA cape (PNG 200)', a.status === 200 && isPng(a.buf));
+const aq = await get('s.optifine.net', '/capes/Notch.png?ts=12345');
+ok('sert MA cape malgré une query (cache-buster)', aq.status === 200 && isPng(aq.buf));
 const b = await get('s.optifine.net', '/capes/Dieu.png');
 ok('sert cape registre (PNG 200)', b.status === 200 && isPng(b.buf));
 const an = await get('s.optifine.net', '/capes/Anim.png');
@@ -135,6 +146,33 @@ ok('publishCape réussit', pr.ok === true);
 const idxPut = puts.map((p) => { try { return JSON.parse(Buffer.from(p.content, 'base64').toString('utf8')).players; } catch { return null; } }).find(Boolean) || {};
 ok('fusionne « newguy » SANS effacer « other »', !!idxPut.other && !!idxPut.newguy);
 ok('réutilise le sha distant (pas d’écrasement aveugle)', puts.some((p) => p.sha === 'abc'));
+
+// ABORT si l'index distant est illisible (JSON corrompu / contenu vide des gros fichiers) :
+// on ne doit JAMAIS remplacer tout le registre par notre seule entrée.
+const puts2 = [];
+global.fetch = async (url, opts = {}) => {
+  url = String(url); const method = opts.method || 'GET';
+  const R = (status, obj, text) => ({ ok: status < 400, status, json: async () => obj, text: async () => (text !== undefined ? text : JSON.stringify(obj)) });
+  if (url.includes('/registry/capes/') && method === 'PUT') return R(200, {});
+  if (url.includes('/registry/capes.json')) {
+    if (method === 'PUT') { puts2.push('index'); return R(200, {}); }
+    return R(200, { sha: 'zzz', content: Buffer.from('{ pas du JSON').toString('base64') }); // index corrompu
+  }
+  if (url.includes('raw.githubusercontent')) return R(200, {}, '{ pas du JSON');
+  return R(500, {});
+};
+const prBad = await reg.publishCape('tok', 'newguy', mkPng(64, 32));
+global.fetch = origFetch;
+ok('publishCape ANNULE si l’index distant est illisible', prBad.ok === false);
+ok('publishCape n’écrit PAS l’index quand il est illisible', !puts2.includes('index'));
+
+// Validation anti-traversée sur les clés/chemins venant de l'index distant.
+fs.mkdirSync(path.join(ud, 'registry-cache'), { recursive: true });
+fs.writeFileSync(path.join(ud, 'registry-cache', 'capes.json'),
+  JSON.stringify({ players: { gooduser: { cape: '../../evil.png' } } }));
+reg.initRegistry(ud, {});
+ok('getRegistryCape rejette une clé hors format (anti-traversée)', (await reg.getRegistryCape('../../etc')) === null);
+ok('getRegistryCape rejette un chemin de cape non conforme', (await reg.getRegistryCape('gooduser')) === null);
 
 console.log('\n# Compte Minecraft officiel (mcaccount)');
 const mc = await import(S('mcaccount.js'));

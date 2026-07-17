@@ -157,7 +157,7 @@ npm start          # lance l'app (Windows)
 ```bash
 npm install               # dépendances de build (Electron) — sur ton PC Windows
 npm run icon              # (re)génère build/icon.png + .ico (pur Node)
-npm test                  # 68 tests : capes (animées/HD), PNG, registre, réglages, fournisseur OptiFine, géométrie, proxy HTTP, compte Minecraft officiel (auth + texture anti-SSRF)
+npm test                  # 77 tests : capes (animées/HD + anti-traversée), PNG (décodeur borné), registre (fusion sûre + anti-traversée), réglages (écriture atomique), fournisseur OptiFine, géométrie, proxy HTTP, compte Minecraft officiel (auth + texture anti-SSRF)
 npm run dist              # → dist/Cap Hub Setup <version>.exe (NSIS) + Cap Hub <version> portable.exe
 npm run publish:update    # SHA-256 + Release GitHub + maj cap-hub/version.json
 ```

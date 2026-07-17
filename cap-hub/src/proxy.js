@@ -43,28 +43,60 @@ async function resolveRealIp(host) {
 // ---------- Relais vers le vrai serveur OptiFine ----------
 const passCache = new Map(); // host+path -> { status, body, t }
 const PASS_TTL = 10 * 60 * 1000;
+const PASS_MAX = 500;                 // borne le nombre d'entrées (anti-fuite mémoire)
+const MAX_BODY = 3 * 1024 * 1024;
+
+function cacheGet(key) {
+  const hit = passCache.get(key);
+  if (hit && Date.now() - hit.t < PASS_TTL) return hit;
+  if (hit) passCache.delete(key);     // purge l'entrée expirée
+  return null;
+}
+function cacheSet(key, entry) {
+  passCache.set(key, entry);
+  if (passCache.size > PASS_MAX) passCache.delete(passCache.keys().next().value); // éviction FIFO
+}
 
 function fetchUpstream(host, urlPath) {
-  return new Promise(async (resolve) => {
-    const ckey = host + '|' + urlPath;
-    const hit = passCache.get(ckey);
-    if (hit && Date.now() - hit.t < PASS_TTL) return resolve(hit);
-    let ip;
-    try { ip = await resolveRealIp(host); } catch { return resolve({ status: 0, body: null }); }
-    const req = http.get(
-      { host: ip, port: 80, path: urlPath, headers: { Host: host, 'User-Agent': 'CapHub' }, timeout: 6000 },
-      (res) => {
-        const chunks = []; let size = 0;
-        res.on('data', (c) => { size += c.length; if (size < 3 * 1024 * 1024) chunks.push(c); });
-        res.on('end', () => {
-          const entry = { status: res.statusCode || 0, body: Buffer.concat(chunks), t: Date.now() };
-          passCache.set(ckey, entry);
-          resolve(entry);
-        });
-      }
-    );
-    req.on('timeout', () => req.destroy(new Error('timeout')));
-    req.on('error', () => resolve({ status: 0, body: null }));
+  // Clé de cache indépendante de la query (certains clients ajoutent un cache-buster) :
+  // sinon le cache ne « toucherait » jamais et grossirait sans fin.
+  const ckey = host + '|' + urlPath.split('?')[0];
+  const cached = cacheGet(ckey);
+  if (cached) return Promise.resolve(cached);
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v) => { if (!done) { done = true; resolve(v); } };
+    // Filet de sécurité : quoi qu'il arrive, on résout (jamais de requête suspendue).
+    const guard = setTimeout(() => finish({ status: 0, body: null }), 8000);
+    guard.unref?.();
+    (async () => {
+      let ip;
+      try { ip = await resolveRealIp(host); } catch { return finish({ status: 0, body: null }); }
+      let req;
+      try {
+        req = http.get(
+          { host: ip, port: 80, path: urlPath, headers: { Host: host, 'User-Agent': 'CapHub' }, timeout: 6000 },
+          (res) => {
+            const chunks = []; let size = 0; let tooBig = false;
+            res.on('data', (c) => {
+              if (tooBig) return;
+              size += c.length;
+              if (size > MAX_BODY) { tooBig = true; res.destroy(); return finish({ status: 0, body: null }); } // tronqué -> échec (ni caché ni servi)
+              chunks.push(c);
+            });
+            res.on('end', () => {
+              if (tooBig) return;
+              const entry = { status: res.statusCode || 0, body: Buffer.concat(chunks), t: Date.now() };
+              if (entry.status === 200) cacheSet(ckey, entry); // on ne cache QUE les 200 (pas les 5xx transitoires)
+              finish(entry);
+            });
+            res.on('error', () => finish({ status: 0, body: null }));
+          }
+        );
+      } catch { return finish({ status: 0, body: null }); }
+      req.on('timeout', () => req.destroy(new Error('timeout')));
+      req.on('error', () => finish({ status: 0, body: null }));
+    })();
   });
 }
 
@@ -126,11 +158,16 @@ export function startProxy(dependencies, opts = {}) {
   return new Promise((resolve) => {
     if (server) return resolve({ ok: true, already: true, port: server.address()?.port });
     const s = http.createServer((req, res) => { handle(req, res).catch(() => { try { res.writeHead(500); res.end(); } catch {} }); });
-    s.once('error', (e) => {
+    const onBindError = (e) => {
       server = null;
       resolve({ ok: false, error: e.code === 'EADDRINUSE' ? 'Port 80 déjà utilisé (IIS ? Skype ? autre proxy ?).' : e.message });
-    });
+    };
+    s.once('error', onBindError);
     s.listen(port, '127.0.0.1', () => {
+      // Une fois lié : on retire le handler de bind et on installe un handler PERSISTANT
+      // qui logue les erreurs runtime au lieu de laisser Node crasher le process principal.
+      s.removeListener('error', onBindError);
+      s.on('error', (e) => log('warn', `proxy : erreur serveur ignorée (${e.message})`));
       server = s;
       const bound = s.address()?.port;
       log('ok', `proxy de capes démarré sur 127.0.0.1:${bound}`);
@@ -142,8 +179,12 @@ export function startProxy(dependencies, opts = {}) {
 export function stopProxy() {
   return new Promise((resolve) => {
     if (!server) return resolve({ ok: true, already: true });
-    server.close(() => { server = null; log('ok', 'proxy arrêté'); resolve({ ok: true }); });
-    setTimeout(() => { server = null; resolve({ ok: true }); }, 1500).unref();
+    const s = server;
+    // Ferme aussi les connexions keep-alive (OptiFine) sinon close() peut ne jamais
+    // rappeler et le serveur resterait à retenir des sockets.
+    try { s.closeAllConnections?.(); } catch {}
+    s.close(() => { if (server === s) server = null; log('ok', 'proxy arrêté'); resolve({ ok: true }); });
+    setTimeout(() => { if (server === s) server = null; resolve({ ok: true }); }, 1500).unref();
   });
 }
 

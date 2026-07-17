@@ -67,8 +67,11 @@ export function decodePNG(buf) {
   const idat = [];
   while (pos + 8 <= buf.length) {
     const len = buf.readUInt32BE(pos); const type = buf.toString('ascii', pos + 4, pos + 8);
+    // Longueur de chunk hors limites (PNG corrompu/malveillant) -> on abandonne proprement.
+    if (len < 0 || pos + 12 + len > buf.length) return null;
     const data = buf.subarray(pos + 8, pos + 8 + len);
     if (type === 'IHDR') {
+      if (len < 13) return null;
       width = data.readUInt32BE(0); height = data.readUInt32BE(4);
       bitDepth = data[8]; colorType = data[9]; interlace = data[12];
     } else if (type === 'PLTE') palette = Buffer.from(data);

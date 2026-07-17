@@ -8,6 +8,11 @@
 //   la cape reste locale et on peut l'échanger en manuel (onglet Joueurs).
 import fs from 'node:fs';
 import path from 'node:path';
+import { isPng } from './png.js';
+
+const NAME_RE = /^[a-z0-9_]{1,16}$/;                 // pseudo Minecraft valide
+const CAPE_RE = /^capes\/[a-z0-9_]{1,16}\.png$/;      // chemin de cape attendu dans l'index
+const MAX_CAPE = 12 * 1024 * 1024;
 
 const DEFAULT_REPO = 'saliox/hasu-client';
 const DEFAULT_BRANCH = 'main';
@@ -61,8 +66,11 @@ export function listPlayers() {
 // Cape d'un joueur du registre, avec cache disque (1 h) et cache des absences.
 const missCache = new Map(); // name -> timestamp
 export async function getRegistryCape(nameLower) {
+  // L'index vient d'un JSON distant (potentiellement altéré) : on valide la clé ET le
+  // chemin de cape avant de construire un chemin disque ou une URL (anti-traversée).
+  if (!NAME_RE.test(String(nameLower || ''))) return null;
   const entry = (index.players || {})[nameLower];
-  if (!entry || !entry.cape) return null;
+  if (!entry || !CAPE_RE.test(String(entry.cape || ''))) return null;
   const cached = path.join(cacheDir, `${nameLower}.png`);
   try {
     const st = fs.statSync(cached);
@@ -73,7 +81,10 @@ export async function getRegistryCape(nameLower) {
   try {
     const r = await fetch(`${rawBase()}/${entry.cape}`, { signal: AbortSignal.timeout(8000) });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const len = Number(r.headers.get('content-length') || 0);
+    if (len > MAX_CAPE) throw new Error('cape trop lourde');
     const buf = Buffer.from(await r.arrayBuffer());
+    if (buf.length > MAX_CAPE || !isPng(buf)) throw new Error('cape invalide'); // ni PNG, ni bornée
     fs.writeFileSync(cached, buf);
     return buf;
   } catch {
@@ -128,17 +139,36 @@ async function putFile(token, relPath, contentBuf, message, knownSha) {
 // publiées entre-temps.
 export async function publishCape(token, username, pngBuf) {
   const name = String(username || '').toLowerCase();
-  if (!/^[a-z0-9_]{1,16}$/.test(name)) return { ok: false, error: 'Pseudo Minecraft invalide.' };
+  if (!NAME_RE.test(name)) return { ok: false, error: 'Pseudo Minecraft invalide.' };
   if (!token) return { ok: false, error: 'Token GitHub manquant (Réglages).' };
   try {
-    await putFile(token, `capes/${name}.png`, pngBuf, `Cap Hub : cape de ${name}`);
-
-    // Relit capes.json distant (source de vérité) et fusionne notre entrée.
+    // 1) Relire l'index distant (sha + contenu) et fusionner AVANT toute écriture, pour
+    //    ne JAMAIS écraser les entrées des autres joueurs. Si l'index existe mais reste
+    //    illisible, on ANNULE (mieux vaut échouer que remplacer tout le registre par une
+    //    seule entrée — cas des gros fichiers où l'API renvoie un contenu vide, ou d'un
+    //    JSON corrompu).
     const cur = await getFile(token, 'capes.json');
-    let players = {};
-    if (cur && cur.buf) { try { players = JSON.parse(cur.buf.toString('utf8')).players || {}; } catch {} }
+    let players;
+    if (!cur) {
+      players = {}; // capes.json n'existe pas encore : on est le premier joueur
+    } else {
+      let text = cur.buf ? cur.buf.toString('utf8') : null;
+      if (text === null) {
+        // Contenu vide via l'API (fichier ≥ 1 Mo) -> on relit le contenu complet en raw.
+        try {
+          const rr = await fetch(`${rawBase()}/capes.json?t=${Date.now()}`, { signal: AbortSignal.timeout(10000) });
+          if (rr.ok) text = await rr.text();
+        } catch {}
+      }
+      if (text === null) return { ok: false, error: 'Index distant inaccessible — publication annulée (pour ne pas écraser les autres).' };
+      try { players = JSON.parse(text).players || {}; }
+      catch { return { ok: false, error: 'Index distant illisible — publication annulée (pour ne pas écraser les autres).' }; }
+    }
     players[name] = { cape: `capes/${name}.png`, updated: new Date().toISOString().slice(0, 10) };
     const json = JSON.stringify({ format: 1, players }, null, 2) + '\n';
+
+    // 2) Écrire le PNG puis l'index (sha = verrou optimiste : 409 si un autre a publié entre-temps).
+    await putFile(token, `capes/${name}.png`, pngBuf, `Cap Hub : cape de ${name}`);
     await putFile(token, 'capes.json', Buffer.from(json), `Cap Hub : index (+${name})`, cur ? cur.sha : undefined);
 
     index = { format: 1, players };
