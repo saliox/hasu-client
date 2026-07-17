@@ -115,10 +115,20 @@ async function gh(token, url, options = {}) {
 }
 
 // GET du fichier via l'API contents : renvoie { sha, buf } ou null s'il n'existe pas.
+// buf est null pour les fichiers ≥ 1 Mo (l'API renvoie alors un content vide).
 async function getFile(token, relPath) {
   const j = await gh(token, `${apiBase()}/${relPath}?ref=${cfg.branch}`);
   if (!j || !j.sha) return null;
   return { sha: j.sha, buf: j.content ? Buffer.from(j.content, 'base64') : null };
+}
+
+// Contenu complet d'un blob par SON sha (via l'API git/blobs, qui sert n'importe quelle
+// taille). On l'utilise pour les index ≥ 1 Mo : cohérent avec le sha du PUT (contrairement
+// au CDN raw qui peut être en retard et faire perdre des entrées).
+async function getBlobText(token, sha) {
+  const j = await gh(token, `https://api.github.com/repos/${cfg.repo}/git/blobs/${sha}`);
+  if (!j || typeof j.content !== 'string') return null;
+  return Buffer.from(j.content, 'base64').toString('utf8'); // base64 tolère les retours ligne
 }
 
 async function putFile(token, relPath, contentBuf, message, knownSha) {
@@ -154,11 +164,9 @@ export async function publishCape(token, username, pngBuf) {
     } else {
       let text = cur.buf ? cur.buf.toString('utf8') : null;
       if (text === null) {
-        // Contenu vide via l'API (fichier ≥ 1 Mo) -> on relit le contenu complet en raw.
-        try {
-          const rr = await fetch(`${rawBase()}/capes.json?t=${Date.now()}`, { signal: AbortSignal.timeout(10000) });
-          if (rr.ok) text = await rr.text();
-        } catch {}
+        // Contenu vide via l'API (fichier ≥ 1 Mo) -> on relit le blob par son sha (cohérent
+        // avec le sha du PUT), et non via le CDN raw qui pourrait être périmé.
+        try { text = await getBlobText(token, cur.sha); } catch {}
       }
       if (text === null) return { ok: false, error: 'Index distant inaccessible — publication annulée (pour ne pas écraser les autres).' };
       try { players = JSON.parse(text).players || {}; }

@@ -360,6 +360,9 @@ async function ensureMcSession() {
   if (!clientId) return session;
   try {
     const renewed = await mc.refreshSession(clientId, session.msRefreshToken);
+    // Un refresh qui ne ramène pas de profil (ex. 404 transitoire) ne doit PAS écraser la
+    // session valide déjà en place -> on conserve l'ancienne.
+    if (!renewed || !renewed.profile) return session;
     setMcSession(renewed);
     return renewed;
   } catch {
@@ -398,6 +401,7 @@ ipcMain.handle('mc:loginMicrosoft', async () => {
   const state = mcLoginState;
   try {
     const dc = await mc.requestDeviceCode(clientId);
+    if (state.cancelled) return { ok: false, error: 'Connexion annulée.' }; // annulé pendant la requête -> ne pas ré-afficher le code
     send('mc-code', { userCode: dc.user_code, verificationUri: dc.verification_uri, expiresIn: dc.expires_in });
     try { shell.openExternal(dc.verification_uri); } catch {}
     const session = await mc.pollDeviceCode(clientId, dc.device_code, dc.interval, dc.expires_in, () => state.cancelled);

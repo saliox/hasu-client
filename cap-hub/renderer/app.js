@@ -560,19 +560,21 @@ async function loadMc() {
 async function mcSetCape(id) {
   if (mcBusy) return; mcBusy = true;
   toast('Activation de la cape…');
-  const r = await window.cap.mc.setCape(id);
-  mcBusy = false;
-  if (r.ok) { renderMc(r); toast('Cape officielle activée ✔', 'ok'); }
-  else toast(r.error || 'Activation impossible', 'err');
+  try {
+    const r = await window.cap.mc.setCape(id);
+    if (r.ok) { renderMc(r); toast('Cape officielle activée ✔', 'ok'); }
+    else toast(r.error || 'Activation impossible', 'err');
+  } finally { mcBusy = false; }
 }
 
 async function mcHide() {
   if (mcBusy) return; mcBusy = true;
   toast('Masquage de la cape…');
-  const r = await window.cap.mc.hideCape();
-  mcBusy = false;
-  if (r.ok) { renderMc(r); toast('Cape masquée ✔', 'ok'); }
-  else toast(r.error || 'Masquage impossible', 'err');
+  try {
+    const r = await window.cap.mc.hideCape();
+    if (r.ok) { renderMc(r); toast('Cape masquée ✔', 'ok'); }
+    else toast(r.error || 'Masquage impossible', 'err');
+  } finally { mcBusy = false; }
 }
 
 // Ajoute une cape officielle à la bibliothèque locale (utilisable via OptiFine, etc.).

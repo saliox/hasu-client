@@ -217,6 +217,13 @@ global.fetch = mcFetch();
 const msSession = await mc.refreshSession('client-id', 'ms-refresh');
 ok('refreshSession chaîne jusqu’au profil', msSession.accessToken === 'mc-access' && msSession.profile.name === 'Steve' && msSession.msRefreshToken === 'ms-refresh');
 ok('refreshSession pose expiresAt futur', msSession.expiresAt > Date.now());
+// Conserve l'ancien refresh token si Microsoft n'en renvoie pas de nouveau.
+global.fetch = async (url, opts = {}) => {
+  if (String(url).endsWith('/token')) return { ok: true, status: 200, json: async () => ({ access_token: 'ms-access', expires_in: 3600 }), text: async () => '' };
+  return mcFetch()(url, opts);
+};
+const kept = await mc.refreshSession('client-id', 'ancien-refresh');
+ok('refreshSession conserve l’ancien refresh token si absent de la réponse', kept.msRefreshToken === 'ancien-refresh');
 const dc = await mc.requestDeviceCode('client-id');
 ok('requestDeviceCode renvoie user_code', dc.user_code === 'ABCD-EFGH');
 let threw = false; global.fetch = mcFetch({ profile401: true });
