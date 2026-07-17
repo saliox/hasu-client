@@ -21,7 +21,10 @@ export function isAnimated(w, h) {
 
 // Rectangle (en pixels) du DEVANT de la cape pour l'image `frame` (0 = première).
 export function capeFrontRect(w, h, frame = 0) {
-  const s = w / 64;                            // échelle
+  // Échelle selon la disposition : OptiFine 46×22 (et multiples) a une planche plus
+  // étroite -> s = w/46 ; sinon vanilla/HD -> s = w/64. Un w divisible par 46 mais pas
+  // par 64 est forcément une planche OptiFine.
+  const s = (w % 46 === 0 && w % 64 !== 0) ? w / 46 : w / 64;
   const frameH = 32 * s;                       // hauteur d'une image (w/2)
   return {
     x: Math.round(1 * s),

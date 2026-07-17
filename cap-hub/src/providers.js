@@ -27,7 +27,7 @@ const optifine = {
     return m ? { key: m[1] } : null;
   },
   render({ capePng, upstream }) {
-    if (capePng) return { status: 200, headers: { ...PNG, 'Content-Length': capePng.length }, body: capePng };
+    if (capePng && capePng.length) return { status: 200, headers: { ...PNG, 'Content-Length': capePng.length }, body: capePng };
     if (upstream && upstream.status === 200 && upstream.body)
       return { status: 200, headers: { ...PNG, 'Content-Length': upstream.body.length }, body: upstream.body };
     return { status: 404, headers: {}, body: null };

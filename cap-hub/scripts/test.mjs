@@ -12,7 +12,7 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 // import() dynamique : sur Windows un chemin absolu (D:\...) doit être une URL file://.
 const S = (f) => pathToFileURL(path.join(root, 'src', f)).href;
 
-const { initCapes, listCapes, importCape, importCapeBuffer, validateCape, readCape, resolveCape, renameCape, duplicateCape } = await import(S('capes.js'));
+const { initCapes, listCapes, importCape, importCapeBuffer, validateCape, readCape, resolveCape, renameCape, duplicateCape, deleteCape } = await import(S('capes.js'));
 const { isPng, readPngSize, encodePNG, decodePNG, firstFrameIfAnimated, capeFrames } = await import(S('png.js'));
 const providers = await import(S('providers.js'));
 const proxy = await import(S('proxy.js'));
@@ -64,6 +64,12 @@ ok('rejette un buffer non-cape', importCapeBuffer(Buffer.from('nope'), 'X').ok =
 const dup = duplicateCape(cr.id);
 ok('duplique une cape en un nouvel id', dup.ok && dup.id !== cr.id && !!resolveCape(dup.id));
 ok('duplique une cape INTÉGRÉE aussi', duplicateCape(capes.find((c) => c.builtin).id).ok === true);
+// Une cape utilisateur nommée « builtin » ne doit PAS être confondue avec une intégrée.
+const bcap = importCapeBuffer(mkPng(64, 32), 'builtin');
+ok('cape utilisateur « builtin » renommable', bcap.ok && renameCape(bcap.id, 'builtin cool').ok === true);
+const bcap2 = importCapeBuffer(mkPng(64, 32), 'builtinx');
+ok('cape utilisateur « builtinx » supprimable', bcap2.ok && deleteCape(bcap2.id).ok === true);
+ok('vraie cape intégrée toujours protégée', deleteCape(capes.find((c) => c.builtin).id).ok === false);
 
 console.log('\n# Réglages (favoris / catégories)');
 const store = await import(S('store.js'));
@@ -91,6 +97,7 @@ ok('64x32 = 1 frame', geom.frameCount(64, 32) === 1 && !geom.isAnimated(64, 32))
 ok('64x64 = 2 frames (animée)', geom.frameCount(64, 64) === 2 && geom.isAnimated(64, 64));
 ok('128x64 HD = 1 frame', geom.frameCount(128, 64) === 1);
 ok('front rect 64x32 = 10x16 @ (1,1)', (() => { const r = geom.capeFrontRect(64, 32, 0); return r.x === 1 && r.y === 1 && r.w === 10 && r.h === 16; })());
+ok('front rect OptiFine 46x22 = 10x16 @ (1,1)', (() => { const r = geom.capeFrontRect(46, 22, 0); return r.x === 1 && r.y === 1 && r.w === 10 && r.h === 16; })());
 ok('front rect frame 1 décalé', geom.capeFrontRect(64, 64, 1).y === 33);
 
 console.log('\n# Proxy HTTP (OptiFine)');

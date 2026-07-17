@@ -73,9 +73,13 @@ export function importCape(srcPath, name) {
   return importCapeBuffer(buf, name || path.basename(srcPath, '.png'));
 }
 
+// Une cape est « intégrée » si son fichier est DANS le dossier builtin (comparaison du
+// dossier parent, pas un startsWith qui piégerait une cape utilisateur nommée « builtin… »).
+const isBuiltinFile = (file) => path.dirname(file) === BUILTIN_DIR;
+
 export function deleteCape(id) {
   const file = resolveCape(id);
-  if (!file || file.startsWith(BUILTIN_DIR)) return { ok: false, error: 'Cape introuvable ou intégrée (non supprimable).' };
+  if (!file || isBuiltinFile(file)) return { ok: false, error: 'Cape introuvable ou intégrée (non supprimable).' };
   try { fs.unlinkSync(file); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
 }
 
@@ -84,7 +88,7 @@ export function deleteCape(id) {
 export function renameCape(id, newName) {
   const file = resolveCape(id);
   if (!file) return { ok: false, error: 'Cape introuvable.' };
-  if (file.startsWith(BUILTIN_DIR)) return { ok: false, error: 'Cape intégrée (non renommable).' };
+  if (isBuiltinFile(file)) return { ok: false, error: 'Cape intégrée (non renommable).' };
   const safe = String(newName || '')
     .replace(/[^A-Za-z0-9 _.-]/g, '_')
     .replace(/\.{2,}/g, '_')

@@ -237,6 +237,14 @@ $('#cape-search').addEventListener('input', (e) => { capeSearch = e.target.value
 $('#cape-sort').addEventListener('change', (e) => { capeSort = e.target.value; renderCapeGrid(); });
 $('#cape-cat').addEventListener('change', (e) => { capeCatFilter = e.target.value; renderCapeGrid(); });
 
+// Bascule « cape sur un personnage » / « cape seule » pour tous les aperçus 3D.
+let showBody = true;
+$('#toggle-body').addEventListener('click', () => {
+  showBody = !showBody;
+  if (window.CapePreview) window.CapePreview.setShowBody(showBody);
+  $('#toggle-body').textContent = showBody ? '🧍 Sur un perso' : '🏳️ Cape seule';
+});
+
 // Cache des data URL de capes (miniatures + aperçu) — évite un aller-retour IPC par
 // cape à chaque re-render (recherche, tri, favori…). Clé = id ; le contenu d'un id ne
 // change jamais (un renommage change l'id), donc le cache reste valide.
