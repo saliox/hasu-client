@@ -47,21 +47,41 @@ export async function checkForUpdates(currentVersion) {
 
 // Télécharge l'installeur, vérifie le SHA-256, lance l'install silencieuse
 // puis relance l'app (script cmd détaché, comme les autres apps du compte).
-export async function applyUpdate(appQuit) {
+const MAX_INSTALLER = 300 * 1024 * 1024; // borne mémoire
+
+// Télécharge la réponse en FLUX en rapportant la progression (0-99 %, null si taille
+// inconnue). Retombe sur arrayBuffer() si le corps n'est pas lisible en flux.
+async function downloadWithProgress(r, total, onProgress) {
+  if (!r.body || typeof r.body.getReader !== 'function') return Buffer.from(await r.arrayBuffer());
+  const reader = r.body.getReader();
+  const chunks = []; let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    received += value.length;
+    if (received > MAX_INSTALLER) { try { await reader.cancel(); } catch {} throw new Error('Installeur trop volumineux — refusé.'); }
+    chunks.push(Buffer.from(value));
+    if (onProgress) { try { onProgress(total ? Math.min(99, Math.round((received / total) * 100)) : null); } catch {} }
+  }
+  return Buffer.concat(chunks);
+}
+
+export async function applyUpdate(appQuit, onProgress) {
   if (!lastInfo) return { ok: false, error: 'Aucune mise à jour prête.' };
   try {
     if (!isAllowedInstallerUrl(lastInfo.url)) throw new Error('URL d’installeur non autorisée — mise à jour refusée.');
     const dest = path.join(os.tmpdir(), 'CapHub-Setup.exe');
     const r = await fetch(lastInfo.url, { signal: AbortSignal.timeout(180000) });
     if (!r.ok) throw new Error(`Téléchargement : HTTP ${r.status}`);
-    const len = Number(r.headers.get('content-length') || 0);
-    if (len > 300 * 1024 * 1024) throw new Error('Installeur trop volumineux — refusé.'); // borne mémoire
-    const buf = Buffer.from(await r.arrayBuffer());
+    const total = Number(r.headers.get('content-length') || 0);
+    if (total > MAX_INSTALLER) throw new Error('Installeur trop volumineux — refusé.');
+    const buf = await downloadWithProgress(r, total, onProgress);
     const sha = crypto.createHash('sha256').update(buf).digest('hex');
     if (String(lastInfo.sha256 || '').toLowerCase() !== sha) {
       throw new Error('Empreinte SHA-256 invalide — mise à jour refusée.');
     }
     fs.writeFileSync(dest, buf);
+    if (onProgress) { try { onProgress(100); } catch {} }
     const script = path.join(os.tmpdir(), 'caphub-update.cmd');
     const body =
       '@echo off\r\n' +

@@ -70,7 +70,7 @@ contextBridge.exposeInMainWorld('cap', {
 
   // Événements poussés par le main -> UI.
   on: (channel, cb) => {
-    const allowed = ['log', 'game-start', 'game-stop', 'update-status', 'proxy-changed', 'mc-code'];
+    const allowed = ['log', 'game-start', 'game-stop', 'update-status', 'update-progress', 'proxy-changed', 'mc-code'];
     if (!allowed.includes(channel)) return () => {};
     const h = (_e, data) => cb(data);
     ipcRenderer.on(channel, h);
