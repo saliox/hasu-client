@@ -56,25 +56,30 @@
   const VERT = `
     attribute vec3 aPos; attribute vec2 aUV; attribute vec3 aNorm;
     uniform mat4 uProj, uView, uModel;
-    varying vec2 vUV; varying vec3 vN;
+    varying vec2 vUV; varying float vShade;
     void main() {
-      mat4 mv = uView * uModel;
-      gl_Position = uProj * mv * vec4(aPos, 1.0);
+      gl_Position = uProj * uView * uModel * vec4(aPos, 1.0);
       vUV = aUV;
-      vN = mat3(mv) * aNorm;
+      // Ombrage plat par face, FIXÉ au modèle (comme les blocs Minecraft) : dessus le plus
+      // clair, avant/arrière moyen, côtés plus sombres, dessous le plus foncé. Indépendant
+      // de la caméra -> le dessus reste clair même quand on tourne le perso.
+      vec3 n = aNorm;
+      float ax = abs(n.x), ay = abs(n.y), az = abs(n.z);
+      float s;
+      if (ay >= ax && ay >= az) s = n.y > 0.0 ? 1.0 : 0.5;   // dessus / dessous
+      else if (az >= ax) s = 0.86;                            // avant / arrière
+      else s = 0.66;                                          // côtés gauche/droite
+      vShade = s;
     }`;
   const FRAG = `
     precision mediump float;
-    varying vec2 vUV; varying vec3 vN;
+    varying vec2 vUV; varying float vShade;
     uniform sampler2D uTex; uniform float uShadow;
     void main() {
       vec4 c = texture2D(uTex, vUV);
       if (uShadow > 0.5) { gl_FragColor = vec4(0.0, 0.0, 0.0, c.a * 0.33); return; }
       if (c.a < 0.5) discard;                       // couches transparentes -> non dessinées
-      vec3 L = normalize(vec3(0.35, 0.5, 0.85));    // lumière fixe (haut-avant-droite)
-      float nl = clamp(dot(normalize(vN), L) * 0.5 + 0.5, 0.0, 1.0); // demi-lambert (doux)
-      float sh = mix(0.6, 1.0, nl);
-      gl_FragColor = vec4(c.rgb * sh, 1.0);
+      gl_FragColor = vec4(c.rgb * vShade, 1.0);
     }`;
 
   function compile(type, src) {
@@ -339,10 +344,11 @@
 
     const aspect = W / H;
     const ctrY = showBody ? 18 : 28;
-    const dist = (showBody ? 82 : 30) / curZoom;
+    // FOV faible + caméra plus loin = perspective douce (proportions justes, look « aperçu de skin »).
+    const dist = (showBody ? 108 : 40) / curZoom;
     // Caméra en orbite : azimut = rotation du modèle, élévation = inclinaison.
     const eye = [0, ctrY + Math.sin(curTilt) * dist, Math.cos(curTilt) * dist];
-    const proj = perspective(30 * Math.PI / 180, aspect, 1, 600);
+    const proj = perspective(22 * Math.PI / 180, aspect, 1, 800);
     const view = lookAt(eye, [0, ctrY, 0], [0, 1, 0]);
     const model = rotY(curAngle);
     gl.uniformMatrix4fv(uniLoc.proj, false, proj);
