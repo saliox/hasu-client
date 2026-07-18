@@ -98,6 +98,16 @@ export function readCapeOriginal(id) {
   try { return fs.readFileSync(file); } catch { return null; }
 }
 
+// Dimensions (origine + servie) d'une cape, SANS transférer les pixels : sert au sélecteur
+// de qualité côté UI (évite d'encoder l'original entier juste pour lire sa taille).
+export function capeDims(id) {
+  const orig = readCapeOriginal(id), served = readCape(id);
+  if (!orig || !served) return null;
+  const o = readPngSize(orig), s = readPngSize(served);
+  if (!o || !s) return null;
+  return { ow: o.width, oh: o.height, sw: s.width, sh: s.height };
+}
+
 // Change la résolution servie d'une cape importée. buf = PNG rééchantillonné (validé) ;
 // buf === null restaure l'original. L'original est sauvegardé UNE fois en <fichier>.orig
 // (donc l'opération est réversible et non destructive). Le proxy et l'aperçu servent

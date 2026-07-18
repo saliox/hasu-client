@@ -20,7 +20,7 @@
   const IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
   let skinImg = null, slim = false, skinTex = null, skinDirty = true;
   let capeImg = null, capeW = 0, capeH = 0, frames = 1, curFrame = 0, lastSwap = 0;
-  let capeTex = null, capeGeomFrame = -1, capeGeomFlat = null;
+  let capeTex = null;
   let defaultSkin = null, defaultTex = null;
   let shadowTex = null, shadowBuf = null;
   let skinBuf = null, skinCount = 0, skinBufSlim = null, skinBufLegacy = false;
@@ -368,7 +368,7 @@
     gl = null; prog = null; skinBuf = null; capeBuf = null; skinTex = null; capeTex = null; defaultTex = null;
     if (!initGL()) return;
     attachOrbit(canvas);
-    skinDirty = true; capeGeomFrame = -1;
+    skinDirty = true; cloth.flat = null;
     if (skinImg || capeImg) start();
   }
 
@@ -486,14 +486,14 @@
 
   function clear() {
     gen++; if (raf) cancelAnimationFrame(raf); raf = 0;
-    capeImg = null; if (capeTex && gl) { gl.deleteTexture(capeTex); } capeTex = null; capeGeomFrame = -1;
+    capeImg = null; if (capeTex && gl) { gl.deleteTexture(capeTex); } capeTex = null;
     if (gl) { gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); }
   }
 
   function setCape(dataUrl) {
     gen++; if (raf) cancelAnimationFrame(raf); raf = 0;
     if (capeTex && gl) gl.deleteTexture(capeTex);
-    capeImg = null; capeTex = null; capeGeomFrame = -1;
+    capeImg = null; capeTex = null;
     if (!dataUrl) { if (gl) { gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); } return; }
     const myGen = gen;
     const image = new Image();

@@ -12,7 +12,7 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 // import() dynamique : sur Windows un chemin absolu (D:\...) doit être une URL file://.
 const S = (f) => pathToFileURL(path.join(root, 'src', f)).href;
 
-const { initCapes, listCapes, importCape, importCapeBuffer, validateCape, readCape, resolveCape, renameCape, duplicateCape, deleteCape, readCapeOriginal, setCapeResolution } = await import(S('capes.js'));
+const { initCapes, listCapes, importCape, importCapeBuffer, validateCape, readCape, resolveCape, renameCape, duplicateCape, deleteCape, readCapeOriginal, setCapeResolution, capeDims } = await import(S('capes.js'));
 const { isPng, readPngSize, encodePNG, decodePNG, firstFrameIfAnimated, capeFrames } = await import(S('png.js'));
 const providers = await import(S('providers.js'));
 const proxy = await import(S('proxy.js'));
@@ -79,6 +79,11 @@ ok('original conservé (128x64) après réduction', (() => { const s = readPngSi
 ok('rejette une image non-cape en résolution', setCapeResolution(hdc.id, Buffer.from('nope')).ok === false);
 ok('restaure l’original -> 128x64', setCapeResolution(hdc.id, null).ok && (() => { const s = readPngSize(readCape(hdc.id)); return s.width === 128 && s.height === 64; })());
 ok('résolution refusée sur une cape intégrée', setCapeResolution(capes.find((c) => c.builtin).id, mkPng(64, 32)).ok === false);
+// capeDims : dimensions origine + servie sans transférer les pixels.
+ok('capeDims : origine = servie au repos', (() => { const d = capeDims(hdc.id); return d && d.ow === 128 && d.oh === 64 && d.sw === 128 && d.sh === 64; })());
+setCapeResolution(hdc.id, mkPng(64, 32));
+ok('capeDims : origine ≠ servie après réduction', (() => { const d = capeDims(hdc.id); return d && d.ow === 128 && d.oh === 64 && d.sw === 64 && d.sh === 32; })());
+setCapeResolution(hdc.id, null);
 
 console.log('\n# Réglages (favoris / catégories)');
 const store = await import(S('store.js'));

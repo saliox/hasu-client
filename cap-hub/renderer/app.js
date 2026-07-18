@@ -89,6 +89,7 @@ async function loadCapes() {
   // cache d'images (un id de fichier peut être réutilisé) et on force l'aperçu à se
   // recalculer. La frappe dans la recherche ne passe PAS par ici -> cache conservé.
   capeImgCache.clear();
+  resMetaCache.clear();      // taille des capes : re-lue au prochain rendu (une cape a pu changer)
   previewState.canvas = null;
   const r = await window.cap.capes.list();
   capeCache = r.capes || [];
@@ -290,9 +291,9 @@ function capeFrontThumb(url) {
 }
 
 // ---------- Résolution / qualité par cape ----------
-function imgSize(dataUrl) {
-  return new Promise((res) => { const i = new Image(); i.onload = () => res([i.naturalWidth, i.naturalHeight]); i.onerror = () => res([0, 0]); i.src = dataUrl; });
-}
+// Métadonnées de taille par cape (origine immuable) — évite de re-solliciter le main à
+// chaque re-rendu de grille (recherche/tri). Vidé sur tout changement structurel (loadCapes).
+const resMetaCache = new Map();
 // Rééchantillonne une cape vers (tw×th). Downscale lissé = réduction propre (le jeu
 // ré-agrandit ensuite au plus proche). Renvoie un data URL PNG.
 function downscaleCape(dataUrl, tw, th) {
@@ -309,45 +310,47 @@ function downscaleCape(dataUrl, tw, th) {
   });
 }
 // Prépare le sélecteur de qualité d'une carte selon la taille d'origine (options ≤ origine).
+// Les dimensions viennent d'un IPC LÉGER (capes.dims, pas de transfert des pixels) et sont
+// mises en cache -> aucun aller-retour ni décodage lors des re-rendus (frappe recherche…).
 async function initResSelect(sel, c) {
   const row = sel.closest('.res-row');
   try {
-    const origRes = await window.cap.capes.original(c.id);
-    const served = await capeDataUrl(c.id);
-    if (!origRes || !origRes.ok || !served) return;
-    const [ow, oh] = await imgSize(origRes.dataUrl);
-    const [sw] = await imgSize(served);
-    if (!ow || !oh) return;
-    const base = (ow % 46 === 0 && ow % 64 !== 0) ? 46 : 64;
-    const origScale = Math.max(1, Math.round(ow / base));
-    const baseH = Math.round(oh / origScale);
-    const servedScale = Math.max(1, Math.round(sw / base));
+    let meta = resMetaCache.get(c.id);
+    if (!meta) {
+      const d = await window.cap.capes.dims(c.id);
+      if (!d || !d.ok || !d.ow || !d.oh) return;
+      const base = (d.ow % 46 === 0 && d.ow % 64 !== 0) ? 46 : 64;
+      const origScale = Math.max(1, Math.round(d.ow / base));
+      meta = { ow: d.ow, oh: d.oh, base, baseH: Math.round(d.oh / origScale), origScale, servedScale: Math.max(1, Math.round(d.sw / base)) };
+      resMetaCache.set(c.id, meta);
+    }
+    const { ow, oh, base, baseH, origScale, servedScale } = meta;
     const opts = [{ v: 'orig', label: `Originale (${ow}×${oh})` }];
     for (const s of [1, 2, 4, 8]) if (s < origScale) opts.push({ v: String(s), label: `${base * s}×${baseH * s}${s === 1 ? ' · léger' : ''}` });
     if (opts.length <= 1) { if (row) row.remove(); return; } // rien à réduire (déjà minimal)
     sel.innerHTML = opts.map((o) => `<option value="${o.v}">${o.label}</option>`).join('');
     sel.value = (servedScale >= origScale) ? 'orig' : String(servedScale);
-    sel.addEventListener('change', () => applyRes(sel, c.id, origScale, base, baseH));
+    sel.addEventListener('change', () => applyRes(sel, c.id, meta));
     if (row) row.classList.remove('hidden');
   } catch { /* laisse la ligne cachée */ }
 }
-async function applyRes(sel, id, origScale, base, baseH) {
+async function applyRes(sel, id, meta) {
   const v = sel.value;
   sel.disabled = true;
   try {
     let r;
-    if (v === 'orig' || +v >= origScale) r = await window.cap.capes.setResolution(id, null);
+    if (v === 'orig' || +v >= meta.origScale) r = await window.cap.capes.setResolution(id, null);
     else {
-      const orig = await window.cap.capes.original(id);
+      const orig = await window.cap.capes.original(id); // pixels de l'original : seulement au moment d'appliquer
       if (!orig || !orig.ok) return toast('Original indisponible.', 'err');
-      const url = await downscaleCape(orig.dataUrl, base * +v, baseH * +v);
+      const url = await downscaleCape(orig.dataUrl, meta.base * +v, meta.baseH * +v);
       if (!url) return toast('Rééchantillonnage impossible.', 'err');
       r = await window.cap.capes.setResolution(id, url);
     }
     if (!r || !r.ok) return toast((r && r.error) || 'Changement impossible', 'err');
     toast('Résolution mise à jour ✔ — en jeu, rejoins un monde pour la voir.', 'ok');
     frontThumbCache.clear();
-    await loadCapes();
+    await loadCapes(); // vide resMetaCache -> le sélecteur reflète la nouvelle taille servie
   } finally { sel.disabled = false; }
 }
 
