@@ -23,6 +23,15 @@ const LAUNCHER_EXES = {
   'tlauncher.exe': 'TLauncher',
   'curseforge.exe': 'CurseForge',
   'hasulauncher.exe': 'Hasu Launcher',
+  'modrinth app.exe': 'Modrinth App',
+  'ftb app.exe': 'FTB App',
+  'ftbapp.exe': 'FTB App',
+  'techniclauncher.exe': 'Technic Launcher',
+  'sklauncher.exe': 'SKLauncher',
+  'legacylauncher.exe': 'Legacy Launcher',
+  'labymod.exe': 'LabyMod',
+  'xmdl.exe': 'X Minecraft Launcher',
+  'foldercraft.exe': 'FolderCraft',
 };
 
 // Signatures dans la ligne de commande Java -> nom du client en jeu. On vise des
@@ -34,8 +43,9 @@ const JAVA_SIGNS = [
   { re: /net\.badlion\.|badlionclient/i, client: 'Badlion Client (en jeu)' },
   { re: /net\.digitalingot\.feather|featherclient/i, client: 'Feather Client (en jeu)' },
   { re: /\bhasu(?:client)?\b/i, client: 'Hasu Client (en jeu)' },
+  { re: /net\.labymod\b/i, client: 'LabyMod (en jeu)' },
   {
-    re: /net\.minecraft\.client\.main\.Main|net\.minecraft\.launchwrapper|--gameDir\b|--assetIndex\b|--assetsDir\b|[\\/]\.minecraft[\\/]|net\.fabricmc\.|net\.minecraftforge\.|cpw\.mods\.modlauncher|io\.github\.zekerzhayard/i,
+    re: /net\.minecraft\.client\.main\.Main|net\.minecraft\.launchwrapper|--gameDir\b|--assetIndex\b|--assetsDir\b|[\\/]\.minecraft[\\/]|net\.fabricmc\.|org\.quiltmc\.|net\.minecraftforge\.|cpw\.mods\.modlauncher|cpw\.mods\.bootstraplauncher|io\.github\.zekerzhayard/i,
     client: 'Minecraft (en jeu)',
   },
 ];

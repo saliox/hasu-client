@@ -306,6 +306,13 @@ ok('java Minecraft (classe main) détecté + pseudo', watch.classify({ Name: 'ja
 ok('java avec .minecraft dans le chemin détecté', /Minecraft/.test(watch.classify({ Name: 'javaw.exe', ProcessId: 8, CommandLine: 'javaw -Djava.library.path=C:/Users/x/AppData/Roaming/.minecraft/bin net.x' })?.client || ''));
 ok('java tiers avec « forge » dans un jar -> IGNORÉ (plus de faux positif)', watch.classify({ Name: 'java.exe', ProcessId: 7, CommandLine: 'java -jar C:/tools/forge-cli-utils.jar' }) === null);
 ok('java quelconque (IntelliJ) -> ignoré', watch.classify({ Name: 'java.exe', ProcessId: 9, CommandLine: 'java -cp idea.jar com.intellij.Main' }) === null);
+// Couverture élargie des launchers / clients.
+ok('détecte Modrinth App', watch.classify({ Name: 'Modrinth App.exe', ProcessId: 11 })?.client === 'Modrinth App');
+ok('détecte FTB App', watch.classify({ Name: 'ftbapp.exe', ProcessId: 12 })?.client === 'FTB App');
+ok('détecte Technic Launcher', watch.classify({ Name: 'TechnicLauncher.exe', ProcessId: 13 })?.client === 'Technic Launcher');
+ok('détecte LabyMod en jeu', /LabyMod/.test(watch.classify({ Name: 'javaw.exe', ProcessId: 14, CommandLine: 'javaw -cp x net.labymod.core.Main --username Bob' })?.client || ''));
+ok('détecte Quilt en jeu', /Minecraft/.test(watch.classify({ Name: 'javaw.exe', ProcessId: 15, CommandLine: 'javaw org.quiltmc.loader.impl.launch.knot.KnotClient' })?.client || ''));
+ok('détecte Forge 1.17+ (bootstraplauncher)', /Minecraft/.test(watch.classify({ Name: 'javaw.exe', ProcessId: 16, CommandLine: 'javaw cpw.mods.bootstraplauncher.BootstrapLauncher' })?.client || ''));
 
 console.log('\n# Auto-update (URL d’installeur restreinte)');
 const up = await import(S('updater.js'));
