@@ -33,6 +33,7 @@ function activateTab(tab) {
   if (t === 'official') loadMc();
   if (t === 'capes') { previewState.canvas = null; renderPreview(capeActive, (capeCache.find((c) => c.id === capeActive) || {}).name || ''); }
   else if (t === 'creator') { previewState.canvas = null; updateCreator(); }
+  else if (t === 'editor') { previewState.canvas = null; edActivate(); }
   else if (window.CapePreview) { window.CapePreview.clear(); previewState.canvas = null; } // pas d'aperçu -> stoppe l'animation (CPU)
 }
 tabEls.forEach((tab, i) => {
@@ -96,6 +97,7 @@ async function loadCapes() {
   capeCats = r.categories || {};
   updateCatFilter();
   renderCapeGrid();
+  if (edInited) edRefreshSources();
 }
 
 // Catégorie effective d'une cape : surcharge utilisateur, sinon déduite (intégrées) ou « Mes créations ».
@@ -512,10 +514,13 @@ $('#px-reset').addEventListener('click', () => { pxSnapshot(); pxGrid.fill($('#p
 // Raccourcis Annuler/Rétablir (uniquement sur le créateur en mode pixel).
 window.addEventListener('keydown', (e) => {
   if (!(e.ctrlKey || e.metaKey)) return;
-  if (!$('#tab-creator').classList.contains('active') || $('#cr-mode').value !== 'pixel') return;
   const k = e.key.toLowerCase();
-  if (k === 'z' && !e.shiftKey) { e.preventDefault(); pxUndo(); }
-  else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); pxRedo(); }
+  const onEditor = $('#tab-editor').classList.contains('active');
+  const onCreatorPixel = $('#tab-creator').classList.contains('active') && $('#cr-mode').value === 'pixel';
+  if (!onEditor && !onCreatorPixel) return;
+  const undo = onEditor ? edDoUndo : pxUndo, redo = onEditor ? edDoRedo : pxRedo;
+  if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+  else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo(); }
 });
 
 // Import d'image quelconque.
@@ -546,6 +551,254 @@ $('#cr-create').addEventListener('click', () => guard('#cr-create', async () => 
   await loadCapes();
   updateCreator();
 }));
+
+// ---------- Onglet Édition : éditeur pixel dédié (zoom molette + déplacement) ----------
+const ED_W = 64, ED_H = 32;
+// Zone AVANT (ce qui se voit) et toutes les régions utiles de la planche de cape (px).
+// Le reste de la planche 64×32 est ignoré par le jeu.
+const ED_FRONT = { x: 1, y: 1, w: 10, h: 16 };
+const ED_REGIONS = [
+  ED_FRONT,                        // avant (visible)
+  { x: 12, y: 1, w: 10, h: 16 },   // arrière
+  { x: 0, y: 1, w: 1, h: 16 },     // bord droit
+  { x: 11, y: 1, w: 1, h: 16 },    // bord gauche
+  { x: 1, y: 0, w: 10, h: 1 },     // dessus
+  { x: 11, y: 0, w: 10, h: 1 },    // dessous
+];
+let edGrid = new Array(ED_W * ED_H).fill(null); // null = pixel transparent
+let edZoom = 14, edFitZoom = 14, edPanX = 0, edPanY = 0;
+let edPainting = false, edPanning = false, edPanFrom = null;
+let edTool = 'brush'; // 'brush' | 'erase' | 'pick'
+let edShowGrid = true, edInited = false;
+let edUndo = [], edRedo = [];
+
+function edFillRegion(r, col) {
+  for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) edGrid[y * ED_W + x] = col;
+}
+function edCanvasEl() { return $('#ed-canvas'); }
+function edResizeCanvas() {
+  const cv = edCanvasEl(); if (!cv) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth || cv.parentElement.clientWidth || 640;
+  const h = cv.clientHeight || 480;
+  const nw = Math.max(1, Math.round(w * dpr)), nh = Math.max(1, Math.round(h * dpr));
+  if (cv.width !== nw || cv.height !== nh) { cv.width = nw; cv.height = nh; }
+}
+function edFit() {
+  const cv = edCanvasEl();
+  edFitZoom = edZoom = Math.max(3, Math.floor(Math.min(cv.width / (ED_W + 4), cv.height / (ED_H + 4))));
+  edPanX = Math.round((cv.width - ED_W * edZoom) / 2);
+  edPanY = Math.round((cv.height - ED_H * edZoom) / 2);
+}
+function edZoomLabel() {
+  const el = $('#ed-zoom-val'); if (el && edFitZoom) el.textContent = Math.round(edZoom / edFitZoom * 100) + '%';
+}
+function edRender() {
+  const cv = edCanvasEl(); if (!cv) return;
+  const c = cv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0);
+  c.clearRect(0, 0, cv.width, cv.height);
+  const z = edZoom, ox = edPanX, oy = edPanY;
+  // Damier de fond (montre la transparence) + pixels peints par-dessus.
+  for (let y = 0; y < ED_H; y++) for (let x = 0; x < ED_W; x++) {
+    const sx = ox + x * z, sy = oy + y * z;
+    c.fillStyle = ((x + y) & 1) ? '#20232b' : '#181b22';
+    c.fillRect(sx, sy, z, z);
+    const col = edGrid[y * ED_W + x];
+    if (col) { c.fillStyle = col; c.fillRect(sx, sy, z, z); }
+  }
+  // Grille (si assez zoomé).
+  if (edShowGrid && z >= 6) {
+    c.strokeStyle = 'rgba(255,255,255,0.07)'; c.lineWidth = 1; c.beginPath();
+    for (let x = 0; x <= ED_W; x++) { c.moveTo(ox + x * z + 0.5, oy); c.lineTo(ox + x * z + 0.5, oy + ED_H * z); }
+    for (let y = 0; y <= ED_H; y++) { c.moveTo(ox, oy + y * z + 0.5); c.lineTo(ox + ED_W * z, oy + y * z + 0.5); }
+    c.stroke();
+  }
+  // Contours des régions + libellé de la zone AVANT.
+  c.lineWidth = 2;
+  ED_REGIONS.forEach((r) => { c.strokeStyle = 'rgba(255,255,255,0.16)'; c.strokeRect(ox + r.x * z, oy + r.y * z, r.w * z, r.h * z); });
+  c.strokeStyle = 'rgba(96,230,150,0.95)'; c.strokeRect(ox + ED_FRONT.x * z, oy + ED_FRONT.y * z, ED_FRONT.w * z, ED_FRONT.h * z);
+  c.fillStyle = 'rgba(96,230,150,0.95)'; c.font = '600 12px system-ui, sans-serif'; c.textBaseline = 'bottom';
+  if (oy + ED_FRONT.y * z - 3 > 10) c.fillText('AVANT (visible)', ox + ED_FRONT.x * z, oy + ED_FRONT.y * z - 3);
+  edZoomLabel();
+}
+
+// Coordonnées case (+ position écran) sous le pointeur.
+function edCoord(e) {
+  const cv = edCanvasEl(), rect = cv.getBoundingClientRect();
+  const sx = (e.clientX - rect.left) * (cv.width / rect.width);
+  const sy = (e.clientY - rect.top) * (cv.height / rect.height);
+  const x = Math.floor((sx - edPanX) / edZoom), y = Math.floor((sy - edPanY) / edZoom);
+  return { x, y, sx, sy, inside: x >= 0 && y >= 0 && x < ED_W && y < ED_H };
+}
+
+// Aperçu 3D coalescé (1 encodage PNG max par frame d'affichage).
+let edPreviewRaf = 0;
+function edSchedulePreview() {
+  if (edPreviewRaf || !window.CapePreview) return;
+  edPreviewRaf = requestAnimationFrame(() => { edPreviewRaf = 0; window.CapePreview.setCape(edExportUrl()); });
+}
+function edExportUrl() {
+  const cv = $('#ed-export'), c = cv.getContext('2d'); c.clearRect(0, 0, ED_W, ED_H);
+  for (let y = 0; y < ED_H; y++) for (let x = 0; x < ED_W; x++) { const col = edGrid[y * ED_W + x]; if (col) { c.fillStyle = col; c.fillRect(x, y, 1, 1); } }
+  return cv.toDataURL('image/png');
+}
+
+function edPaint(e) {
+  const p = edCoord(e); if (!p.inside) return;
+  const col = edTool === 'erase' ? null : $('#ed-color').value;
+  edGrid[p.y * ED_W + p.x] = col;
+  if ($('#ed-mirror').checked) edGrid[p.y * ED_W + (ED_W - 1 - p.x)] = col;
+  edRender(); edSchedulePreview();
+}
+function edPickAt(e) {
+  const p = edCoord(e); if (!p.inside) return;
+  const col = edGrid[p.y * ED_W + p.x];
+  if (col) $('#ed-color').value = col;
+  edSetTool('brush');
+}
+
+// Historique (annuler / rétablir) — une entrée par TRAIT.
+function edSnapshot() { edUndo.push(edGrid.slice()); if (edUndo.length > 80) edUndo.shift(); edRedo.length = 0; edUpdateButtons(); }
+function edUpdateButtons() { const u = $('#ed-undo'), r = $('#ed-redo'); if (u) u.disabled = !edUndo.length; if (r) r.disabled = !edRedo.length; }
+function edDoUndo() { if (!edUndo.length) return; edRedo.push(edGrid.slice()); edGrid = edUndo.pop(); edRender(); edSchedulePreview(); edUpdateButtons(); }
+function edDoRedo() { if (!edRedo.length) return; edUndo.push(edGrid.slice()); edGrid = edRedo.pop(); edRender(); edSchedulePreview(); edUpdateButtons(); }
+
+function edSetTool(t) {
+  edTool = t;
+  $('#ed-brush').classList.toggle('active', t === 'brush');
+  $('#ed-erase').classList.toggle('active', t === 'erase');
+  $('#ed-pick').classList.toggle('active', t === 'pick');
+  const cv = edCanvasEl(); if (cv) cv.style.cursor = t === 'pick' ? 'copy' : 'crosshair';
+}
+
+// Charge une image (data URL) dans la grille 64×32 (1re image si cape animée, sous-échantillonnée si HD).
+function edLoadDataUrl(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const cv = document.createElement('canvas'); cv.width = ED_W; cv.height = ED_H;
+      const c = cv.getContext('2d'); c.imageSmoothingEnabled = false;
+      const fw = img.naturalWidth || ED_W;
+      const fh = Math.min(img.naturalHeight || ED_H, Math.round((img.naturalWidth || ED_W) / 2)) || ED_H;
+      c.drawImage(img, 0, 0, fw, fh, 0, 0, ED_W, ED_H);
+      const d = c.getImageData(0, 0, ED_W, ED_H).data;
+      for (let i = 0; i < ED_W * ED_H; i++) {
+        const a = d[i * 4 + 3];
+        edGrid[i] = a > 12 ? '#' + [d[i * 4], d[i * 4 + 1], d[i * 4 + 2]].map((v) => v.toString(16).padStart(2, '0')).join('') : null;
+      }
+      resolve(true);
+    };
+    img.onerror = () => resolve(false);
+    img.src = dataUrl;
+  });
+}
+
+// Remplit la liste « Point de départ » (Cape vierge + capes de la bibliothèque).
+function edRefreshSources() {
+  const sel = $('#ed-source'); if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="__blank">Cape vierge (couleur unie)</option>';
+  for (const c of capeCache) {
+    const o = document.createElement('option'); o.value = c.id; o.textContent = c.name + (c.builtin ? ' (intégrée)' : '');
+    sel.appendChild(o);
+  }
+  if ([...sel.options].some((o) => o.value === cur)) sel.value = cur;
+}
+async function edLoadSource() {
+  const v = $('#ed-source').value;
+  edSnapshot();
+  if (v === '__blank') { edGrid.fill(null); ED_REGIONS.forEach((r) => edFillRegion(r, $('#ed-color').value)); }
+  else {
+    const url = await capeDataUrl(v);
+    if (!url) { toast('Cape indisponible.', 'err'); edUndo.pop(); edUpdateButtons(); return; }
+    await edLoadDataUrl(url);
+  }
+  edRender(); edSchedulePreview();
+}
+
+function edInit() {
+  edRefreshSources();
+  // Cape vierge par défaut.
+  ED_REGIONS.forEach((r) => edFillRegion(r, '#7c5cff'));
+  const cv = edCanvasEl();
+  cv.addEventListener('pointerdown', (e) => {
+    if (e.button === 1 || e.button === 2) { // clic molette / droit -> déplacement
+      edPanning = true; edPanFrom = { x: e.clientX, y: e.clientY, px: edPanX, py: edPanY };
+      try { cv.setPointerCapture(e.pointerId); } catch {} e.preventDefault(); return;
+    }
+    if (edTool === 'pick') { edPickAt(e); return; }
+    edPainting = true; try { cv.setPointerCapture(e.pointerId); } catch {}
+    edSnapshot(); edPaint(e);
+  });
+  cv.addEventListener('pointermove', (e) => {
+    if (edPanning && edPanFrom) {
+      const sc = cv.width / cv.getBoundingClientRect().width;
+      edPanX = edPanFrom.px + (e.clientX - edPanFrom.x) * sc;
+      edPanY = edPanFrom.py + (e.clientY - edPanFrom.y) * sc;
+      edRender(); return;
+    }
+    if (edPainting) edPaint(e);
+  });
+  const endStroke = () => { edPainting = false; edPanning = false; edPanFrom = null; };
+  window.addEventListener('pointerup', endStroke);
+  cv.addEventListener('pointercancel', endStroke);
+  cv.addEventListener('contextmenu', (e) => e.preventDefault()); // clic droit = déplacement, pas de menu
+  cv.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const rect = cv.getBoundingClientRect();
+    const sx = (e.clientX - rect.left) * (cv.width / rect.width);
+    const sy = (e.clientY - rect.top) * (cv.height / rect.height);
+    const wx = (sx - edPanX) / edZoom, wy = (sy - edPanY) / edZoom;
+    const f = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    edZoom = Math.min(64, Math.max(3, edZoom * f));
+    edPanX = sx - wx * edZoom; edPanY = sy - wy * edZoom;
+    edRender();
+  }, { passive: false });
+
+  $('#ed-color').addEventListener('input', () => { if (edTool === 'erase') edSetTool('brush'); });
+  $('#ed-brush').addEventListener('click', () => edSetTool('brush'));
+  $('#ed-erase').addEventListener('click', () => edSetTool('erase'));
+  $('#ed-pick').addEventListener('click', () => edSetTool(edTool === 'pick' ? 'brush' : 'pick'));
+  $('#ed-grid').addEventListener('click', () => { edShowGrid = !edShowGrid; $('#ed-grid').classList.toggle('active', edShowGrid); edRender(); });
+  $('#ed-undo').addEventListener('click', edDoUndo);
+  $('#ed-redo').addEventListener('click', edDoRedo);
+  $('#ed-fill-front').addEventListener('click', () => { edSnapshot(); edFillRegion(ED_FRONT, $('#ed-color').value); edRender(); edSchedulePreview(); });
+  $('#ed-fill-all').addEventListener('click', () => { edSnapshot(); ED_REGIONS.forEach((r) => edFillRegion(r, $('#ed-color').value)); edRender(); edSchedulePreview(); });
+  $('#ed-clear').addEventListener('click', () => { edSnapshot(); edGrid.fill(null); edRender(); edSchedulePreview(); });
+  $('#ed-zoom-in').addEventListener('click', () => { edZoom = Math.min(64, edZoom * 1.25); edRender(); });
+  $('#ed-zoom-out').addEventListener('click', () => { edZoom = Math.max(3, edZoom / 1.25); edRender(); });
+  $('#ed-zoom-reset').addEventListener('click', () => { edResizeCanvas(); edFit(); edRender(); });
+  $('#ed-load').addEventListener('click', () => guard('#ed-load', edLoadSource));
+  $('#ed-import').addEventListener('click', () => guard('#ed-import', async () => {
+    const r = await window.cap.capes.pickImage();
+    if (!r.ok) { if (!r.canceled) toast(r.error || 'Image invalide', 'err'); return; }
+    edSnapshot(); await edLoadDataUrl(r.dataUrl); edRender(); edSchedulePreview();
+    toast('Image chargée dans l’éditeur ✔', 'ok');
+  }));
+  $('#ed-save').addEventListener('click', () => guard('#ed-save', async () => {
+    if (edGrid.every((c) => !c)) return toast('La cape est vide — dessine quelque chose d’abord.', 'err');
+    const name = $('#ed-name').value.trim() || 'Ma cape';
+    const r = await window.cap.capes.create(name, edExportUrl());
+    if (!r.ok) return toast(r.error || 'Enregistrement impossible', 'err');
+    if ($('#ed-use').checked && r.id) { await window.cap.capes.setActive(r.id); refreshStatus(); }
+    $('#ed-msg').textContent = `Cape « ${name} » ajoutée à ta bibliothèque ✔${$('#ed-use').checked ? ' (activée)' : ''}`;
+    toast('Cape enregistrée ✔', 'ok');
+    await loadCapes();
+  }));
+  window.addEventListener('resize', () => {
+    if (!$('#tab-editor').classList.contains('active')) return;
+    edResizeCanvas(); edFit(); edRender();
+  });
+  edSetTool('brush');
+}
+function edActivate() {
+  if (!edInited) { edInit(); edInited = true; }
+  edRefreshSources();
+  mountPreview('#editor-preview');
+  edResizeCanvas(); edFit(); edRender();
+  window.CapePreview.setCape(edExportUrl());
+  previewState.canvas = null; // force un remontage propre au retour sur « Mes capes »
+}
 
 // ---------- Compte Minecraft officiel ----------
 let mcBusy = false;
