@@ -14,7 +14,7 @@ import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { isPng, firstFrameIfAnimated } from './src/png.js';
 
-import { initCapes, listCapes, importCape, importCapeBuffer, deleteCape, renameCape, resolveCape, readCape, readCapeOriginal, setCapeResolution, duplicateCape } from './src/capes.js';
+import { initCapes, listCapes, importCape, importCapeBuffer, deleteCape, renameCape, resolveCape, readCape, readCapeOriginal, setCapeResolution, capeDims, duplicateCape } from './src/capes.js';
 import { initStore, getSettings, saveSettings, setToken, getToken, setMcSession, getMcSession, clearMcSession } from './src/store.js';
 import * as mc from './src/mcaccount.js';
 import { startProxy, stopProxy, isRunning, getStats, getPort, proxyEvents, redirectHosts } from './src/proxy.js';
@@ -353,6 +353,11 @@ ipcMain.handle('capes:preview', (_e, id) => {
   const buf = readCape(id);
   if (!buf) return { ok: false, error: 'Cape introuvable.' };
   return { ok: true, dataUrl: 'data:image/png;base64,' + buf.toString('base64') };
+});
+// Dimensions (origine + servie) — payload minuscule pour le sélecteur de qualité.
+ipcMain.handle('capes:dims', (_e, id) => {
+  const d = capeDims(id);
+  return d ? { ok: true, ...d } : { ok: false, error: 'Cape introuvable.' };
 });
 // Version d'ORIGINE (avant réduction de résolution) — source pour rééchantillonner.
 ipcMain.handle('capes:original', (_e, id) => {
