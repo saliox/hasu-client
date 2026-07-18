@@ -689,7 +689,7 @@ function edRender() {
   // Damier de fond (montre la transparence) + pixels peints par-dessus.
   for (let y = 0; y < ED_H; y++) for (let x = 0; x < ED_W; x++) {
     const sx = ox + x * z, sy = oy + y * z;
-    c.fillStyle = ((x + y) & 1) ? '#20232b' : '#181b22';
+    c.fillStyle = ((x + y) & 1) ? '#2b3040' : '#232836';
     c.fillRect(sx, sy, z, z);
     const col = edGrid[y * ED_W + x];
     if (col) { c.fillStyle = col; c.fillRect(sx, sy, z, z); }
@@ -701,12 +701,20 @@ function edRender() {
     for (let y = 0; y <= ED_H; y++) { c.moveTo(ox, oy + y * z + 0.5); c.lineTo(ox + ED_W * z, oy + y * z + 0.5); }
     c.stroke();
   }
+  // Cadre net de la planche.
+  c.strokeStyle = 'rgba(255,255,255,0.22)'; c.lineWidth = 1;
+  c.strokeRect(ox + 0.5, oy + 0.5, ED_W * z - 1, ED_H * z - 1);
   // Contours des régions + libellé de la zone AVANT.
   c.lineWidth = 2;
   ED_REGIONS.forEach((r) => { c.strokeStyle = 'rgba(255,255,255,0.16)'; c.strokeRect(ox + r.x * z, oy + r.y * z, r.w * z, r.h * z); });
   c.strokeStyle = 'rgba(96,230,150,0.95)'; c.strokeRect(ox + ED_FRONT.x * z, oy + ED_FRONT.y * z, ED_FRONT.w * z, ED_FRONT.h * z);
-  c.fillStyle = 'rgba(96,230,150,0.95)'; c.font = '600 12px system-ui, sans-serif'; c.textBaseline = 'bottom';
-  if (oy + ED_FRONT.y * z - 3 > 10) c.fillText('AVANT (visible)', ox + ED_FRONT.x * z, oy + ED_FRONT.y * z - 3);
+  const ly = oy + ED_FRONT.y * z - 4;
+  if (ly > 14) {
+    c.font = '600 12px system-ui, sans-serif'; c.textBaseline = 'bottom';
+    const lx = ox + ED_FRONT.x * z, tw = c.measureText('AVANT (visible)').width;
+    c.fillStyle = 'rgba(10,14,24,0.72)'; c.fillRect(lx - 4, ly - 14, tw + 8, 16);
+    c.fillStyle = 'rgba(120,240,170,0.98)'; c.fillText('AVANT (visible)', lx, ly);
+  }
   // Aperçu du tracé en cours (ligne / rectangle) avant de valider.
   if (edPreview && edPreview.length) {
     const mh = $('#ed-mirror').checked, mv = $('#ed-mirrorv').checked;
