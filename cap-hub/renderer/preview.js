@@ -165,7 +165,9 @@
       const P = face.c.map((i) => project(C[i], ang, tilt, cx, cy, unit));
       if (!frontFacing(P)) continue; // backface culling
       const depth = (P[0][2] + P[1][2] + P[2][2] + P[3][2]) / 4;
-      polys.push({ P, uv, tex, key: tex + ':' + face.k, face: face.k, depth });
+      // Clé de tuile = région UV réelle (PAS le nom de face) : head/body/bras/jambes
+      // partagent les mêmes noms de face mais des régions différentes -> sinon collision.
+      polys.push({ P, uv, tex, key: tex + ':' + uv.join('_'), face: face.k, depth });
     }
   }
 
@@ -242,8 +244,9 @@
     ctx.imageSmoothingEnabled = false;
     const cx = W / 2, cy = H / 2 + (showBody ? 6 : 0);
     const unit = showBody ? Math.min(W / 20, H / 42) : Math.min(W / 13, H / 20);
-    // Rotation lente montrant surtout le DOS (pour voir la cape), avec léger va-et-vient.
-    const ang = Math.PI + Math.sin(t * 0.5) * 0.6;
+    // Tourne-disque lent : on part de FACE (on voit le visage, comme un aperçu de skin
+    // Minecraft) et la rotation ramène le dos (donc la cape) régulièrement.
+    const ang = t * 0.55;
     const tilt = 0.12;
 
     // Ombre au sol.
