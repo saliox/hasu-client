@@ -12,6 +12,8 @@
   // ---------- État ----------
   let canvas = null, gl = null, prog = null, raf = 0, t0 = 0, gen = 0;
   let showBody = true;
+  // Rotation : tourne-disque auto, ou contrôlée à la souris (glisser pour tourner).
+  let curAngle = 0, lastTs = 0, dragging = false, dragX0 = 0, dragA0 = 0;
   let skinImg = null, slim = false, skinTex = null, skinDirty = true;
   let capeImg = null, capeW = 0, capeH = 0, frames = 1, curFrame = 0, lastSwap = 0;
   let capeTex = null, capeGeomFrame = -1;
@@ -268,8 +270,30 @@
     canvas.width = bw * SSAA; canvas.height = bh * SSAA;
     gl = null; prog = null; skinBuf = null; capeBuf = null; skinTex = null; capeTex = null; defaultTex = null;
     if (!initGL()) return;
+    attachOrbit(canvas);
     skinDirty = true; capeGeomFrame = -1;
     if (skinImg || capeImg) start();
+  }
+
+  // Glisser (souris/tactile) pour faire tourner le modèle ; relâcher reprend l'auto-rotation.
+  function attachOrbit(el) {
+    if (el.dataset.orbit) { el.style.cursor = 'grab'; return; }
+    el.dataset.orbit = '1';
+    el.style.cursor = 'grab'; el.style.touchAction = 'none';
+    if (!el.title) el.title = 'Glisse pour tourner';
+    el.addEventListener('pointerdown', (e) => {
+      dragging = true; dragX0 = e.clientX; dragA0 = curAngle;
+      try { el.setPointerCapture(e.pointerId); } catch {}
+      el.style.cursor = 'grabbing';
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const w = el.getBoundingClientRect().width || 1;
+      curAngle = dragA0 + (e.clientX - dragX0) / w * (Math.PI * 2);
+    });
+    const up = () => { if (dragging) { dragging = false; el.style.cursor = 'grab'; } };
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
   }
 
   function bindAttribs() {
@@ -294,7 +318,8 @@
   function loop(ts) {
     if (!gl || (!capeImg && !skinImg)) { raf = 0; return; }
     if (!t0) t0 = ts;
-    const t = (ts - t0) / 1000;
+    const dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 0; lastTs = ts;
+    if (!dragging) curAngle += dt * 0.6; // auto-rotation quand on ne fait pas glisser
     if (frames > 1 && ts - lastSwap > 100) { curFrame = (curFrame + 1) % frames; lastSwap = ts; if (capeImg) buildCapeGeom(); }
 
     ensureTextures();
@@ -310,7 +335,7 @@
     const eyeY = ctrY + (showBody ? 5 : 1.5);
     const proj = perspective(30 * Math.PI / 180, aspect, 1, 400);
     const view = lookAt([0, eyeY, dist], [0, ctrY, 0], [0, 1, 0]);
-    const model = rotY(t * 0.6);
+    const model = rotY(curAngle);
     gl.uniformMatrix4fv(uniLoc.proj, false, proj);
     gl.uniformMatrix4fv(uniLoc.view, false, view);
     gl.uniformMatrix4fv(uniLoc.model, false, model);
@@ -345,7 +370,7 @@
     raf = requestAnimationFrame(loop);
   }
 
-  function start() { if (!raf && gl) { t0 = 0; raf = requestAnimationFrame(loop); } }
+  function start() { if (!raf && gl) { t0 = 0; lastTs = 0; raf = requestAnimationFrame(loop); } }
 
   function clear() {
     gen++; if (raf) cancelAnimationFrame(raf); raf = 0;
