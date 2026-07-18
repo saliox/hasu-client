@@ -14,12 +14,12 @@
   let showBody = true;
   // Orbite : rotation auto (tourne-disque) ou contrôlée à la souris (glisser = tourner +
   // incliner, molette = zoomer).
-  let curAngle = 0, curTilt = 0.09, curZoom = 1, lastTs = 0;
+  let curAngle = 0, curTilt = 0.09, curZoom = 1, lastTs = 0, spinClock = 0;
   let dragging = false, dragX0 = 0, dragY0 = 0, dragA0 = 0, dragT0 = 0;
   const clampTilt = (v) => Math.max(-0.5, Math.min(1.2, v));
   let skinImg = null, slim = false, skinTex = null, skinDirty = true;
   let capeImg = null, capeW = 0, capeH = 0, frames = 1, curFrame = 0, lastSwap = 0;
-  let capeTex = null, capeGeomFrame = -1;
+  let capeTex = null, capeGeomFrame = -1, capeGeomFlat = null;
   let defaultSkin = null, defaultTex = null;
   let shadowTex = null, shadowBuf = null;
   let skinBuf = null, skinCount = 0, skinBufSlim = null, skinBufLegacy = false;
@@ -153,35 +153,40 @@
     skinBufSlim = slim; skinBufLegacy = legacy;
   }
 
-  // Géométrie de la cape (10×16×1), suspendue au dos, légèrement inclinée vers l'arrière.
-  function buildCapeGeom() {
+  // Géométrie de la cape (10×16×1). Sur le perso : suspendue au dos, inclinée. En mode
+  // « cape seule » (flat) : à plat, centrée à l'origine, face décorée vers la caméra (+Z),
+  // pour remplir l'aperçu.
+  function buildCapeGeom(flat) {
     if (!capeImg) return;
     const base = (capeW % 46 === 0 && capeW % 64 !== 0) ? 46 : 64;
     const s = capeW / base;
     const texW = base, texH = capeH / s;   // hauteur "logique" (32 par frame)
     const ov = curFrame * 32;              // frame animée -> décalage vertical
     const a = [];
-    // On construit la cape à l'origine puis on l'incline autour de son bord supérieur.
-    pushBox(a, 0, 0, 0, 10, 16, 1, 0, ov, texW, texH, 0, true);
-    // Inclinaison ~11° autour de l'axe X passant par le haut de la cape, puis placement au dos.
-    const ang = 0.19, ca = Math.cos(ang), sa = Math.sin(ang);
-    const pivotY = 8;                      // haut de la cape (demi-hauteur, cape centrée en 0)
-    for (let i = 0; i < a.length; i += 8) {
-      let y = a[i + 1] - pivotY, z = a[i + 2];
-      a[i + 1] = pivotY + (y * ca - z * sa);
-      a[i + 2] = (y * sa + z * ca);
-      // normales aussi
-      let ny = a[i + 6], nz = a[i + 7];
-      a[i + 6] = ny * ca - nz * sa; a[i + 7] = ny * sa + nz * ca;
-      // placement final : accrochée aux épaules (y≈24), collée au dos (z≈-2.6)
-      a[i + 1] += 16; a[i + 2] += -2.6;
+    if (flat) {
+      // Face décorée vers +Z (donc vers la caméra à l'angle 0) -> capeMode=false.
+      pushBox(a, 0, 0, 0, 10, 16, 1, 0, ov, texW, texH, 0, false);
+    } else {
+      // On construit la cape à l'origine puis on l'incline autour de son bord supérieur.
+      pushBox(a, 0, 0, 0, 10, 16, 1, 0, ov, texW, texH, 0, true);
+      const ang = 0.19, ca = Math.cos(ang), sa = Math.sin(ang);
+      const pivotY = 8;                    // haut de la cape (demi-hauteur, cape centrée en 0)
+      for (let i = 0; i < a.length; i += 8) {
+        let y = a[i + 1] - pivotY, z = a[i + 2];
+        a[i + 1] = pivotY + (y * ca - z * sa);
+        a[i + 2] = (y * sa + z * ca);
+        let ny = a[i + 6], nz = a[i + 7];
+        a[i + 6] = ny * ca - nz * sa; a[i + 7] = ny * sa + nz * ca;
+        // placement final : accrochée aux épaules (y≈24), collée au dos (z≈-2.6)
+        a[i + 1] += 16; a[i + 2] += -2.6;
+      }
     }
     const data = new Float32Array(a);
     if (!capeBuf) capeBuf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, capeBuf);
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
     capeCount = data.length / 8;
-    capeGeomFrame = curFrame;
+    capeGeomFrame = curFrame; capeGeomFlat = flat;
   }
 
   // Ombre de contact : quad au sol (y=0) avec une texture radiale douce.
@@ -322,15 +327,21 @@
       skinDirty = false;
     }
     if (capeImg && !capeTex) capeTex = texFromImage(capeImg);
-    if (capeImg && capeGeomFrame !== curFrame) buildCapeGeom();
+    const flat = !showBody;
+    if (capeImg && (capeGeomFrame !== curFrame || capeGeomFlat !== flat)) buildCapeGeom(flat);
   }
 
   function loop(ts) {
     if (!gl || (!capeImg && !skinImg)) { raf = 0; return; }
     if (!t0) t0 = ts;
     const dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 0; lastTs = ts;
-    if (!dragging) curAngle += dt * 0.6; // auto-rotation quand on ne fait pas glisser
-    if (frames > 1 && ts - lastSwap > 100) { curFrame = (curFrame + 1) % frames; lastSwap = ts; if (capeImg) buildCapeGeom(); }
+    spinClock += dt;
+    if (!dragging) {
+      // Sur le perso : tourne-disque. Cape seule : léger balancement (reste de face, jamais de tranche).
+      if (showBody) curAngle += dt * 0.6;
+      else curAngle = Math.sin(spinClock * 0.7) * 0.5;
+    }
+    if (frames > 1 && ts - lastSwap > 100) { curFrame = (curFrame + 1) % frames; lastSwap = ts; }
 
     ensureTextures();
 
@@ -340,9 +351,10 @@
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     const aspect = W / H;
-    const ctrY = showBody ? 18 : 28;
+    // Cape seule : la cape est centrée à l'origine -> on vise (0,0) et on la cadre pour remplir.
+    const ctrY = showBody ? 18 : 0;
     // Perspective modérée façon skinview3d/NameMC.
-    const dist = (showBody ? 58 : 26) / curZoom;
+    const dist = (showBody ? 58 : 24) / curZoom;
     // Caméra en orbite : azimut = rotation du modèle, élévation = inclinaison.
     const eye = [0, ctrY + Math.sin(curTilt) * dist, Math.cos(curTilt) * dist];
     const proj = perspective(42 * Math.PI / 180, aspect, 1, 800);
