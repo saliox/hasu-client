@@ -1,7 +1,7 @@
 {
-  "version": "0.12.3",
-  "url": "https://github.com/saliox/hasu-client/releases/download/cap-hub-v0.12.3/Cap.Hub.Setup.0.12.3.exe",
-  "sha256": "ca640a7da99a192c91ae7ddb5f0d90b03a290cbf6d8a4a973f44dbe4c3b0e0fe",
-  "notes": "Cap Hub 0.12.3",
-  "pubDate": "2026-07-18T13:25:28.814Z"
+  "version": "0.12.4",
+  "url": "https://github.com/saliox/hasu-client/releases/download/cap-hub-v0.12.4/Cap.Hub.Setup.0.12.4.exe",
+  "sha256": "f203618f92b3eec8cdbbed0e364fd8cbbb0b4cefeb8f75056acf39a7bdb466ca",
+  "notes": "Cap Hub 0.12.4",
+  "pubDate": "2026-07-18T14:30:12.399Z"
 }
