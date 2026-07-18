@@ -80,7 +80,11 @@
   }
 
   // ---------- Projection ----------
-  const DEPTH = 62;
+  // Perspective FAIBLE (quasi-orthographique) = boîtes nettes façon Minecraft, sans
+  // déformation des faches ni bras qui « s'écartent ».
+  const DEPTH = 210;
+  // Ombrage par face (look cuboïde Minecraft) : dessus le plus clair, côtés plus sombres.
+  const SHADE = { top: 1.0, front: 0.86, back: 0.86, left: 0.66, right: 0.66, bottom: 0.5, cape: 0.92 };
   function project(p, ang, tilt, cx, cy, unit) {
     let x = p[0], y = p[1] - 16, z = p[2]; // centre modèle ~ y16
     const ca = Math.cos(ang), sa = Math.sin(ang);
@@ -161,7 +165,7 @@
       const P = face.c.map((i) => project(C[i], ang, tilt, cx, cy, unit));
       if (!frontFacing(P)) continue; // backface culling
       const depth = (P[0][2] + P[1][2] + P[2][2] + P[3][2]) / 4;
-      polys.push({ P, uv, tex, key: tex + ':' + face.k, depth });
+      polys.push({ P, uv, tex, key: tex + ':' + face.k, face: face.k, depth });
     }
   }
 
@@ -176,7 +180,7 @@
     const c3 = [[xL, yTop, zTop], [xR, yTop, zTop], [xR, yBot, zBot], [xL, yBot, zBot]];
     const P = c3.map((p) => project(p, ang, tilt, cx, cy, unit));
     const depth = (P[0][2] + P[1][2] + P[2][2] + P[3][2]) / 4;
-    polys.push({ P, uv: [r.x, r.y, r.w, r.h], tex: 'cape', key: 'cape:' + curFrame, depth });
+    polys.push({ P, uv: [r.x, r.y, r.w, r.h], tex: 'cape', key: 'cape:' + curFrame, face: 'cape', depth });
   }
 
   // Cache de tuiles : chaque région source est recadrée à sa résolution native une fois,
@@ -205,10 +209,26 @@
     if (!img) return;
     const tile = getTile(img, poly.uv, poly.key + (poly.tex === 'cape' ? '' : (skinImg ? ':s' : ':d')));
     if (!tile) return;
-    const w = tile.width, h = tile.height, P = expand(poly.P, 0.75);
-    const S = [[0, 0], [w, 0], [w, h], [0, h]];
-    texTri(tile, S[0], S[1], S[2], P[0], P[1], P[2]);
-    texTri(tile, S[0], S[2], S[3], P[0], P[2], P[3]);
+    // En quasi-orthographique, une face plane se projette en ~parallélogramme : on la
+    // dessine d'UNE seule transformation affine (0,0)->P0, (w,0)->P1, (0,h)->P3. Pas de
+    // découpe en 2 triangles -> aucune couture diagonale. Léger débordement (expand) pour
+    // masquer les jointures entre faces voisines.
+    const w = tile.width, h = tile.height, P = expand(poly.P, 0.85);
+    const a = (P[1][0] - P[0][0]) / w, b = (P[1][1] - P[0][1]) / w;
+    const c = (P[3][0] - P[0][0]) / h, d = (P[3][1] - P[0][1]) / h;
+    ctx.save();
+    ctx.beginPath(); ctx.moveTo(P[0][0], P[0][1]); for (let i = 1; i < 4; i++) ctx.lineTo(P[i][0], P[i][1]); ctx.closePath(); ctx.clip();
+    ctx.setTransform(a, b, c, d, P[0][0], P[0][1]);
+    ctx.drawImage(tile, 0, 0);
+    ctx.restore();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // Ombrage par face -> volume cuboïde Minecraft.
+    const shade = SHADE[poly.face] != null ? SHADE[poly.face] : 0.8;
+    if (shade < 1) {
+      ctx.globalAlpha = 1 - shade; ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.moveTo(P[0][0], P[0][1]); for (let i = 1; i < 4; i++) ctx.lineTo(P[i][0], P[i][1]); ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
   }
 
   function loop(ts) {
