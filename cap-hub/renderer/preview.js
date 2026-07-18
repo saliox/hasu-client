@@ -12,8 +12,11 @@
   // ---------- État ----------
   let canvas = null, gl = null, prog = null, raf = 0, t0 = 0, gen = 0;
   let showBody = true;
-  // Rotation : tourne-disque auto, ou contrôlée à la souris (glisser pour tourner).
-  let curAngle = 0, lastTs = 0, dragging = false, dragX0 = 0, dragA0 = 0;
+  // Orbite : rotation auto (tourne-disque) ou contrôlée à la souris (glisser = tourner +
+  // incliner, molette = zoomer).
+  let curAngle = 0, curTilt = 0.09, curZoom = 1, lastTs = 0;
+  let dragging = false, dragX0 = 0, dragY0 = 0, dragA0 = 0, dragT0 = 0;
+  const clampTilt = (v) => Math.max(-0.5, Math.min(1.2, v));
   let skinImg = null, slim = false, skinTex = null, skinDirty = true;
   let capeImg = null, capeW = 0, capeH = 0, frames = 1, curFrame = 0, lastSwap = 0;
   let capeTex = null, capeGeomFrame = -1;
@@ -282,18 +285,23 @@
     el.style.cursor = 'grab'; el.style.touchAction = 'none';
     if (!el.title) el.title = 'Glisse pour tourner';
     el.addEventListener('pointerdown', (e) => {
-      dragging = true; dragX0 = e.clientX; dragA0 = curAngle;
+      dragging = true; dragX0 = e.clientX; dragY0 = e.clientY; dragA0 = curAngle; dragT0 = curTilt;
       try { el.setPointerCapture(e.pointerId); } catch {}
       el.style.cursor = 'grabbing';
     });
     el.addEventListener('pointermove', (e) => {
       if (!dragging) return;
-      const w = el.getBoundingClientRect().width || 1;
-      curAngle = dragA0 + (e.clientX - dragX0) / w * (Math.PI * 2);
+      const r = el.getBoundingClientRect(), w = r.width || 1, h = r.height || 1;
+      curAngle = dragA0 + (e.clientX - dragX0) / w * (Math.PI * 2);   // horizontal = tourner
+      curTilt = clampTilt(dragT0 - (e.clientY - dragY0) / h * 1.6);   // vertical = incliner
     });
     const up = () => { if (dragging) { dragging = false; el.style.cursor = 'grab'; } };
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', up);
+    el.addEventListener('wheel', (e) => {                            // molette = zoomer
+      e.preventDefault();
+      curZoom = Math.max(0.5, Math.min(2.4, curZoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
+    }, { passive: false });
   }
 
   function bindAttribs() {
@@ -331,10 +339,11 @@
 
     const aspect = W / H;
     const ctrY = showBody ? 18 : 28;
-    const dist = showBody ? 82 : 30;
-    const eyeY = ctrY + (showBody ? 5 : 1.5);
-    const proj = perspective(30 * Math.PI / 180, aspect, 1, 400);
-    const view = lookAt([0, eyeY, dist], [0, ctrY, 0], [0, 1, 0]);
+    const dist = (showBody ? 82 : 30) / curZoom;
+    // Caméra en orbite : azimut = rotation du modèle, élévation = inclinaison.
+    const eye = [0, ctrY + Math.sin(curTilt) * dist, Math.cos(curTilt) * dist];
+    const proj = perspective(30 * Math.PI / 180, aspect, 1, 600);
+    const view = lookAt(eye, [0, ctrY, 0], [0, 1, 0]);
     const model = rotY(curAngle);
     gl.uniformMatrix4fv(uniLoc.proj, false, proj);
     gl.uniformMatrix4fv(uniLoc.view, false, view);
