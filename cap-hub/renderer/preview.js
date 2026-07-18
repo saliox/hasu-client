@@ -20,7 +20,7 @@
   let skinBuf = null, skinCount = 0, skinBufSlim = null, skinBufLegacy = false;
   let capeBuf = null, capeCount = 0;
   let attribLoc = {}, uniLoc = {};
-  const SSAA = 2; // suréchantillonnage (rendu à 2× puis réduit = bords lisses)
+  const SSAA = 3; // suréchantillonnage (rendu à 3× puis réduit = bords bien lisses)
 
   // ---------- Petite bibliothèque mat4 (colonne-major, comme WebGL) ----------
   function perspective(fovy, aspect, near, far) {

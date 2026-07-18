@@ -178,26 +178,54 @@ code { background: var(--bg-3); padding: 1px 6px; border-radius: 6px; font-size:
 .ed-guide li { margin: 4px 0; }
 .ed-guide b { color: var(--txt); }
 .ed-front-tag { color: #60e696; font-weight: 600; }
-.ed-toolbar { margin-top: 2px; }
+.ed-tools { margin-top: 2px; }
 .ed-zoom { align-items: center; gap: 8px; }
 .ed-canvas-wrap {
   flex: 1; min-width: 320px; border: 1px solid var(--line); border-radius: 12px;
-  background: var(--bg); overflow: hidden;
+  background: radial-gradient(220px 220px at 50% 40%, #10141f, var(--bg) 80%);
+  overflow: hidden; box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
 }
 #ed-canvas { display: block; width: 100%; height: 480px; touch-action: none; cursor: crosshair; }
 .ed-preview { align-self: flex-start; }
-.ed-preview #editor-preview { border-radius: 10px; }
-.ed-colors { align-items: center; }
-.ed-swatches { display: flex; flex-wrap: wrap; gap: 5px; margin: 2px 0 4px; }
-.ed-swatch {
-  width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line);
-  cursor: pointer; padding: 0; transition: transform .08s;
+.ed-preview #editor-preview {
+  border-radius: 12px; border: 1px solid var(--line);
+  background: radial-gradient(120px 200px at 50% 30%, var(--bg-3), var(--bg) 72%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 6px 20px -10px rgba(0,0,0,.7);
 }
-.ed-swatch:hover { transform: scale(1.12); }
-.ed-swatch.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
-.ed-swatches .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 3px; }
-.ed-toolbar .btn { font-size: 15px; min-width: 34px; }
-.ed-toolbar .btn.active { border-color: var(--accent); color: var(--accent); background: var(--bg-3); }
+
+/* Barre d'outils segmentée + icônes SVG */
+.ed-tools { display: inline-flex; gap: 3px; padding: 4px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; }
+.ed-row2 { align-items: center; gap: 12px; }
+.ed-tool {
+  width: 40px; height: 34px; display: inline-grid; place-items: center; padding: 0;
+  background: transparent; border: 1px solid transparent; border-radius: 8px;
+  color: var(--muted); cursor: pointer; transition: background .12s, color .12s, box-shadow .12s, transform .05s;
+}
+.ed-tool:hover:not(:disabled) { background: var(--bg-3); color: var(--txt); }
+.ed-tool:active:not(:disabled) { transform: translateY(1px); }
+.ed-tool.active {
+  color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  border-color: transparent; box-shadow: 0 3px 12px -3px var(--accent);
+}
+.ed-tool:disabled { opacity: .32; cursor: default; }
+.ed-tool svg { width: 21px; height: 21px; display: block; }
+.ed-colors .ed-tool { width: 36px; }
+
+/* Palette de couleurs */
+.ed-colors { align-items: center; gap: 8px; }
+.ed-colors input[type=color] { width: 46px !important; height: 34px; }
+.ed-swatches { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 4px; }
+.ed-swatch {
+  width: 24px; height: 24px; border-radius: 7px; border: 1px solid rgba(255,255,255,.12);
+  cursor: pointer; padding: 0; transition: transform .08s, box-shadow .12s;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+}
+.ed-swatch:hover { transform: translateY(-2px) scale(1.06); box-shadow: 0 4px 10px -3px rgba(0,0,0,.6); }
+.ed-swatch.sel { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ed-swatches .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
+
+/* Champs (taille) plus soignés dans l'éditeur */
+.ed-row2 select { background: var(--bg-3); border: 1px solid var(--line); color: var(--txt); border-radius: 8px; padding: 5px 8px; }
 
 /* Puce catégorie (dossier) sur les cartes */
 .catrow { margin-top: -4px; }
