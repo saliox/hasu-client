@@ -64,16 +64,17 @@ function fetchUpstream(host, urlPath) {
   const cached = cacheGet(ckey);
   if (cached) return Promise.resolve(cached);
   return new Promise((resolve) => {
-    let done = false;
-    // Filet de sécurité : quoi qu'il arrive, on résout (jamais de requête suspendue).
+    let done = false, req = null;
+    // Filet de sécurité : quoi qu'il arrive, on résout ET on détruit la requête amont en
+    // cours (sinon un corps qui arrive au goutte-à-goutte, sous MAX_BODY, laisse fuir un
+    // socket : le timeout d'inactivité de 6 s ne se déclenche jamais).
     let guard = null;
-    const finish = (v) => { if (!done) { done = true; if (guard) clearTimeout(guard); resolve(v); } };
+    const finish = (v) => { if (!done) { done = true; if (guard) clearTimeout(guard); try { req && req.destroy(); } catch {} resolve(v); } };
     guard = setTimeout(() => finish({ status: 0, body: null }), 8000);
     guard.unref?.();
     (async () => {
       let ip;
       try { ip = await resolveRealIp(host); } catch { return finish({ status: 0, body: null }); }
-      let req;
       try {
         req = http.get(
           { host: ip, port: 80, path: urlPath, headers: { Host: host, 'User-Agent': 'CapHub' }, timeout: 6000 },

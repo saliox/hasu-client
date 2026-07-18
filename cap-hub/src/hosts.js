@@ -50,12 +50,17 @@ function buildScript(domains) {
     `$enc = New-Object System.Text.UTF8Encoding($false)`,
     `$lines = @(); if (Test-Path $hosts) { $lines = [System.IO.File]::ReadAllLines($hosts) }`,
     `$out = New-Object System.Collections.Generic.List[string]`,
+    `$buf = New-Object System.Collections.Generic.List[string]`,
     `$in = $false`,
+    // On bufferise les lignes entre BEGIN et END ; on ne les jette QUE si un END arrive.
+    // Un BEGIN orphelin (écriture précédente tronquée par un AV/crash) restaure donc les
+    // lignes qui le suivent au lieu de supprimer la fin du fichier hosts (perte de données).
     `foreach ($l in $lines) {`,
-    `  if ($l -eq '${MARK_BEGIN}') { $in = $true; continue }`,
-    `  if ($l -eq '${MARK_END}') { $in = $false; continue }`,
-    `  if (-not $in) { $out.Add($l) }`,
+    `  if ($l -eq '${MARK_BEGIN}') { if ($in) { foreach ($b in $buf) { $out.Add($b) } }; $buf.Clear(); $in = $true; continue }`,
+    `  if ($l -eq '${MARK_END}') { if ($in) { $buf.Clear(); $in = $false } else { $out.Add($l) }; continue }`,
+    `  if ($in) { $buf.Add($l) } else { $out.Add($l) }`,
     `}`,
+    `if ($in) { foreach ($b in $buf) { $out.Add($b) } }`,
     add,
     `[System.IO.File]::WriteAllLines($hosts, $out, $enc)`,
     `ipconfig /flushdns | Out-Null`,

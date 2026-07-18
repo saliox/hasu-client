@@ -52,7 +52,11 @@ const MAX_INSTALLER = 300 * 1024 * 1024; // borne mémoire
 // Télécharge la réponse en FLUX en rapportant la progression (0-99 %, null si taille
 // inconnue). Retombe sur arrayBuffer() si le corps n'est pas lisible en flux.
 async function downloadWithProgress(r, total, onProgress) {
-  if (!r.body || typeof r.body.getReader !== 'function') return Buffer.from(await r.arrayBuffer());
+  if (!r.body || typeof r.body.getReader !== 'function') {
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (buf.length > MAX_INSTALLER) throw new Error('Installeur trop volumineux — refusé.'); // le cap s'applique aussi hors flux
+    return buf;
+  }
   const reader = r.body.getReader();
   const chunks = []; let received = 0;
   for (;;) {
