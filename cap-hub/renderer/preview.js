@@ -56,30 +56,27 @@
   const VERT = `
     attribute vec3 aPos; attribute vec2 aUV; attribute vec3 aNorm;
     uniform mat4 uProj, uView, uModel;
-    varying vec2 vUV; varying float vShade;
+    varying vec2 vUV; varying vec3 vNv; varying float vUp;
     void main() {
       gl_Position = uProj * uView * uModel * vec4(aPos, 1.0);
       vUV = aUV;
-      // Ombrage plat par face, FIXÉ au modèle (comme les blocs Minecraft) : dessus le plus
-      // clair, avant/arrière moyen, côtés plus sombres, dessous le plus foncé. Indépendant
-      // de la caméra -> le dessus reste clair même quand on tourne le perso.
-      vec3 n = aNorm;
-      float ax = abs(n.x), ay = abs(n.y), az = abs(n.z);
-      float s;
-      if (ay >= ax && ay >= az) s = n.y > 0.0 ? 1.0 : 0.5;   // dessus / dessous
-      else if (az >= ax) s = 0.86;                            // avant / arrière
-      else s = 0.66;                                          // côtés gauche/droite
-      vShade = s;
+      vNv = mat3(uView * uModel) * aNorm; // normale en repère caméra
+      vUp = aNorm.y;                      // composante « vers le haut » (repère modèle)
     }`;
+  // Éclairage façon skinview3d / NameMC : ambiant clair et dominant + petite lumière
+  // attachée à la caméra (les faces tournées vers l'objectif sont un peu plus claires) +
+  // un soupçon de « dessus plus clair ». Rendu net et régulier, PAS d'ombres dures.
   const FRAG = `
     precision mediump float;
-    varying vec2 vUV; varying float vShade;
+    varying vec2 vUV; varying vec3 vNv; varying float vUp;
     uniform sampler2D uTex; uniform float uShadow;
     void main() {
       vec4 c = texture2D(uTex, vUV);
       if (uShadow > 0.5) { gl_FragColor = vec4(0.0, 0.0, 0.0, c.a * 0.33); return; }
-      if (c.a < 0.5) discard;                       // couches transparentes -> non dessinées
-      gl_FragColor = vec4(c.rgb * vShade, 1.0);
+      if (c.a < 0.5) discard;
+      float camLight = max(dot(normalize(vNv), vec3(0.0, 0.0, 1.0)), 0.0); // face vers la caméra
+      float shade = clamp(0.76 + 0.26 * camLight + 0.05 * max(vUp, 0.0), 0.0, 1.0);
+      gl_FragColor = vec4(c.rgb * shade, 1.0);
     }`;
 
   function compile(type, src) {
@@ -344,11 +341,11 @@
 
     const aspect = W / H;
     const ctrY = showBody ? 18 : 28;
-    // FOV faible + caméra plus loin = perspective douce (proportions justes, look « aperçu de skin »).
-    const dist = (showBody ? 108 : 40) / curZoom;
+    // Perspective modérée façon skinview3d/NameMC.
+    const dist = (showBody ? 58 : 26) / curZoom;
     // Caméra en orbite : azimut = rotation du modèle, élévation = inclinaison.
     const eye = [0, ctrY + Math.sin(curTilt) * dist, Math.cos(curTilt) * dist];
-    const proj = perspective(22 * Math.PI / 180, aspect, 1, 800);
+    const proj = perspective(42 * Math.PI / 180, aspect, 1, 800);
     const view = lookAt(eye, [0, ctrY, 0], [0, 1, 0]);
     const model = rotY(curAngle);
     gl.uniformMatrix4fv(uniLoc.proj, false, proj);
