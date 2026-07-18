@@ -259,6 +259,33 @@ async function capeDataUrl(id) {
   return url;
 }
 
+// Vignette « devant de la cape » : au lieu d'afficher la planche 64×32 dépliée (dos, bords…),
+// on recadre la face avant visible, en gérant HD / animé (1re image) / OptiFine (46 de large).
+const frontThumbCache = new Map();
+function capeFrontThumb(url) {
+  if (!url) return Promise.resolve(url);
+  if (frontThumbCache.has(url)) return Promise.resolve(frontThumbCache.get(url));
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth, h = img.naturalHeight;
+      if (!w || !h) { resolve(url); return; }
+      const s = (w % 46 === 0 && w % 64 !== 0) ? w / 46 : w / 64; // échelle (OptiFine vs vanilla/HD)
+      const fx = s, fy = s, fw = 10 * s, fh = 16 * s;             // région AVANT (1,1,10,16)*s
+      const scale = Math.max(1, Math.round(120 / fw));            // agrandi net (pixels du jeu)
+      const cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(fw * scale)); cv.height = Math.max(1, Math.round(fh * scale));
+      const c = cv.getContext('2d'); c.imageSmoothingEnabled = false;
+      c.drawImage(img, fx, fy, fw, fh, 0, 0, cv.width, cv.height);
+      const out = cv.toDataURL('image/png');
+      frontThumbCache.set(url, out);
+      resolve(out);
+    };
+    img.onerror = () => resolve(url); // repli : planche complète
+    img.src = url;
+  });
+}
+
 // Prévisualisation 3D de la cape active. Ne se relance QUE si la cape (ou le canvas)
 // a changé — sinon taper dans la recherche ferait clignoter l'aperçu à chaque frappe.
 const previewState = { id: null, canvas: null };
@@ -279,7 +306,7 @@ async function renderPreview(id, name) {
 
 async function loadThumb(el, id) {
   const url = await capeDataUrl(id);
-  if (url) el.style.backgroundImage = `url(${url})`;
+  if (url) el.style.backgroundImage = `url(${await capeFrontThumb(url)})`;
 }
 
 async function setActive(id) {
@@ -991,7 +1018,7 @@ async function mcTexture(capeId) {
 }
 async function mcLoadThumb(el, capeId) {
   const url = await mcTexture(capeId);
-  if (url) { el.style.backgroundImage = `url(${url})`; el.textContent = ''; el.classList.remove('mc-none'); }
+  if (url) { el.style.backgroundImage = `url(${await capeFrontThumb(url)})`; el.textContent = ''; el.classList.remove('mc-none'); }
 }
 // Aperçu 3D de la cape officielle active (réutilise le moteur CapePreview).
 async function mcRenderPreview(v) {
@@ -1206,7 +1233,7 @@ async function playerCape(name) {
 }
 async function loadPlayerThumb(el, name) {
   const url = await playerCape(name);
-  if (url) el.style.backgroundImage = `url(${url})`;
+  if (url) el.style.backgroundImage = `url(${await capeFrontThumb(url)})`;
 }
 async function showPlayerCape(name) {
   if (!window.CapePreview) return;
