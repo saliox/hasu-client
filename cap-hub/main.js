@@ -515,6 +515,7 @@ function mcView(session) {
 
 // Renvoie une session Minecraft avec un accessToken valide : rafraîchit via le refresh
 // token Microsoft si expiré (et si dispo). Persiste la session rafraîchie.
+let mcRefreshPromise = null; // dé-duplique les refresh concurrents (le refresh token MS est à usage unique)
 async function ensureMcSession() {
   const session = getMcSession();
   if (!session) return null;
@@ -523,16 +524,25 @@ async function ensureMcSession() {
   if (!session.msRefreshToken) return session; // token direct : on tente tel quel
   const clientId = getSettings().mcClientId;
   if (!clientId) return session;
-  try {
-    const renewed = await mc.refreshSession(clientId, session.msRefreshToken);
-    // Un refresh qui ne ramène pas de profil (ex. 404 transitoire) ne doit PAS écraser la
-    // session valide déjà en place -> on conserve l'ancienne.
-    if (!renewed || !renewed.profile) return session;
-    setMcSession(renewed);
-    return renewed;
-  } catch {
-    return session; // échec de refresh : on laisse l'appel échouer en 401 -> l'UI proposera de se reconnecter
-  }
+  // Un seul refresh à la fois : plusieurs IPC concurrents (mc:status/refresh/setCape…) ne
+  // doivent pas redemander en parallèle avec le même refresh token (rotation MS -> échec).
+  if (mcRefreshPromise) return mcRefreshPromise;
+  mcRefreshPromise = (async () => {
+    try {
+      const renewed = await mc.refreshSession(clientId, session.msRefreshToken);
+      if (!renewed || !renewed.accessToken) return session; // refresh réellement raté -> garde l'ancienne
+      // Nouveaux jetons OK mais profil temporairement indispo (404 transitoire) : on GARDE
+      // les jetons rafraîchis (dont le refresh token rotaté) et on réutilise l'ancien profil.
+      const merged = renewed.profile ? renewed : { ...renewed, profile: session.profile };
+      setMcSession(merged);
+      return merged;
+    } catch {
+      return session; // échec de refresh : l'appel échouera en 401 -> l'UI proposera de se reconnecter
+    } finally {
+      mcRefreshPromise = null;
+    }
+  })();
+  return mcRefreshPromise;
 }
 
 let mcLoginState = null; // { cancelled } pour interrompre le device-code en cours
@@ -562,6 +572,7 @@ ipcMain.handle('mc:loginToken', async (_e, token) => {
 ipcMain.handle('mc:loginMicrosoft', async () => {
   const clientId = getSettings().mcClientId;
   if (!clientId) return { ok: false, error: 'Renseigne d’abord l’Azure Client ID (Réglages → Compte Minecraft).' };
+  if (mcLoginState) mcLoginState.cancelled = true; // annule un device-code précédent encore en cours (évite un poll orphelin)
   mcLoginState = { cancelled: false };
   const state = mcLoginState;
   try {

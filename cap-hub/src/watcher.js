@@ -61,11 +61,14 @@ function listProcesses() {
     execFile('powershell.exe', ['-NoProfile', '-Command', PS_CMD],
       { windowsHide: true, timeout: 15000, maxBuffer: 8 * 1024 * 1024 },
       (err, stdout) => {
-        if (err || !stdout || !stdout.trim()) return resolve([]);
+        // Échec/timeout de la requête -> état INCONNU (null), à distinguer d'un « aucun
+        // processus » (liste vide) : sinon un hoquet WMI simulerait la fermeture du jeu.
+        if (err) return resolve(null);
+        if (!stdout || !stdout.trim()) return resolve([]); // requête OK, vraiment aucun match
         try {
           const j = JSON.parse(stdout);
           resolve(Array.isArray(j) ? j : [j]);
-        } catch { resolve([]); }
+        } catch { resolve(null); } // sortie illisible -> inconnu, on ne change pas l'état
       });
   });
 }
@@ -96,6 +99,7 @@ async function scan() {
   scanning = true;
   try {
     const procs = await listProcesses();
+    if (procs === null) return; // requête échouée : on garde l'état précédent (pas de faux game-stop/start)
     const current = new Map();
     for (const p of procs) {
       const c = classify(p);
