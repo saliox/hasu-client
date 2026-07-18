@@ -571,8 +571,9 @@ let edPainting = false, edPanning = false, edPanFrom = null;
 let edTool = 'brush'; // 'brush' | 'line' | 'rect' | 'bucket' | 'erase' | 'pick'
 let edBrush = 1;               // taille du pinceau (1..4)
 let edStart = null, edLast = null, edPreview = null; // outils ligne/rectangle (glisser)
-let edShowGrid = true, edInited = false;
+let edShowGrid = true, edInited = false, edHover = null;
 let edUndo = [], edRedo = [], edRecent = [];
+function edUpdatePos(p) { const el = $('#ed-pos'); if (el) el.textContent = (p && p.inside) ? `▪ ${p.x}, ${p.y}` : ''; }
 const ED_PRESETS = ['#e23636', '#e07b39', '#f2c14e', '#3fa34d', '#2b8fd6', '#7c5cff', '#c94fd6', '#ffffff', '#9aa0aa', '#3a3f57', '#5a3a22', '#111318'];
 
 // Pose une couleur en (x,y) en appliquant la taille du pinceau ET les miroirs actifs.
@@ -728,6 +729,24 @@ function edRender() {
     }
     c.globalAlpha = 1;
   }
+  // Repère de survol : montre la (les) case(s) qui seront peintes (taille du pinceau + miroirs).
+  if (edHover && !edPreview) {
+    const mh = $('#ed-mirror').checked, mv = $('#ed-mirrorv').checked;
+    const cells = [];
+    if (edTool === 'brush' || edTool === 'erase') {
+      const n = edBrush, o = Math.floor((n - 1) / 2);
+      for (let dy = 0; dy < n; dy++) for (let dx = 0; dx < n; dx++) {
+        const px = edHover.x - o + dx, py = edHover.y - o + dy;
+        cells.push([px, py]);
+        if (mh) cells.push([ED_W - 1 - px, py]);
+        if (mv) cells.push([px, ED_H - 1 - py]);
+        if (mh && mv) cells.push([ED_W - 1 - px, ED_H - 1 - py]);
+      }
+    } else cells.push([edHover.x, edHover.y]);
+    c.lineWidth = Math.max(1.5, z / 8);
+    c.strokeStyle = edTool === 'erase' ? 'rgba(255,90,90,0.95)' : 'rgba(255,255,255,0.92)';
+    for (const [x, y] of cells) if (x >= 0 && y >= 0 && x < ED_W && y < ED_H) c.strokeRect(ox + x * z + 0.5, oy + y * z + 0.5, z - 1, z - 1);
+  }
   edZoomLabel();
 }
 
@@ -852,15 +871,18 @@ function edInit() {
       edPanY = edPanFrom.py + (e.clientY - edPanFrom.y) * sc;
       edRender(); return;
     }
-    if (!edPainting) return;
+    const p = edCoord(e);
+    edHover = p.inside ? { x: p.x, y: p.y } : null;
+    edUpdatePos(p);
+    if (!edPainting) { edRender(); return; }
     if (edStart) {
-      const p = edCoord(e);
       edPreview = edTool === 'line'
         ? edLineCells(edStart.x, edStart.y, p.x, p.y)
         : edRectCells(edStart.x, edStart.y, p.x, p.y, $('#ed-rectfill').checked);
       edRender();
     } else edPaint(e);
   });
+  cv.addEventListener('pointerleave', () => { edHover = null; edUpdatePos(null); edRender(); });
   const endStroke = () => {
     if (edPainting && edStart && edPreview) { // valider ligne / rectangle
       const col = edCurCol();

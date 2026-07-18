@@ -226,6 +226,7 @@ code { background: var(--bg-3); padding: 1px 6px; border-radius: 6px; font-size:
 
 /* Champs (taille) plus soignés dans l'éditeur */
 .ed-row2 select { background: var(--bg-3); border: 1px solid var(--line); color: var(--txt); border-radius: 8px; padding: 5px 8px; }
+.ed-pos { margin-left: auto; font-variant-numeric: tabular-nums; min-width: 56px; text-align: right; }
 
 /* Puce catégorie (dossier) sur les cartes */
 .catrow { margin-top: -4px; }
