@@ -17,6 +17,7 @@
   let curAngle = 0, curTilt = 0.09, curZoom = 1, lastTs = 0, spinClock = 0;
   let dragging = false, dragX0 = 0, dragY0 = 0, dragA0 = 0, dragT0 = 0;
   const clampTilt = (v) => Math.max(-0.5, Math.min(1.2, v));
+  const IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
   let skinImg = null, slim = false, skinTex = null, skinDirty = true;
   let capeImg = null, capeW = 0, capeH = 0, frames = 1, curFrame = 0, lastSwap = 0;
   let capeTex = null, capeGeomFrame = -1, capeGeomFlat = null;
@@ -153,40 +154,126 @@
     skinBufSlim = slim; skinBufLegacy = legacy;
   }
 
-  // Géométrie de la cape (10×16×1). Sur le perso : suspendue au dos, inclinée. En mode
-  // « cape seule » (flat) : à plat, centrée à l'origine, face décorée vers la caméra (+Z),
-  // pour remplir l'aperçu.
-  function buildCapeGeom(flat) {
-    if (!capeImg) return;
-    const base = (capeW % 46 === 0 && capeW % 64 !== 0) ? 46 : 64;
-    const s = capeW / base;
-    const texW = base, texH = capeH / s;   // hauteur "logique" (32 par frame)
-    const ov = curFrame * 32;              // frame animée -> décalage vertical
-    const a = [];
-    if (flat) {
-      // Face décorée vers +Z (donc vers la caméra à l'angle 0) -> capeMode=false.
-      pushBox(a, 0, 0, 0, 10, 16, 1, 0, ov, texW, texH, 0, false);
-    } else {
-      // On construit la cape à l'origine puis on l'incline autour de son bord supérieur.
-      pushBox(a, 0, 0, 0, 10, 16, 1, 0, ov, texW, texH, 0, true);
-      const ang = 0.19, ca = Math.cos(ang), sa = Math.sin(ang);
-      const pivotY = 8;                    // haut de la cape (demi-hauteur, cape centrée en 0)
-      for (let i = 0; i < a.length; i += 8) {
-        let y = a[i + 1] - pivotY, z = a[i + 2];
-        a[i + 1] = pivotY + (y * ca - z * sa);
-        a[i + 2] = (y * sa + z * ca);
-        let ny = a[i + 6], nz = a[i + 7];
-        a[i + 6] = ny * ca - nz * sa; a[i + 7] = ny * sa + nz * ca;
-        // placement final : accrochée aux épaules (y≈24), collée au dos (z≈-2.6)
-        a[i + 1] += 16; a[i + 2] += -2.6;
+  // ---------- Physique de cape : simulation de tissu (Verlet + contraintes) ----------
+  // Grille de particules CW×CH. Rangée du haut = ancres (accrochées aux épaules ou au bord
+  // supérieur), les autres tombent librement -> la cape ondule, se balance quand on tourne
+  // (inertie) et flotte au vent. Même schéma directement portable dans le mod (Java).
+  const CW = 7, CH = 11;                      // colonnes (largeur) × rangées (hauteur)
+  const REST_H = 10 / (CW - 1), REST_V = 16 / (CH - 1); // longueurs au repos (unités MC)
+  const cloth = { flat: null, pos: new Float32Array(CW * CH * 3), prev: new Float32Array(CW * CH * 3) };
+  const capeMesh = new Float32Array((CH - 1) * (CW - 1) * 6 * 8);
+
+  const idx = (r, c) => (r * CW + c) * 3;
+  // Position locale au repos d'une particule (avant rotation du modèle).
+  function restLocal(r, c, flat, out) {
+    const fx = c / (CW - 1), fy = r / (CH - 1);
+    if (flat) { out[0] = -5 + 10 * fx; out[1] = 8 - 16 * fy; out[2] = 0.0 - fy * 0.4; }
+    else { out[0] = 5 - 10 * fx; out[1] = 24 - 16 * fy; out[2] = -2.1 - fy * 0.5; } // drape léger vers l'arrière
+  }
+  // Applique rotation Y (comme le corps) à un point local -> monde.
+  function rotYpt(a, x, y, z, out) { const c = Math.cos(a), s = Math.sin(a); out[0] = c * x + s * z; out[1] = y; out[2] = -s * x + c * z; }
+
+  function clothInit(flat) {
+    const tmp = [0, 0, 0], w = [0, 0, 0];
+    for (let r = 0; r < CH; r++) for (let c = 0; c < CW; c++) {
+      restLocal(r, c, flat, tmp);
+      rotYpt(curAngle, tmp[0], tmp[1], tmp[2], w);
+      const i = idx(r, c);
+      cloth.pos[i] = w[0]; cloth.pos[i + 1] = w[1]; cloth.pos[i + 2] = w[2];
+      cloth.prev[i] = w[0]; cloth.prev[i + 1] = w[1]; cloth.prev[i + 2] = w[2];
+    }
+    cloth.flat = flat;
+  }
+
+  // Une distance-contrainte entre deux particules (déplace la/les libre(s)). stiff dans ]0..1].
+  function constrain(i, j, rest, pinnedI, pinnedJ, stiff) {
+    const p = cloth.pos;
+    let dx = p[j] - p[i], dy = p[j + 1] - p[i + 1], dz = p[j + 2] - p[i + 2];
+    const d = Math.hypot(dx, dy, dz) || 1e-4;
+    const diff = (stiff || 1) * (d - rest) / d;
+    if (pinnedI && pinnedJ) return;
+    if (pinnedI) { p[j] -= dx * diff; p[j + 1] -= dy * diff; p[j + 2] -= dz * diff; }
+    else if (pinnedJ) { p[i] += dx * diff; p[i + 1] += dy * diff; p[i + 2] += dz * diff; }
+    else {
+      const h = 0.5 * diff;
+      p[i] += dx * h; p[i + 1] += dy * h; p[i + 2] += dz * h;
+      p[j] -= dx * h; p[j + 1] -= dy * h; p[j + 2] -= dz * h;
+    }
+  }
+
+  function clothStep(dt, flat) {
+    if (cloth.flat !== flat) clothInit(flat);
+    const p = cloth.pos, pv = cloth.prev;
+    const t = spinClock;
+    const sub = 2, h = Math.min(dt, 0.033) / sub, h2 = h * h;
+    const g = -32;                                   // gravité (unités/s²)
+    for (let it = 0; it < sub; it++) {
+      // Intégration de Verlet + gravité + vent (doux) pour les particules libres (r>0).
+      for (let r = 1; r < CH; r++) for (let c = 0; c < CW; c++) {
+        const i = idx(r, c);
+        const wz = (Math.sin(t * 1.4 + r * 0.5) * 0.5 + 0.5) * 1.8 * (r / CH); // vent doux (arrière)
+        const wx = Math.sin(t * 1.9 + c * 0.6 + r * 0.25) * 1.1 * (r / CH);    // flottement latéral doux
+        const ax = wx, ay = g, az = -wz;
+        const nx = p[i] + (p[i] - pv[i]) * 0.985 + ax * h2;
+        const ny = p[i + 1] + (p[i + 1] - pv[i + 1]) * 0.985 + ay * h2;
+        const nz = p[i + 2] + (p[i + 2] - pv[i + 2]) * 0.985 + az * h2;
+        pv[i] = p[i]; pv[i + 1] = p[i + 1]; pv[i + 2] = p[i + 2];
+        p[i] = nx; p[i + 1] = ny; p[i + 2] = nz;
+      }
+      // Contraintes (plusieurs relaxations).
+      for (let k = 0; k < 8; k++) {
+        // ancres : rangée du haut collée à sa position monde courante.
+        const tmp = [0, 0, 0], wpt = [0, 0, 0];
+        for (let c = 0; c < CW; c++) { restLocal(0, c, flat, tmp); rotYpt(curAngle, tmp[0], tmp[1], tmp[2], wpt); const i = idx(0, c); p[i] = wpt[0]; p[i + 1] = wpt[1]; p[i + 2] = wpt[2]; }
+        for (let r = 0; r < CH; r++) for (let c = 0; c < CW; c++) {
+          const pin = r === 0;
+          if (c + 1 < CW) constrain(idx(r, c), idx(r, c + 1), REST_H, pin, r === 0, 1);
+          if (r + 1 < CH) constrain(idx(r, c), idx(r + 1, c), REST_V, pin, false, 1);
+          // Flexion (rigidité douce) : garde la cape plate, évite l'enroulement.
+          if (c + 2 < CW) constrain(idx(r, c), idx(r, c + 2), 2 * REST_H, pin, r === 0, 0.3);
+          if (r + 2 < CH) constrain(idx(r, c), idx(r + 2, c), 2 * REST_V, pin, false, 0.3);
+        }
+        // Collision avec le torse (mode perso) : la cape reste derrière le dos.
+        if (!flat) {
+          const ca = Math.cos(curAngle), sa = Math.sin(curAngle);
+          for (let r = 1; r < CH; r++) for (let c = 0; c < CW; c++) {
+            const i = idx(r, c);
+            const lx = ca * p[i] - sa * p[i + 2];       // -> repère local
+            let lz = sa * p[i] + ca * p[i + 2];
+            if (lx > -4.7 && lx < 4.7 && p[i + 1] > -0.5 && p[i + 1] < 24.5 && lz > -2.0) {
+              lz = -2.0;
+              p[i] = ca * lx + sa * lz;                 // -> retour monde
+              p[i + 2] = -sa * lx + ca * lz;
+            }
+          }
+        }
       }
     }
-    const data = new Float32Array(a);
+  }
+
+  // Construit le maillage texturé déformé (positions monde, UV cape avant, normales calculées).
+  function clothMesh() {
+    const base = (capeW % 46 === 0 && capeW % 64 !== 0) ? 46 : 64;
+    const s = capeW / base, texW = base, texH = capeH / s, ov = curFrame * 32;
+    const p = cloth.pos, m = capeMesh;
+    const U = (c) => (1 + 10 * (c / (CW - 1))) / texW;
+    const V = (r) => 1 - (1 + ov + 16 * (r / (CH - 1))) / texH;
+    let o = 0;
+    const emit = (r, c, nx, ny, nz) => { const i = idx(r, c); m[o++] = p[i]; m[o++] = p[i + 1]; m[o++] = p[i + 2]; m[o++] = U(c); m[o++] = V(r); m[o++] = nx; m[o++] = ny; m[o++] = nz; };
+    for (let r = 0; r < CH - 1; r++) for (let c = 0; c < CW - 1; c++) {
+      const a = idx(r, c), b = idx(r, c + 1), d = idx(r + 1, c), e = idx(r + 1, c + 1);
+      // normale du quad (produit vectoriel des diagonales approximatif)
+      let ux = p[e] - p[a], uy = p[e + 1] - p[a + 1], uz = p[e + 2] - p[a + 2];
+      let vx = p[b] - p[d], vy = p[b + 1] - p[d + 1], vz = p[b + 2] - p[d + 2];
+      let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl;
+      emit(r, c, nx, ny, nz); emit(r + 1, c, nx, ny, nz); emit(r + 1, c + 1, nx, ny, nz);
+      emit(r, c, nx, ny, nz); emit(r + 1, c + 1, nx, ny, nz); emit(r, c + 1, nx, ny, nz);
+    }
     if (!capeBuf) capeBuf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, capeBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
-    capeCount = data.length / 8;
-    capeGeomFrame = curFrame; capeGeomFlat = flat;
+    gl.bufferData(gl.ARRAY_BUFFER, m, gl.DYNAMIC_DRAW);
+    capeCount = (CH - 1) * (CW - 1) * 6;
   }
 
   // Ombre de contact : quad au sol (y=0) avec une texture radiale douce.
@@ -327,8 +414,6 @@
       skinDirty = false;
     }
     if (capeImg && !capeTex) capeTex = texFromImage(capeImg);
-    const flat = !showBody;
-    if (capeImg && (capeGeomFrame !== curFrame || capeGeomFlat !== flat)) buildCapeGeom(flat);
   }
 
   function loop(ts) {
@@ -384,8 +469,11 @@
       gl.bindBuffer(gl.ARRAY_BUFFER, skinBuf); bindAttribs();
       gl.drawArrays(gl.TRIANGLES, 0, skinCount);
     }
-    // 3) Cape.
-    if (capeImg && capeCount) {
+    // 3) Cape (tissu simulé, en repère MONDE -> modèle = identité).
+    if (capeImg) {
+      clothStep(dt, !showBody);
+      clothMesh();
+      gl.uniformMatrix4fv(uniLoc.model, false, IDENTITY);
       gl.bindTexture(gl.TEXTURE_2D, capeTex);
       gl.bindBuffer(gl.ARRAY_BUFFER, capeBuf); bindAttribs();
       gl.drawArrays(gl.TRIANGLES, 0, capeCount);
@@ -412,7 +500,7 @@
     image.onload = () => {
       if (myGen !== gen) return;
       capeImg = image; capeW = image.naturalWidth; capeH = image.naturalHeight;
-      frames = frameCount(capeW, capeH); curFrame = 0; lastSwap = 0; capeGeomFrame = -1;
+      frames = frameCount(capeW, capeH); curFrame = 0; lastSwap = 0; cloth.flat = null; // ré-init du tissu
       start();
     };
     image.onerror = () => { if (myGen === gen) capeImg = null; };
