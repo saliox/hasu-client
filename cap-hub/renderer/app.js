@@ -568,9 +568,97 @@ const ED_REGIONS = [
 let edGrid = new Array(ED_W * ED_H).fill(null); // null = pixel transparent
 let edZoom = 14, edFitZoom = 14, edPanX = 0, edPanY = 0;
 let edPainting = false, edPanning = false, edPanFrom = null;
-let edTool = 'brush'; // 'brush' | 'erase' | 'pick'
+let edTool = 'brush'; // 'brush' | 'line' | 'rect' | 'bucket' | 'erase' | 'pick'
+let edBrush = 1;               // taille du pinceau (1..4)
+let edStart = null, edLast = null, edPreview = null; // outils ligne/rectangle (glisser)
 let edShowGrid = true, edInited = false;
-let edUndo = [], edRedo = [];
+let edUndo = [], edRedo = [], edRecent = [];
+const ED_PRESETS = ['#e23636', '#e07b39', '#f2c14e', '#3fa34d', '#2b8fd6', '#7c5cff', '#c94fd6', '#ffffff', '#9aa0aa', '#3a3f57', '#5a3a22', '#111318'];
+
+// Pose une couleur en (x,y) en appliquant la taille du pinceau ET les miroirs actifs.
+function edStamp(x, y, col) {
+  const n = edBrush, o = Math.floor((n - 1) / 2);
+  const mh = $('#ed-mirror').checked, mv = $('#ed-mirrorv').checked;
+  const put = (xx, yy) => { if (xx >= 0 && yy >= 0 && xx < ED_W && yy < ED_H) edGrid[yy * ED_W + xx] = col; };
+  for (let dy = 0; dy < n; dy++) for (let dx = 0; dx < n; dx++) {
+    const px = x - o + dx, py = y - o + dy;
+    put(px, py);
+    if (mh) put(ED_W - 1 - px, py);
+    if (mv) put(px, ED_H - 1 - py);
+    if (mh && mv) put(ED_W - 1 - px, ED_H - 1 - py);
+  }
+}
+// Cellules d'un segment (Bresenham) et d'un rectangle (contour ou plein).
+function edLineCells(x0, y0, x1, y1) {
+  const cells = []; const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
+  let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx - dy, x = x0, y = y0;
+  for (;;) { cells.push([x, y]); if (x === x1 && y === y1) break; const e2 = 2 * err; if (e2 > -dy) { err -= dy; x += sx; } if (e2 < dx) { err += dx; y += sy; } }
+  return cells;
+}
+function edRectCells(x0, y0, x1, y1, fill) {
+  const cells = [], ax = Math.min(x0, x1), bx = Math.max(x0, x1), ay = Math.min(y0, y1), by = Math.max(y0, y1);
+  for (let y = ay; y <= by; y++) for (let x = ax; x <= bx; x++) if (fill || x === ax || x === bx || y === ay || y === by) cells.push([x, y]);
+  return cells;
+}
+// Pot de peinture : remplit la zone contiguë de même couleur (4-connexité) sur la planche.
+function edBucketAt(x, y, col) {
+  const target = edGrid[y * ED_W + x];
+  if (target === col) return;
+  const stack = [[x, y]];
+  while (stack.length) {
+    const [cx, cy] = stack.pop();
+    if (cx < 0 || cy < 0 || cx >= ED_W || cy >= ED_H) continue;
+    const k = cy * ED_W + cx;
+    if (edGrid[k] !== target) continue;
+    edGrid[k] = col;
+    stack.push([cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]);
+  }
+}
+// Éclaircit / assombrit la couleur courante.
+function edShade(delta) {
+  const n = parseInt($('#ed-color').value.slice(1), 16);
+  const f = (v) => Math.max(0, Math.min(255, Math.round(v + delta * 255)));
+  const r = f((n >> 16) & 255), g = f((n >> 8) & 255), b = f(n & 255);
+  $('#ed-color').value = '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
+  edRenderSwatches();
+}
+// Palette : presets + couleurs récemment utilisées.
+function edAddRecent(col) { if (!col) return; edRecent = [col, ...edRecent.filter((c) => c !== col)].slice(0, 8); edRenderSwatches(); }
+function edRenderSwatches() {
+  const box = $('#ed-swatches'); if (!box) return;
+  const cur = ($('#ed-color').value || '').toLowerCase();
+  box.innerHTML = '';
+  const mk = (col) => {
+    const b = document.createElement('button');
+    b.className = 'ed-swatch' + (col.toLowerCase() === cur ? ' sel' : '');
+    b.style.background = col; b.title = col; b.type = 'button';
+    b.addEventListener('click', () => { $('#ed-color').value = col; if (edTool === 'erase') edSetTool('brush'); edRenderSwatches(); });
+    return b;
+  };
+  ED_PRESETS.forEach((c) => box.appendChild(mk(c)));
+  if (edRecent.length) { const s = document.createElement('div'); s.className = 'sep'; box.appendChild(s); edRecent.forEach((c) => box.appendChild(mk(c))); }
+}
+// Place une image dans la SEULE zone AVANT (10×16), sans toucher au reste (pixels transparents conservés).
+function edLoadImageIntoFront(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const cv = document.createElement('canvas'); cv.width = ED_FRONT.w; cv.height = ED_FRONT.h;
+      const c = cv.getContext('2d'); c.imageSmoothingEnabled = false;
+      const iw = img.naturalWidth || 1, ih = img.naturalHeight || 1;
+      const s = Math.max(ED_FRONT.w / iw, ED_FRONT.h / ih), w = iw * s, h = ih * s;
+      c.drawImage(img, (ED_FRONT.w - w) / 2, (ED_FRONT.h - h) / 2, w, h);
+      const d = c.getImageData(0, 0, ED_FRONT.w, ED_FRONT.h).data;
+      for (let y = 0; y < ED_FRONT.h; y++) for (let x = 0; x < ED_FRONT.w; x++) {
+        const i = (y * ED_FRONT.w + x) * 4;
+        if (d[i + 3] > 12) edGrid[(ED_FRONT.y + y) * ED_W + (ED_FRONT.x + x)] = '#' + [d[i], d[i + 1], d[i + 2]].map((v) => v.toString(16).padStart(2, '0')).join('');
+      }
+      resolve(true);
+    };
+    img.onerror = () => resolve(false);
+    img.src = dataUrl;
+  });
+}
 
 function edFillRegion(r, col) {
   for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) edGrid[y * ED_W + x] = col;
@@ -619,6 +707,19 @@ function edRender() {
   c.strokeStyle = 'rgba(96,230,150,0.95)'; c.strokeRect(ox + ED_FRONT.x * z, oy + ED_FRONT.y * z, ED_FRONT.w * z, ED_FRONT.h * z);
   c.fillStyle = 'rgba(96,230,150,0.95)'; c.font = '600 12px system-ui, sans-serif'; c.textBaseline = 'bottom';
   if (oy + ED_FRONT.y * z - 3 > 10) c.fillText('AVANT (visible)', ox + ED_FRONT.x * z, oy + ED_FRONT.y * z - 3);
+  // Aperçu du tracé en cours (ligne / rectangle) avant de valider.
+  if (edPreview && edPreview.length) {
+    const mh = $('#ed-mirror').checked, mv = $('#ed-mirrorv').checked;
+    c.globalAlpha = 0.6; c.fillStyle = $('#ed-color').value;
+    const cell = (x, y) => { if (x >= 0 && y >= 0 && x < ED_W && y < ED_H) c.fillRect(ox + x * z, oy + y * z, z, z); };
+    for (const [x, y] of edPreview) {
+      cell(x, y);
+      if (mh) cell(ED_W - 1 - x, y);
+      if (mv) cell(x, ED_H - 1 - y);
+      if (mh && mv) cell(ED_W - 1 - x, ED_H - 1 - y);
+    }
+    c.globalAlpha = 1;
+  }
   edZoomLabel();
 }
 
@@ -643,17 +744,20 @@ function edExportUrl() {
   return cv.toDataURL('image/png');
 }
 
+function edCurCol() { return edTool === 'erase' ? null : $('#ed-color').value; }
+// Peinture libre (pinceau / gomme) avec interpolation entre deux positions de souris.
 function edPaint(e) {
   const p = edCoord(e); if (!p.inside) return;
-  const col = edTool === 'erase' ? null : $('#ed-color').value;
-  edGrid[p.y * ED_W + p.x] = col;
-  if ($('#ed-mirror').checked) edGrid[p.y * ED_W + (ED_W - 1 - p.x)] = col;
+  const col = edCurCol();
+  const from = edLast || p;
+  for (const [x, y] of edLineCells(from.x, from.y, p.x, p.y)) edStamp(x, y, col);
+  edLast = { x: p.x, y: p.y };
   edRender(); edSchedulePreview();
 }
 function edPickAt(e) {
   const p = edCoord(e); if (!p.inside) return;
   const col = edGrid[p.y * ED_W + p.x];
-  if (col) $('#ed-color').value = col;
+  if (col) { $('#ed-color').value = col; edRenderSwatches(); }
   edSetTool('brush');
 }
 
@@ -663,12 +767,11 @@ function edUpdateButtons() { const u = $('#ed-undo'), r = $('#ed-redo'); if (u) 
 function edDoUndo() { if (!edUndo.length) return; edRedo.push(edGrid.slice()); edGrid = edUndo.pop(); edRender(); edSchedulePreview(); edUpdateButtons(); }
 function edDoRedo() { if (!edRedo.length) return; edUndo.push(edGrid.slice()); edGrid = edRedo.pop(); edRender(); edSchedulePreview(); edUpdateButtons(); }
 
+const ED_TOOLS = ['brush', 'line', 'rect', 'bucket', 'erase', 'pick'];
 function edSetTool(t) {
   edTool = t;
-  $('#ed-brush').classList.toggle('active', t === 'brush');
-  $('#ed-erase').classList.toggle('active', t === 'erase');
-  $('#ed-pick').classList.toggle('active', t === 'pick');
-  const cv = edCanvasEl(); if (cv) cv.style.cursor = t === 'pick' ? 'copy' : 'crosshair';
+  ED_TOOLS.forEach((k) => { const b = $('#ed-' + k); if (b) b.classList.toggle('active', k === t); });
+  const cv = edCanvasEl(); if (cv) cv.style.cursor = t === 'pick' ? 'copy' : (t === 'bucket' ? 'cell' : 'crosshair');
 }
 
 // Charge une image (data URL) dans la grille 64×32 (1re image si cape animée, sous-échantillonnée si HD).
@@ -726,9 +829,13 @@ function edInit() {
       edPanning = true; edPanFrom = { x: e.clientX, y: e.clientY, px: edPanX, py: edPanY };
       try { cv.setPointerCapture(e.pointerId); } catch {} e.preventDefault(); return;
     }
+    const p = edCoord(e); if (!p.inside && edTool !== 'pick') return;
     if (edTool === 'pick') { edPickAt(e); return; }
-    edPainting = true; try { cv.setPointerCapture(e.pointerId); } catch {}
-    edSnapshot(); edPaint(e);
+    try { cv.setPointerCapture(e.pointerId); } catch {}
+    if (edTool === 'bucket') { edSnapshot(); edBucketAt(p.x, p.y, edCurCol()); edAddRecent(edCurCol()); edRender(); edSchedulePreview(); return; }
+    edSnapshot(); edPainting = true;
+    if (edTool === 'line' || edTool === 'rect') { edStart = { x: p.x, y: p.y }; edPreview = [[p.x, p.y]]; edRender(); }
+    else { edLast = null; edPaint(e); } // pinceau / gomme
   });
   cv.addEventListener('pointermove', (e) => {
     if (edPanning && edPanFrom) {
@@ -737,9 +844,23 @@ function edInit() {
       edPanY = edPanFrom.py + (e.clientY - edPanFrom.y) * sc;
       edRender(); return;
     }
-    if (edPainting) edPaint(e);
+    if (!edPainting) return;
+    if (edStart) {
+      const p = edCoord(e);
+      edPreview = edTool === 'line'
+        ? edLineCells(edStart.x, edStart.y, p.x, p.y)
+        : edRectCells(edStart.x, edStart.y, p.x, p.y, $('#ed-rectfill').checked);
+      edRender();
+    } else edPaint(e);
   });
-  const endStroke = () => { edPainting = false; edPanning = false; edPanFrom = null; };
+  const endStroke = () => {
+    if (edPainting && edStart && edPreview) { // valider ligne / rectangle
+      const col = edCurCol();
+      for (const [x, y] of edPreview) edStamp(x, y, col);
+      edAddRecent(col); edRender(); edSchedulePreview();
+    } else if (edPainting) edAddRecent(edCurCol());
+    edPainting = false; edPanning = false; edPanFrom = null; edStart = null; edPreview = null; edLast = null;
+  };
   window.addEventListener('pointerup', endStroke);
   cv.addEventListener('pointercancel', endStroke);
   cv.addEventListener('contextmenu', (e) => e.preventDefault()); // clic droit = déplacement, pas de menu
@@ -755,10 +876,22 @@ function edInit() {
     edRender();
   }, { passive: false });
 
-  $('#ed-color').addEventListener('input', () => { if (edTool === 'erase') edSetTool('brush'); });
+  $('#ed-color').addEventListener('input', () => { if (edTool === 'erase') edSetTool('brush'); edRenderSwatches(); });
   $('#ed-brush').addEventListener('click', () => edSetTool('brush'));
+  $('#ed-line').addEventListener('click', () => edSetTool('line'));
+  $('#ed-rect').addEventListener('click', () => edSetTool('rect'));
+  $('#ed-bucket').addEventListener('click', () => edSetTool('bucket'));
   $('#ed-erase').addEventListener('click', () => edSetTool('erase'));
   $('#ed-pick').addEventListener('click', () => edSetTool(edTool === 'pick' ? 'brush' : 'pick'));
+  $('#ed-size').addEventListener('change', (e) => { edBrush = Math.max(1, Math.min(4, +e.target.value || 1)); });
+  $('#ed-lighter').addEventListener('click', () => edShade(0.12));
+  $('#ed-darker').addEventListener('click', () => edShade(-0.12));
+  $('#ed-import-front').addEventListener('click', () => guard('#ed-import-front', async () => {
+    const r = await window.cap.capes.pickImage();
+    if (!r.ok) { if (!r.canceled) toast(r.error || 'Image invalide', 'err'); return; }
+    edSnapshot(); await edLoadImageIntoFront(r.dataUrl); edRender(); edSchedulePreview();
+    toast('Image placée dans la zone avant ✔', 'ok');
+  }));
   $('#ed-grid').addEventListener('click', () => { edShowGrid = !edShowGrid; $('#ed-grid').classList.toggle('active', edShowGrid); edRender(); });
   $('#ed-undo').addEventListener('click', edDoUndo);
   $('#ed-redo').addEventListener('click', edDoRedo);
@@ -789,6 +922,19 @@ function edInit() {
     if (!$('#tab-editor').classList.contains('active')) return;
     edResizeCanvas(); edFit(); edRender();
   });
+  // Raccourcis clavier (onglet Édition, hors saisie de texte).
+  const ED_KEYS = { b: 'brush', l: 'line', r: 'rect', g: 'bucket', e: 'erase', p: 'pick', i: 'pick' };
+  window.addEventListener('keydown', (e) => {
+    if (!$('#tab-editor').classList.contains('active')) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+    const k = e.key.toLowerCase();
+    if (ED_KEYS[k]) { e.preventDefault(); edSetTool(ED_KEYS[k]); }
+    else if (k === 'm') { const c = $('#ed-mirror'); c.checked = !c.checked; }
+    else if (k >= '1' && k <= '4') { $('#ed-size').value = k; edBrush = +k; }
+  });
+  edRenderSwatches();
   edSetTool('brush');
 }
 function edActivate() {
