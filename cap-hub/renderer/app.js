@@ -1424,13 +1424,26 @@ function pushLog(e) {
 
 window.cap.on('log', pushLog);
 window.cap.on('proxy-changed', () => refreshStatus());
+// Clients à système de capes FERMÉ : ils n'affichent pas les capes Cap Hub (canal OptiFine
+// non exploitable — cosmétiques propres / capes servies côté serveur). On le signale.
+const CLOSED_CAPE_CLIENTS = /lunar|badlion|feather/i;
+function updateClientNote(client) {
+  const note = $('#client-note'); if (!note) return;
+  if (client && CLOSED_CAPE_CLIENTS.test(client)) {
+    const name = client.replace(/\s*\(en jeu\)\s*/i, '');
+    note.classList.remove('hidden');
+    note.innerHTML = `⚠️ <b>${esc(name)}</b> utilise son <b>propre</b> système de capes (fermé) : Cap Hub ne peut pas y afficher ta cape. Pour être vu sur ce client, ajoute ta cape dans <b>ses cosmétiques</b>, ou utilise une <b>cape officielle Mojang</b> (visible partout, sans rien installer).`;
+  } else { note.classList.add('hidden'); note.textContent = ''; }
+}
 window.cap.on('game-start', (info) => {
   setPill('#pill-game', true, 'Minecraft');
   $('#games-now').textContent = `${info.client}${info.username ? ' — ' + info.username : ''}`;
+  updateClientNote(info.client);
 });
 window.cap.on('game-stop', () => {
   setPill('#pill-game', false, 'Minecraft');
   $('#games-now').textContent = 'Aucun jeu détecté.';
+  updateClientNote(null);
 });
 window.cap.on('update-status', (u) => {
   if (u.state === 'available') {
@@ -1464,5 +1477,6 @@ function esc(s) {
   if (g.games && g.games.length) {
     setPill('#pill-game', true, 'Minecraft');
     $('#games-now').textContent = g.games.map((x) => x.client).join(', ');
+    updateClientNote((g.games.find((x) => CLOSED_CAPE_CLIENTS.test(x.client)) || {}).client || null);
   }
 })();
