@@ -176,10 +176,11 @@
         <!-- Outils + instructions -->
         <div class="editor-side">
           <ol class="ed-guide">
-            <li><b>Point de départ</b> : choisis « Cape vierge », une cape de ta bibliothèque ou une image, puis <b>Charger</b>.</li>
-            <li><b>Peins</b> : <b>clic gauche</b> pose la couleur, <b>glisse</b> pour tracer. Le cadre <span class="ed-front-tag">vert = AVANT</span> est la seule zone visible dans le dos du perso.</li>
-            <li><b>Zoom molette</b> (centré sur le curseur). <b>Clic droit + glisser</b> (ou clic molette) pour te déplacer.</li>
-            <li><b>Gomme</b> = pixel transparent · <b>Pipette</b> = récupère une couleur · <b>Miroir</b> = peint en symétrie gauche/droite.</li>
+            <li><b>Point de départ</b> : « Cape vierge », une cape de ta bibliothèque ou une image, puis <b>Charger</b>.</li>
+            <li><b>Outils</b> : pinceau, ligne, rectangle, pot de peinture, gomme, pipette. <b>Clic gauche</b> pour dessiner, <b>glisse</b> pour tracer.</li>
+            <li>Le cadre <span class="ed-front-tag">vert = AVANT</span> est la <b>seule zone visible</b> dans le dos du perso — mets ton motif dedans.</li>
+            <li><b>Zoom molette</b> (centré sur le curseur) · <b>clic droit + glisser</b> pour te déplacer.</li>
+            <li>Raccourcis : <b>B</b> pinceau · <b>L</b> ligne · <b>R</b> rectangle · <b>G</b> pot · <b>E</b> gomme · <b>P</b> pipette · <b>1–4</b> taille · <b>M</b> miroir · <b>Ctrl+Z</b> annuler.</li>
             <li><b>Enregistre</b> : donne un nom, puis « Ajouter à ma bibliothèque ».</li>
           </ol>
 
@@ -188,23 +189,39 @@
           </label>
           <div class="actions">
             <button id="ed-load" class="btn small" title="Charger la sélection dans l'éditeur (remplace le dessin en cours)">↻ Charger</button>
-            <button id="ed-import" class="btn small" title="Importer une image et l'ajuster en 64×32">🖼️ Depuis une image…</button>
+            <button id="ed-import" class="btn small" title="Importer une image et l'ajuster sur toute la planche 64×32">🖼️ Depuis une image…</button>
           </div>
 
-          <div class="px-tools ed-toolbar">
-            <label>Couleur <input id="ed-color" type="color" value="#7c5cff" /></label>
-            <button id="ed-brush" class="btn small active" title="Pinceau">🖌️ Pinceau</button>
-            <button id="ed-erase" class="btn small" title="Gomme : rend le pixel transparent">🧽 Gomme</button>
-            <button id="ed-pick" class="btn small" title="Pipette : clique une case pour récupérer sa couleur">🎯 Pipette</button>
-            <label class="check"><input id="ed-mirror" type="checkbox" /> Miroir ⇔</label>
+          <div class="px-tools ed-toolbar" role="toolbar" aria-label="Outils de dessin">
+            <button id="ed-brush" class="btn small active" title="Pinceau (B)" aria-label="Pinceau">🖌️</button>
+            <button id="ed-line" class="btn small" title="Ligne droite (L)" aria-label="Ligne">╱</button>
+            <button id="ed-rect" class="btn small" title="Rectangle (R)" aria-label="Rectangle">▭</button>
+            <button id="ed-bucket" class="btn small" title="Pot de peinture — remplit une zone de même couleur (G)" aria-label="Pot de peinture">🪣</button>
+            <button id="ed-erase" class="btn small" title="Gomme — pixel transparent (E)" aria-label="Gomme">🧽</button>
+            <button id="ed-pick" class="btn small" title="Pipette — récupère une couleur (P)" aria-label="Pipette">🎯</button>
+          </div>
+          <div class="px-tools">
+            <label title="Taille du pinceau (touches 1 à 4)">Taille
+              <select id="ed-size"><option>1</option><option>2</option><option>3</option><option>4</option></select>
+            </label>
+            <label class="check" title="Rectangle plein ou contour"><input id="ed-rectfill" type="checkbox" /> Rempli</label>
+            <label class="check" title="Symétrie gauche/droite (M)"><input id="ed-mirror" type="checkbox" /> Miroir ⇔</label>
+            <label class="check" title="Symétrie haut/bas"><input id="ed-mirrorv" type="checkbox" /> Miroir ⇕</label>
+            <button id="ed-grid" class="btn small active" title="Afficher / masquer la grille" aria-label="Grille">▦</button>
             <button id="ed-undo" class="btn small" title="Annuler (Ctrl+Z)" aria-label="Annuler" disabled>↶</button>
             <button id="ed-redo" class="btn small" title="Rétablir (Ctrl+Y)" aria-label="Rétablir" disabled>↷</button>
-            <button id="ed-grid" class="btn small active" title="Afficher / masquer la grille">▦ Grille</button>
           </div>
+          <div class="px-tools ed-colors">
+            <label>Couleur <input id="ed-color" type="color" value="#7c5cff" /></label>
+            <button id="ed-lighter" class="btn small" title="Éclaircir la couleur" aria-label="Éclaircir">☀️</button>
+            <button id="ed-darker" class="btn small" title="Assombrir la couleur" aria-label="Assombrir">🌙</button>
+          </div>
+          <div id="ed-swatches" class="ed-swatches" aria-label="Palette de couleurs"></div>
           <div class="px-tools">
             <button id="ed-fill-front" class="btn small" title="Remplir la zone AVANT avec la couleur">Remplir l'avant</button>
             <button id="ed-fill-all" class="btn small" title="Remplir toute la cape avec la couleur">Tout remplir</button>
             <button id="ed-clear" class="btn small" title="Tout effacer (transparent)">Vider</button>
+            <button id="ed-import-front" class="btn small" title="Placer une image dans la seule zone AVANT (logo, motif…)">🖼️ Image → avant</button>
           </div>
           <div class="px-tools ed-zoom">
             <span class="muted">Zoom</span>
