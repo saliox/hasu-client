@@ -80,7 +80,44 @@ const isBuiltinFile = (file) => path.dirname(file) === BUILTIN_DIR;
 export function deleteCape(id) {
   const file = resolveCape(id);
   if (!file || isBuiltinFile(file)) return { ok: false, error: 'Cape introuvable ou intégrée (non supprimable).' };
-  try { fs.unlinkSync(file); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
+  try {
+    fs.unlinkSync(file);
+    try { fs.unlinkSync(file + '.orig'); } catch {} // supprime aussi la sauvegarde d'origine
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+
+// ---------- Résolution / qualité d'une cape ----------
+// Lit la version d'ORIGINE (avant toute réduction de résolution) : la sauvegarde .orig
+// si elle existe, sinon le fichier courant.
+export function readCapeOriginal(id) {
+  const file = resolveCape(id);
+  if (!file) return null;
+  const orig = file + '.orig';
+  try { if (fs.existsSync(orig)) return fs.readFileSync(orig); } catch {}
+  try { return fs.readFileSync(file); } catch { return null; }
+}
+
+// Change la résolution servie d'une cape importée. buf = PNG rééchantillonné (validé) ;
+// buf === null restaure l'original. L'original est sauvegardé UNE fois en <fichier>.orig
+// (donc l'opération est réversible et non destructive). Le proxy et l'aperçu servent
+// tous deux le fichier courant -> le changement s'applique partout, y compris en jeu.
+export function setCapeResolution(id, buf) {
+  const file = resolveCape(id);
+  if (!file) return { ok: false, error: 'Cape introuvable.' };
+  if (isBuiltinFile(file)) return { ok: false, error: 'Cape intégrée (déjà en résolution standard).' };
+  const orig = file + '.orig';
+  if (buf === null) {
+    try { if (fs.existsSync(orig)) { fs.copyFileSync(orig, file); fs.unlinkSync(orig); } return { ok: true }; }
+    catch (e) { return { ok: false, error: e.message }; }
+  }
+  const v = validateCape(buf);
+  if (!v.ok) return v;
+  try {
+    if (!fs.existsSync(orig)) fs.copyFileSync(file, orig); // sauvegarde l'original la 1re fois
+    fs.writeFileSync(file, buf);
+    return { ok: true, width: v.width, height: v.height };
+  } catch (e) { return { ok: false, error: e.message }; }
 }
 
 // Renomme une cape importée (les intégrées ne sont pas renommables). Renvoie le
@@ -99,8 +136,11 @@ export function renameCape(id, newName) {
   if (path.basename(dest) === path.basename(file)) return { ok: true, id: path.basename(file) };
   let i = 2;
   while (fs.existsSync(dest)) dest = path.join(DIR, `${safe}-${i++}.png`);
-  try { fs.renameSync(file, dest); return { ok: true, id: path.basename(dest) }; }
-  catch (e) { return { ok: false, error: e.message }; }
+  try {
+    fs.renameSync(file, dest);
+    try { if (fs.existsSync(file + '.orig')) fs.renameSync(file + '.orig', dest + '.orig'); } catch {} // suit la sauvegarde
+    return { ok: true, id: path.basename(dest) };
+  } catch (e) { return { ok: false, error: e.message }; }
 }
 
 export function listCapes() {

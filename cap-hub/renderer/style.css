@@ -279,6 +279,13 @@ code { background: var(--bg-3); padding: 1px 6px; border-radius: 6px; font-size:
 .cape .cape-actions .act-rename, .cape .cape-actions .act-del,
 .cape .cape-actions .act-dup, .cape .cape-actions .act-export { flex: 0 0 auto; }
 .cape .cape-actions { flex-wrap: wrap; }
+.cape .res-row { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.cape .res-row.hidden { display: none; }
+.cape .res-row .muted { font-size: 12px; }
+.cape .res-row select {
+  flex: 1; min-width: 0; background: var(--bg-3); border: 1px solid var(--line);
+  color: var(--txt); border-radius: 8px; padding: 4px 6px; font-size: 12px; cursor: pointer;
+}
 /* Étoile favori */
 .cape .fav {
   position: absolute; top: 6px; left: 6px; z-index: 2;

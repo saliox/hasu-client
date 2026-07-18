@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld('cap', {
     duplicate: (id) => invoke('capes:duplicate', id),
     export: (id) => invoke('capes:export', id),
     publish: () => invoke('capes:publish'),
+    original: (id) => invoke('capes:original', id),               // -> data URL de la version d'origine
+    setResolution: (id, dataUrl) => invoke('capes:setResolution', id, dataUrl), // dataUrl null = restaurer
   },
 
   proxy: {

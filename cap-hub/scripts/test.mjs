@@ -12,7 +12,7 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 // import() dynamique : sur Windows un chemin absolu (D:\...) doit être une URL file://.
 const S = (f) => pathToFileURL(path.join(root, 'src', f)).href;
 
-const { initCapes, listCapes, importCape, importCapeBuffer, validateCape, readCape, resolveCape, renameCape, duplicateCape, deleteCape } = await import(S('capes.js'));
+const { initCapes, listCapes, importCape, importCapeBuffer, validateCape, readCape, resolveCape, renameCape, duplicateCape, deleteCape, readCapeOriginal, setCapeResolution } = await import(S('capes.js'));
 const { isPng, readPngSize, encodePNG, decodePNG, firstFrameIfAnimated, capeFrames } = await import(S('png.js'));
 const providers = await import(S('providers.js'));
 const proxy = await import(S('proxy.js'));
@@ -70,6 +70,15 @@ ok('cape utilisateur « builtin » renommable', bcap.ok && renameCape(bcap.id, '
 const bcap2 = importCapeBuffer(mkPng(64, 32), 'builtinx');
 ok('cape utilisateur « builtinx » supprimable', bcap2.ok && deleteCape(bcap2.id).ok === true);
 ok('vraie cape intégrée toujours protégée', deleteCape(capes.find((c) => c.builtin).id).ok === false);
+// Résolution / qualité de cape (réduction réversible via sauvegarde .orig)
+const hdc = importCapeBuffer(mkPng(128, 64), 'HD test');
+ok('importe une cape HD 128x64', hdc.ok);
+ok('original = 128x64 avant réduction', (() => { const s = readPngSize(readCapeOriginal(hdc.id)); return s.width === 128 && s.height === 64; })());
+ok('réduit la résolution servie -> 64x32', setCapeResolution(hdc.id, mkPng(64, 32)).ok && (() => { const s = readPngSize(readCape(hdc.id)); return s.width === 64 && s.height === 32; })());
+ok('original conservé (128x64) après réduction', (() => { const s = readPngSize(readCapeOriginal(hdc.id)); return s.width === 128 && s.height === 64; })());
+ok('rejette une image non-cape en résolution', setCapeResolution(hdc.id, Buffer.from('nope')).ok === false);
+ok('restaure l’original -> 128x64', setCapeResolution(hdc.id, null).ok && (() => { const s = readPngSize(readCape(hdc.id)); return s.width === 128 && s.height === 64; })());
+ok('résolution refusée sur une cape intégrée', setCapeResolution(capes.find((c) => c.builtin).id, mkPng(64, 32)).ok === false);
 
 console.log('\n# Réglages (favoris / catégories)');
 const store = await import(S('store.js'));

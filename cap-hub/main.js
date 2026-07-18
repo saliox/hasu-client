@@ -14,7 +14,7 @@ import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { isPng, firstFrameIfAnimated } from './src/png.js';
 
-import { initCapes, listCapes, importCape, importCapeBuffer, deleteCape, renameCape, resolveCape, readCape, duplicateCape } from './src/capes.js';
+import { initCapes, listCapes, importCape, importCapeBuffer, deleteCape, renameCape, resolveCape, readCape, readCapeOriginal, setCapeResolution, duplicateCape } from './src/capes.js';
 import { initStore, getSettings, saveSettings, setToken, getToken, setMcSession, getMcSession, clearMcSession } from './src/store.js';
 import * as mc from './src/mcaccount.js';
 import { startProxy, stopProxy, isRunning, getStats, getPort, proxyEvents, redirectHosts } from './src/proxy.js';
@@ -353,6 +353,22 @@ ipcMain.handle('capes:preview', (_e, id) => {
   const buf = readCape(id);
   if (!buf) return { ok: false, error: 'Cape introuvable.' };
   return { ok: true, dataUrl: 'data:image/png;base64,' + buf.toString('base64') };
+});
+// Version d'ORIGINE (avant réduction de résolution) — source pour rééchantillonner.
+ipcMain.handle('capes:original', (_e, id) => {
+  const buf = readCapeOriginal(id);
+  if (!buf) return { ok: false, error: 'Cape introuvable.' };
+  return { ok: true, dataUrl: 'data:image/png;base64,' + buf.toString('base64') };
+});
+// Change la résolution servie (aperçu + proxy en jeu). dataUrl null -> restaure l'original.
+ipcMain.handle('capes:setResolution', (_e, id, dataUrl) => {
+  if (dataUrl == null) return setCapeResolution(id, null);
+  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
+  if (!m) return { ok: false, error: 'Image invalide.' };
+  let buf;
+  try { buf = Buffer.from(m[1], 'base64'); } catch { return { ok: false, error: 'Décodage impossible.' }; }
+  if (buf.length > 12 * 1024 * 1024) return { ok: false, error: 'Image trop lourde (max 12 Mo).' };
+  return setCapeResolution(id, buf);
 });
 // Duplique une cape (intégrée ou importée) en une copie modifiable.
 ipcMain.handle('capes:duplicate', (_e, id) => duplicateCape(id));

@@ -162,7 +162,8 @@ function renderCapeGrid() {
         <button class="btn small act-dup" title="Dupliquer" aria-label="Dupliquer">⧉</button>
         <button class="btn small act-export" title="Exporter en PNG" aria-label="Exporter en PNG">⬇</button>
         ${c.builtin ? '' : '<button class="btn small act-rename" title="Renommer" aria-label="Renommer">✎</button><button class="btn small danger act-del" title="Supprimer" aria-label="Supprimer">🗑</button>'}
-      </div>`;
+      </div>
+      ${c.builtin ? '' : '<div class="res-row hidden"><span class="muted">Qualité</span><select class="act-res" title="Résolution de la cape — appliquée à l\'aperçu ET en jeu"></select></div>'}`;
     el.querySelector('.fav').addEventListener('click', () => toggleFav(c.id, !fav));
     el.querySelector('.act-use').addEventListener('click', () => setActive(c.id === capeActive ? '' : c.id));
     el.querySelector('.act-dup').addEventListener('click', () => dupCape(c.id));
@@ -174,6 +175,8 @@ function renderCapeGrid() {
     if (del) del.addEventListener('click', () => removeCape(c.id, c.name));
     grid.appendChild(el);
     loadThumb(el.querySelector('.thumb'), c.id);
+    const res = el.querySelector('.act-res');
+    if (res) initResSelect(res, c);
   }
   // Bandeau + aperçu de la cape active.
   const banner = $('#active-banner');
@@ -284,6 +287,68 @@ function capeFrontThumb(url) {
     img.onerror = () => resolve(url); // repli : planche complète
     img.src = url;
   });
+}
+
+// ---------- Résolution / qualité par cape ----------
+function imgSize(dataUrl) {
+  return new Promise((res) => { const i = new Image(); i.onload = () => res([i.naturalWidth, i.naturalHeight]); i.onerror = () => res([0, 0]); i.src = dataUrl; });
+}
+// Rééchantillonne une cape vers (tw×th). Downscale lissé = réduction propre (le jeu
+// ré-agrandit ensuite au plus proche). Renvoie un data URL PNG.
+function downscaleCape(dataUrl, tw, th) {
+  return new Promise((res) => {
+    const img = new Image();
+    img.onload = () => {
+      const cv = document.createElement('canvas'); cv.width = tw; cv.height = th;
+      const c = cv.getContext('2d'); c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+      c.drawImage(img, 0, 0, tw, th);
+      res(cv.toDataURL('image/png'));
+    };
+    img.onerror = () => res(null);
+    img.src = dataUrl;
+  });
+}
+// Prépare le sélecteur de qualité d'une carte selon la taille d'origine (options ≤ origine).
+async function initResSelect(sel, c) {
+  const row = sel.closest('.res-row');
+  try {
+    const origRes = await window.cap.capes.original(c.id);
+    const served = await capeDataUrl(c.id);
+    if (!origRes || !origRes.ok || !served) return;
+    const [ow, oh] = await imgSize(origRes.dataUrl);
+    const [sw] = await imgSize(served);
+    if (!ow || !oh) return;
+    const base = (ow % 46 === 0 && ow % 64 !== 0) ? 46 : 64;
+    const origScale = Math.max(1, Math.round(ow / base));
+    const baseH = Math.round(oh / origScale);
+    const servedScale = Math.max(1, Math.round(sw / base));
+    const opts = [{ v: 'orig', label: `Originale (${ow}×${oh})` }];
+    for (const s of [1, 2, 4, 8]) if (s < origScale) opts.push({ v: String(s), label: `${base * s}×${baseH * s}${s === 1 ? ' · léger' : ''}` });
+    if (opts.length <= 1) { if (row) row.remove(); return; } // rien à réduire (déjà minimal)
+    sel.innerHTML = opts.map((o) => `<option value="${o.v}">${o.label}</option>`).join('');
+    sel.value = (servedScale >= origScale) ? 'orig' : String(servedScale);
+    sel.addEventListener('change', () => applyRes(sel, c.id, origScale, base, baseH));
+    if (row) row.classList.remove('hidden');
+  } catch { /* laisse la ligne cachée */ }
+}
+async function applyRes(sel, id, origScale, base, baseH) {
+  const v = sel.value;
+  sel.disabled = true;
+  try {
+    let r;
+    if (v === 'orig' || +v >= origScale) r = await window.cap.capes.setResolution(id, null);
+    else {
+      const orig = await window.cap.capes.original(id);
+      if (!orig || !orig.ok) return toast('Original indisponible.', 'err');
+      const url = await downscaleCape(orig.dataUrl, base * +v, baseH * +v);
+      if (!url) return toast('Rééchantillonnage impossible.', 'err');
+      r = await window.cap.capes.setResolution(id, url);
+    }
+    if (!r || !r.ok) return toast((r && r.error) || 'Changement impossible', 'err');
+    toast('Résolution mise à jour ✔ — en jeu, rejoins un monde pour la voir.', 'ok');
+    frontThumbCache.clear();
+    await loadCapes();
+  } finally { sel.disabled = false; }
 }
 
 // Prévisualisation 3D de la cape active. Ne se relance QUE si la cape (ou le canvas)
