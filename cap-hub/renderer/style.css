@@ -170,6 +170,24 @@ code { background: var(--bg-3); padding: 1px 6px; border-radius: 6px; font-size:
 }
 #cr-image .actions { align-items: center; }
 
+/* Onglet Édition (éditeur pixel dédié, zoom molette) */
+.editor { display: flex; gap: 22px; margin-top: 16px; flex-wrap: wrap; align-items: flex-start; }
+.editor-side { flex: 0 0 340px; max-width: 380px; min-width: 300px; display: flex; flex-direction: column; gap: 10px; }
+.editor-main { flex: 1; min-width: 340px; display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
+.ed-guide { margin: 0 0 4px; padding-left: 20px; font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+.ed-guide li { margin: 4px 0; }
+.ed-guide b { color: var(--txt); }
+.ed-front-tag { color: #60e696; font-weight: 600; }
+.ed-toolbar { margin-top: 2px; }
+.ed-zoom { align-items: center; gap: 8px; }
+.ed-canvas-wrap {
+  flex: 1; min-width: 320px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--bg); overflow: hidden;
+}
+#ed-canvas { display: block; width: 100%; height: 480px; touch-action: none; cursor: crosshair; }
+.ed-preview { align-self: flex-start; }
+.ed-preview #editor-preview { border-radius: 10px; }
+
 /* Puce catégorie (dossier) sur les cartes */
 .catrow { margin-top: -4px; }
 .cat-chip {

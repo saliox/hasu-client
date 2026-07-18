@@ -26,6 +26,7 @@
   <nav class="tabs" role="tablist" aria-label="Sections de Cap Hub">
     <button class="tab active" data-tab="capes" role="tab" aria-selected="true">🎽 Mes capes</button>
     <button class="tab" data-tab="creator" role="tab" aria-selected="false">🎨 Créateur</button>
+    <button class="tab" data-tab="editor" role="tab" aria-selected="false">✏️ Édition</button>
     <button class="tab" data-tab="official" role="tab" aria-selected="false">🎖️ Compte officiel</button>
     <button class="tab" data-tab="players" role="tab" aria-selected="false">👥 Joueurs</button>
     <button class="tab" data-tab="status" role="tab" aria-selected="false">🛰️ État</button>
@@ -160,6 +161,80 @@
         </div>
       </div>
       <canvas id="cr-canvas" width="64" height="32" style="display:none"></canvas>
+    </section>
+
+    <!-- ÉDITION PIXEL PAR PIXEL -->
+    <section id="tab-editor" class="panel" role="tabpanel" tabindex="0">
+      <div class="row between">
+        <div>
+          <h2>Édition pixel par pixel</h2>
+          <p class="muted">Dessine une cape de zéro ou retouche une cape existante, <b>case par case</b>, sur la planche officielle <b>64×32</b>. L'aperçu 3D se met à jour en direct.</p>
+        </div>
+      </div>
+
+      <div class="editor">
+        <!-- Outils + instructions -->
+        <div class="editor-side">
+          <ol class="ed-guide">
+            <li><b>Point de départ</b> : choisis « Cape vierge », une cape de ta bibliothèque ou une image, puis <b>Charger</b>.</li>
+            <li><b>Peins</b> : <b>clic gauche</b> pose la couleur, <b>glisse</b> pour tracer. Le cadre <span class="ed-front-tag">vert = AVANT</span> est la seule zone visible dans le dos du perso.</li>
+            <li><b>Zoom molette</b> (centré sur le curseur). <b>Clic droit + glisser</b> (ou clic molette) pour te déplacer.</li>
+            <li><b>Gomme</b> = pixel transparent · <b>Pipette</b> = récupère une couleur · <b>Miroir</b> = peint en symétrie gauche/droite.</li>
+            <li><b>Enregistre</b> : donne un nom, puis « Ajouter à ma bibliothèque ».</li>
+          </ol>
+
+          <label>Point de départ
+            <select id="ed-source"></select>
+          </label>
+          <div class="actions">
+            <button id="ed-load" class="btn small" title="Charger la sélection dans l'éditeur (remplace le dessin en cours)">↻ Charger</button>
+            <button id="ed-import" class="btn small" title="Importer une image et l'ajuster en 64×32">🖼️ Depuis une image…</button>
+          </div>
+
+          <div class="px-tools ed-toolbar">
+            <label>Couleur <input id="ed-color" type="color" value="#7c5cff" /></label>
+            <button id="ed-brush" class="btn small active" title="Pinceau">🖌️ Pinceau</button>
+            <button id="ed-erase" class="btn small" title="Gomme : rend le pixel transparent">🧽 Gomme</button>
+            <button id="ed-pick" class="btn small" title="Pipette : clique une case pour récupérer sa couleur">🎯 Pipette</button>
+            <label class="check"><input id="ed-mirror" type="checkbox" /> Miroir ⇔</label>
+            <button id="ed-undo" class="btn small" title="Annuler (Ctrl+Z)" aria-label="Annuler" disabled>↶</button>
+            <button id="ed-redo" class="btn small" title="Rétablir (Ctrl+Y)" aria-label="Rétablir" disabled>↷</button>
+            <button id="ed-grid" class="btn small active" title="Afficher / masquer la grille">▦ Grille</button>
+          </div>
+          <div class="px-tools">
+            <button id="ed-fill-front" class="btn small" title="Remplir la zone AVANT avec la couleur">Remplir l'avant</button>
+            <button id="ed-fill-all" class="btn small" title="Remplir toute la cape avec la couleur">Tout remplir</button>
+            <button id="ed-clear" class="btn small" title="Tout effacer (transparent)">Vider</button>
+          </div>
+          <div class="px-tools ed-zoom">
+            <span class="muted">Zoom</span>
+            <button id="ed-zoom-out" class="btn small" aria-label="Dézoomer">−</button>
+            <button id="ed-zoom-reset" class="btn small" title="Réajuster à l'écran">Ajuster</button>
+            <button id="ed-zoom-in" class="btn small" aria-label="Zoomer">+</button>
+            <span id="ed-zoom-val" class="muted"></span>
+            <span class="muted">· molette pour zoomer</span>
+          </div>
+
+          <label>Nom de la cape
+            <input id="ed-name" type="text" maxlength="40" placeholder="Ma cape" autocomplete="off" />
+          </label>
+          <label class="check"><input id="ed-use" type="checkbox" /> Utiliser cette cape après enregistrement</label>
+          <div class="actions">
+            <button id="ed-save" class="btn primary">✨ Ajouter à ma bibliothèque</button>
+          </div>
+          <div id="ed-msg" class="muted"></div>
+        </div>
+
+        <!-- Canevas + aperçu 3D -->
+        <div class="editor-main">
+          <div class="ed-canvas-wrap"><canvas id="ed-canvas"></canvas></div>
+          <div class="preview-box ed-preview">
+            <canvas id="editor-preview" width="220" height="300"></canvas>
+            <div class="muted">Aperçu 3D en direct</div>
+          </div>
+        </div>
+      </div>
+      <canvas id="ed-export" width="64" height="32" style="display:none"></canvas>
     </section>
 
     <!-- COMPTE MINECRAFT OFFICIEL -->
