@@ -134,6 +134,11 @@ code { background: var(--bg-3); padding: 1px 6px; border-radius: 6px; font-size:
   background: rgba(124,92,255,.12); border: 1px solid rgba(124,92,255,.35);
 }
 .banner.hidden { display: none; }
+.client-note {
+  margin-top: 10px; padding: 9px 11px; border-radius: 10px; font-size: 12.5px; line-height: 1.5;
+  background: rgba(214, 160, 38, .12); border: 1px solid rgba(214, 160, 38, .42);
+}
+.client-note.hidden { display: none; }
 
 /* Prévisualisation animée */
 .preview-row { display: flex; gap: 18px; align-items: center; margin: 16px 0; flex-wrap: wrap; }
