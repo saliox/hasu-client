@@ -455,12 +455,12 @@ async function buildCapeFromFile(f) {
   return fitImageToCape(img); // sinon on recadre en 64×32
 }
 
-$('#btn-import').addEventListener('click', () => guard('#btn-import', async () => {
-  const r = await window.cap.capes.import();
-  if (!r.ok) { if (!r.canceled) toast(r.error || 'Import impossible', 'err'); return; }
-  toast(`Traitement de ${r.files.length} fichier(s)…`);
+// Crée une cape par fichier fourni. files : [{ name, ext, dataUrl, tooBig }]
+async function importCapeFiles(files) {
+  if (!files.length) return;
+  toast(`Traitement de ${files.length} fichier(s)…`);
   let ok = 0, fail = 0;
-  for (const f of r.files) {
+  for (const f of files) {
     if (f.tooBig) { fail++; continue; }
     try {
       const url = await buildCapeFromFile(f);
@@ -470,7 +470,47 @@ $('#btn-import').addEventListener('click', () => guard('#btn-import', async () =
   }
   toast(`${ok} cape(s) importée(s) ✔${fail ? ` (${fail} rejetée(s))` : ''}`, ok ? 'ok' : 'err');
   if (ok) loadCapes();
+}
+
+$('#btn-import').addEventListener('click', () => guard('#btn-import', async () => {
+  const r = await window.cap.capes.import();
+  if (!r.ok) { if (!r.canceled) toast(r.error || 'Import impossible', 'err'); return; }
+  await importCapeFiles(r.files);
 }));
+
+// ---------- Glisser-déposer des fichiers image/GIF sur la fenêtre ----------
+const DROP_MAX = 12 * 1024 * 1024; // même plafond que l'import natif
+const DROP_EXT = /\.(png|gif|jpe?g|webp|bmp)$/i;
+// Convertit un File du drop en objet import ({ name, ext, dataUrl, tooBig }).
+function fileToImport(file) {
+  return new Promise((resolve) => {
+    const name = (file.name || 'cape').replace(/\.[^.]+$/, '') || 'cape';
+    const ext = ((file.name || '').match(/\.([^.]+)$/)?.[1] || 'png').toLowerCase();
+    if (file.size > DROP_MAX) { resolve({ name, ext, dataUrl: '', tooBig: true }); return; }
+    const rd = new FileReader();
+    rd.onload = () => resolve({ name, ext, dataUrl: String(rd.result || ''), tooBig: false });
+    rd.onerror = () => resolve({ name, ext, dataUrl: '', tooBig: true });
+    rd.readAsDataURL(file);
+  });
+}
+(function setupDropZone() {
+  const overlay = $('#drop-overlay');
+  let depth = 0;
+  const show = () => overlay && overlay.classList.remove('hidden');
+  const hide = () => { depth = 0; overlay && overlay.classList.add('hidden'); };
+  const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
+  window.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); depth++; show(); });
+  window.addEventListener('dragover', (e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+  window.addEventListener('dragleave', (e) => { if (!hasFiles(e)) return; e.preventDefault(); if (--depth <= 0) hide(); });
+  window.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    hide();
+    const files = Array.from(e.dataTransfer?.files || []).filter((f) => DROP_EXT.test(f.name || '') || /^image\//.test(f.type || ''));
+    if (!files.length) { if ((e.dataTransfer?.files || []).length) toast('Aucune image reconnue dans le dépôt.', 'err'); return; }
+    const items = await Promise.all(files.map(fileToImport));
+    await importCapeFiles(items);
+  });
+})();
 
 $('#btn-apply').addEventListener('click', () => guard('#btn-apply', async () => {
   toast('Application de Cap Hub… (une fenêtre admin peut apparaître)');

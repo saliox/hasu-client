@@ -382,6 +382,23 @@ code { background: var(--bg-3); padding: 1px 6px; border-radius: 6px; font-size:
 .toast.ok { border-color: rgba(59,165,93,.6); }
 .toast.err { border-color: rgba(214,60,90,.6); }
 
+.drop-overlay {
+  position: fixed; inset: 0; z-index: 90; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(10,14,24,.72); backdrop-filter: blur(2px);
+}
+.drop-overlay.hidden { display: none; }
+.drop-card {
+  pointer-events: none; text-align: center;
+  padding: 34px 46px; border-radius: 18px;
+  border: 2px dashed var(--accent, #7c5cff);
+  background: var(--bg-2, #141a29);
+  box-shadow: 0 20px 60px rgba(0,0,0,.55);
+}
+.drop-ico { font-size: 42px; line-height: 1; margin-bottom: 10px; }
+.drop-title { font-size: 20px; font-weight: 700; color: var(--txt); }
+.drop-sub { margin-top: 4px; color: var(--muted, #9aa4bd); font-size: 13px; }
+
 /* Select des réglages (thème…) */
 .form select {
   background: var(--bg-2); border: 1px solid var(--line); color: var(--txt);

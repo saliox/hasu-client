@@ -42,7 +42,7 @@
           <p class="muted">Choisis une cape et applique Cap Hub : elle s'affiche sur ton personnage dans tous les clients compatibles OptiFine. Importe des <b>PNG</b> (jusqu'en <b>4K</b>), des <b>GIF</b> (capes animées) ou n'importe quelle image.</p>
         </div>
         <div class="actions">
-          <button id="btn-import" class="btn" title="PNG (HD/4K), GIF animés, ou image recadrée">➕ Importer (PNG / GIF / image)</button>
+          <button id="btn-import" class="btn" title="PNG (HD/4K), GIF animés, ou image recadrée — ou glissez-déposez vos fichiers sur la fenêtre">➕ Importer (PNG / GIF / image)</button>
           <button id="btn-apply" class="btn primary">⚡ Appliquer Cap Hub</button>
         </div>
       </div>
@@ -465,6 +465,13 @@
   </main>
 
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+  <div id="drop-overlay" class="drop-overlay hidden" aria-hidden="true">
+    <div class="drop-card">
+      <div class="drop-ico">⬇️</div>
+      <div class="drop-title">Déposez vos images/GIF</div>
+      <div class="drop-sub">pour créer des capes automatiquement</div>
+    </div>
+  </div>
   <script src="preview.js"></script>
   <script src="app.js"></script>
 </body>
