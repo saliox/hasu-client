@@ -4,3 +4,7 @@ dist/
 src/
 build/
 .gradle/
+
+# Le launcher est open source : son code et ses icônes SONT versionnés
+!launcher/src/
+!launcher/build/

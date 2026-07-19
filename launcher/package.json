@@ -1,0 +1,57 @@
+{
+  "name": "hasu-launcher",
+  "version": "2.0.0",
+  "description": "Hasu Launcher — launcher Minecraft inspiré de Lunar Client : connexion Microsoft, Minecraft 1.8.9 + Forge en un clic, Java intégré (JRE Mojang), console en direct, auto-update signé SHA-256",
+  "type": "module",
+  "main": "main.js",
+  "author": "saliox",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "electron .",
+    "test": "node scripts/test.mjs",
+    "icon": "node scripts/make-icon.mjs",
+    "dist": "electron-builder --win",
+    "pack": "electron-builder --win --dir"
+  },
+  "devDependencies": {
+    "electron": "^31.3.1",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.saliox.hasulauncher",
+    "productName": "Hasu Launcher",
+    "electronLanguages": ["fr", "en-US"],
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.cjs",
+      "src/**/*",
+      "renderer/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "artifactName": "HasuLauncher-Setup-${version}.${ext}",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "portable": {
+      "artifactName": "HasuLauncher-${version}-portable.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "runAfterFinish": true,
+      "artifactName": "HasuLauncher-Setup-${version}.${ext}"
+    }
+  }
+}

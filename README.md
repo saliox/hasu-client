@@ -13,6 +13,10 @@ Le produit se compose de **deux parties** :
 
 > **Version actuelle : 1.14.0**
 
+> 📂 **Code source dans ce dépôt** : le launcher nouvelle génération vit dans
+> [`launcher/`](launcher/) (Electron, open source, releases `launcher-v*`) et
+> l'app de capes dans [`cap-hub/`](cap-hub/) (releases `cap-hub-v*`).
+
 ---
 
 ## ✨ La philosophie : légitime par conception
