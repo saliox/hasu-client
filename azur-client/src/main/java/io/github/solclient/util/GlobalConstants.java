@@ -1,0 +1,66 @@
+/*
+ * Sol Client - an open source Minecraft client
+ * Copyright (C) 2021-2023  TheKodeToad and Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package io.github.solclient.util;
+
+import java.lang.invoke.MethodType;
+import java.net.URL;
+
+import lombok.experimental.UtilityClass;
+
+@UtilityClass
+public class GlobalConstants {
+
+	// properties
+	public final boolean DEV = Boolean.getBoolean("loader.development");
+	public final String MAPPINGS = DEV ? "named" : "intermediary";
+	// shhh... fake constant
+	public boolean optifine = Boolean.getBoolean("io.github.solclient.wrapper.optifine");
+	public final boolean NO_LAUNCHER_WARNINGS = Boolean.getBoolean("io.github.solclient.wrapper.no_launcher_warnings");
+	public final String VERSION_STRING = "@VERSION@";
+	public final String USER_AGENT = "Azur Client/" + GlobalConstants.VERSION;
+	public final SemVer VERSION = SemVer.parseOrNull(VERSION_STRING);
+	public final String LAUNCHER = System.getProperty("io.github.solclient.client.launcher", "unknown");
+	public final boolean AUTOUPDATE = Boolean.getBoolean("io.github.solclient.client.autoupdate");
+	public final String NAME = "Azur Client " + VERSION_STRING;
+
+	// constants
+	public final String KEY_TRANSLATION_KEY = "sol_client.key";
+	public final String KEY_CATEGORY = KEY_TRANSLATION_KEY + ".category";
+	public final URL RELEASE_API = Utils.sneakyParse(System.getProperty("io.github.solclient.client.release_api",
+			"https://api.github.com/repos/saliox/azur-client/releases/latest"));
+	// Application Discord par défaut : héritée de Sol Client (le nom affiché dans la
+	// Rich Presence vient de cette app). TODO : créer une app « Azur Client » sur
+	// discord.com/developers et remplacer l'ID (ou le fournir via la propriété ci-dessous
+	// / l'option « ID d'application Discord » du mod).
+	public final long DISCORD_APPLICATION = Long.getLong("io.github.solclient.client.discord_app", 925701938211868683L);
+	// please change
+	public final String IMGUR_APPLICATION = System.getProperty("io.github.solclient.client.imgur_app", "4efd63137720136");
+	// please don't remove :(
+	public final String COPYRIGHT = "Azur Client © 2026 saliox — based on Sol Client © 2023 TheKodeToad and contributors";
+	public final String OPTIFINE_JAR = "OptiFine_1.8.9_HD_U_M5";
+	// Backend « amis en ligne » : DÉSACTIVÉ par défaut (l'ancien serveur de Sol Client
+	// est mort). Fournir -Dio.github.solclient.client.api=<url> pour un backend perso.
+	public final String API = System.getProperty("io.github.solclient.client.api", "");
+
+	public final String REPLAYMOD_VERSION_STRING = "@REPLAYMOD_VERSION@";
+
+	// utils
+	public final MethodType MAIN_METHOD = MethodType.methodType(void.class, String[].class);
+
+}

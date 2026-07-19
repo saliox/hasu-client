@@ -8,3 +8,7 @@ build/
 # Le launcher est open source : son code et ses icônes SONT versionnés
 !launcher/src/
 !launcher/build/
+
+# Azur Client (hébergement provisoire du client complet) : tout est versionné
+!azur-client/
+!azur-client/**
