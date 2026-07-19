@@ -98,6 +98,21 @@ export function readCapeOriginal(id) {
   try { return fs.readFileSync(file); } catch { return null; }
 }
 
+// Remplace l'image d'une cape importée (édition « sur place »). Valide, refuse les
+// intégrées, et invalide la sauvegarde de résolution .orig (l'image a changé).
+export function setCapeImage(id, buf) {
+  const file = resolveCape(id);
+  if (!file) return { ok: false, error: 'Cape introuvable.' };
+  if (isBuiltinFile(file)) return { ok: false, error: 'Cape intégrée (non modifiable).' };
+  const v = validateCape(buf);
+  if (!v.ok) return v;
+  try {
+    fs.writeFileSync(file, buf);
+    try { fs.unlinkSync(file + '.orig'); } catch {} // l'original de résolution ne correspond plus
+    return { ok: true, id: path.basename(file) };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+
 // Dimensions (origine + servie) d'une cape, SANS transférer les pixels : sert au sélecteur
 // de qualité côté UI (évite d'encoder l'original entier juste pour lire sa taille).
 export function capeDims(id) {

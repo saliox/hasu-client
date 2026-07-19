@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('cap', {
     export: (id) => invoke('capes:export', id),
     publish: () => invoke('capes:publish'),
     dims: (id) => invoke('capes:dims', id),                        // -> { ow, oh, sw, sh } (léger)
+    setImage: (id, dataUrl) => invoke('capes:setImage', id, dataUrl), // écrase l'image d'une cape (édition sur place)
     original: (id) => invoke('capes:original', id),               // -> data URL de la version d'origine
     setResolution: (id, dataUrl) => invoke('capes:setResolution', id, dataUrl), // dataUrl null = restaurer
   },

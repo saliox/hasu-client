@@ -162,7 +162,7 @@ function renderCapeGrid() {
         <button class="btn small act-use" title="${c.id === capeActive ? 'Cliquer pour désactiver' : 'Utiliser cette cape'}">${c.id === capeActive ? '✓ Active' : 'Utiliser'}</button>
         <button class="btn small act-dup" title="Dupliquer" aria-label="Dupliquer">⧉</button>
         <button class="btn small act-export" title="Exporter en PNG" aria-label="Exporter en PNG">⬇</button>
-        ${c.builtin ? '' : '<button class="btn small act-rename" title="Renommer" aria-label="Renommer">✎</button><button class="btn small danger act-del" title="Supprimer" aria-label="Supprimer">🗑</button>'}
+        ${c.builtin ? '' : '<button class="btn small act-edit" title="Éditer pixel par pixel" aria-label="Éditer">✏️</button><button class="btn small act-rename" title="Renommer" aria-label="Renommer">✎</button><button class="btn small danger act-del" title="Supprimer" aria-label="Supprimer">🗑</button>'}
       </div>
       ${c.builtin ? '' : '<div class="res-row hidden"><span class="muted">Qualité</span><select class="act-res" title="Résolution de la cape — appliquée à l\'aperçu ET en jeu"></select></div>'}`;
     el.querySelector('.fav').addEventListener('click', () => toggleFav(c.id, !fav));
@@ -170,6 +170,8 @@ function renderCapeGrid() {
     el.querySelector('.act-dup').addEventListener('click', () => dupCape(c.id));
     el.querySelector('.act-export').addEventListener('click', () => exportCape(c.id, c.name));
     el.querySelector('.cat-chip').addEventListener('click', () => startCatEdit(el, c));
+    const ed = el.querySelector('.act-edit');
+    if (ed) ed.addEventListener('click', () => editCape(c.id));
     const rn = el.querySelector('.act-rename');
     if (rn) rn.addEventListener('click', () => startRename(el, c));
     const del = el.querySelector('.act-del');
@@ -929,16 +931,34 @@ function edRefreshSources() {
   }
   if ([...sel.options].some((o) => o.value === cur)) sel.value = cur;
 }
+// Cape de la bibliothèque en cours d'édition (pour « Mettre à jour »). null = brouillon.
+let edSourceId = null, edSourceName = '';
+function edUpdateSaveButtons() {
+  const btn = $('#ed-update'); if (!btn) return;
+  const cape = edSourceId ? capeCache.find((c) => c.id === edSourceId) : null;
+  if (cape && !cape.builtin) { btn.classList.remove('hidden'); btn.textContent = `💾 Mettre à jour « ${cape.name} »`; edSourceName = cape.name; }
+  else { btn.classList.add('hidden'); if (!cape || cape.builtin) edSourceId = null; } // intégrée/disparue -> pas d'update sur place
+}
 async function edLoadSource() {
   const v = $('#ed-source').value;
   edSnapshot();
-  if (v === '__blank') { edGrid.fill(null); ED_REGIONS.forEach((r) => edFillRegion(r, $('#ed-color').value)); }
+  if (v === '__blank') { edGrid.fill(null); ED_REGIONS.forEach((r) => edFillRegion(r, $('#ed-color').value)); edSourceId = null; }
   else {
     const url = await capeDataUrl(v);
     if (!url) { toast('Cape indisponible.', 'err'); edUndo.pop(); edUpdateButtons(); return; }
     await edLoadDataUrl(url);
+    edSourceId = v; // on édite cette cape -> « Mettre à jour » devient possible (si importée)
   }
+  edUpdateSaveButtons();
   edRender(); edSchedulePreview();
+}
+// Ouvre une cape de la bibliothèque dans l'onglet Édition, prête à être retouchée.
+async function editCape(id) {
+  const tab = [...tabEls].find((t) => t.dataset.tab === 'editor');
+  if (!tab) return;
+  activateTab(tab);                 // -> edActivate() rafraîchit les sources
+  const sel = $('#ed-source');
+  if (sel && [...sel.options].some((o) => o.value === id)) { sel.value = id; await edLoadSource(); }
 }
 
 function edInit() {
@@ -1030,7 +1050,7 @@ function edInit() {
   $('#ed-import').addEventListener('click', () => guard('#ed-import', async () => {
     const r = await window.cap.capes.pickImage();
     if (!r.ok) { if (!r.canceled) toast(r.error || 'Image invalide', 'err'); return; }
-    edSnapshot(); await edLoadDataUrl(r.dataUrl); edRender(); edSchedulePreview();
+    edSnapshot(); await edLoadDataUrl(r.dataUrl); edSourceId = null; edUpdateSaveButtons(); edRender(); edSchedulePreview();
     toast('Image chargée dans l’éditeur ✔', 'ok');
   }));
   $('#ed-save').addEventListener('click', () => guard('#ed-save', async () => {
@@ -1041,6 +1061,16 @@ function edInit() {
     if ($('#ed-use').checked && r.id) { await window.cap.capes.setActive(r.id); refreshStatus(); }
     $('#ed-msg').textContent = `Cape « ${name} » ajoutée à ta bibliothèque ✔${$('#ed-use').checked ? ' (activée)' : ''}`;
     toast('Cape enregistrée ✔', 'ok');
+    await loadCapes();
+  }));
+  $('#ed-update').addEventListener('click', () => guard('#ed-update', async () => {
+    if (!edSourceId) return;
+    if (edGrid.every((c) => !c)) return toast('La cape est vide.', 'err');
+    const r = await window.cap.capes.setImage(edSourceId, edExportUrl());
+    if (!r.ok) return toast(r.error || 'Mise à jour impossible', 'err');
+    $('#ed-msg').textContent = `Cape « ${edSourceName} » mise à jour ✔`;
+    toast('Cape mise à jour ✔', 'ok');
+    frontThumbCache.clear();
     await loadCapes();
   }));
   window.addEventListener('resize', () => {
