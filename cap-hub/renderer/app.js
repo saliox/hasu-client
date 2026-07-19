@@ -154,7 +154,7 @@ function renderCapeGrid() {
     el.className = 'cape' + (c.id === capeActive ? ' active' : '');
     el.innerHTML = `
       <button class="fav ${fav ? 'on' : ''}" title="Favori" aria-label="${fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}">${fav ? '★' : '☆'}</button>
-      <div class="thumb"></div>
+      <div class="thumb"><div class="thumb-meta hidden"></div></div>
       ${c.id === capeActive ? '<span class="badge">active</span>' : ''}
       <div class="name" title="${esc(c.name)}">${esc(c.name)}${c.builtin ? ' <span class="muted">· intégrée</span>' : ''}</div>
       <div class="catrow"><span class="cat-chip" title="Changer de dossier" role="button" tabindex="0" aria-label="Changer de dossier (${esc(catOf(c))})">🗂️ ${esc(catOf(c))}</span></div>
@@ -374,9 +374,45 @@ async function renderPreview(id, name) {
   $('#preview-label').textContent = name || '';
 }
 
+// Métadonnées visuelles d'une cape à partir de son image (résolution par frame,
+// nombre d'images pour les capes animées). Sans IPC : lit l'image déjà chargée.
+const capeMetaCache = new Map();
+function capeMeta(url) {
+  if (!url) return Promise.resolve(null);
+  if (capeMetaCache.has(url)) return Promise.resolve(capeMetaCache.get(url));
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth, h = img.naturalHeight;
+      if (!w || !h) { resolve(null); return; }
+      const optifine = (w % 46 === 0 && w % 64 !== 0);
+      const s = optifine ? w / 46 : w / 64;
+      const frameH = optifine ? 22 * s : 32 * s;
+      const frames = (frameH && h % frameH === 0) ? Math.round(h / frameH) : 1;
+      const meta = { w, h, s, frameH, frames, optifine };
+      capeMetaCache.set(url, meta);
+      resolve(meta);
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
 async function loadThumb(el, id) {
   const url = await capeDataUrl(id);
-  if (url) el.style.backgroundImage = `url(${await capeFrontThumb(url)})`;
+  if (!url) return;
+  el.style.backgroundImage = `url(${await capeFrontThumb(url)})`;
+  const meta = await capeMeta(url);
+  const box = el.querySelector('.thumb-meta');
+  if (!meta || !box) return;
+  const fh = Math.round(meta.frameH);
+  const badges = [`${meta.w}×${fh}`];
+  if (meta.frames > 1) badges.push(`🎞 ${meta.frames}`);
+  box.textContent = badges.join('  ·  ');
+  box.title = meta.frames > 1
+    ? `Cape animée — ${meta.frames} images de ${meta.w}×${fh}${meta.optifine ? ' (OptiFine)' : ''}`
+    : `Résolution ${meta.w}×${fh}${meta.optifine ? ' (OptiFine)' : ''}`;
+  box.classList.remove('hidden');
 }
 
 async function setActive(id) {
