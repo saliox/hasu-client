@@ -7,7 +7,7 @@
 // SÉCURITÉ — Cap Hub reste volontairement sur le SEUL canal OptiFine (HTTP clair) :
 // aucune autorité de certification, aucune interception TLS, aucun magasin de
 // confiance modifié. Voir README (« Pourquoi OptiFine seulement »).
-import { app, BrowserWindow, ipcMain, dialog, shell, Notification, safeStorage, Tray, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, Notification, safeStorage, Tray, Menu, clipboard, nativeImage } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
@@ -416,6 +416,20 @@ ipcMain.handle('capes:saveRender', async (_e, dataUrl, name) => {
   if (r.canceled || !r.filePath) return { ok: false, canceled: true };
   try { fs.writeFileSync(r.filePath, buf); return { ok: true, path: r.filePath }; }
   catch (e) { return { ok: false, error: e.message }; }
+});
+// Copie un rendu 3D (PNG data URL) dans le presse-papiers (partage direct : Discord…).
+ipcMain.handle('capes:copyRender', (_e, dataUrl) => {
+  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
+  if (!m) return { ok: false, error: 'Image invalide.' };
+  let buf;
+  try { buf = Buffer.from(m[1], 'base64'); } catch { return { ok: false, error: 'Décodage impossible.' }; }
+  if (buf.length > 12 * 1024 * 1024) return { ok: false, error: 'Image trop lourde (max 12 Mo).' };
+  try {
+    const img = nativeImage.createFromBuffer(buf);
+    if (img.isEmpty()) return { ok: false, error: 'Image illisible.' };
+    clipboard.writeImage(img);
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle('capes:publish', async () => {
   const s = getSettings();
