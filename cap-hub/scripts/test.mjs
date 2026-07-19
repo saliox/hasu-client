@@ -330,7 +330,7 @@ ok('détecte Forge 1.17+ (bootstraplauncher)', /Minecraft/.test(watch.classify({
 
 console.log('\n# Auto-update (URL d’installeur restreinte)');
 const up = await import(S('updater.js'));
-ok('isNewer compare correctement', up.isNewer('1.2.0', '1.1.9') && !up.isNewer('1.0.0', '1.0.0') && up.isNewer('0.10.0', '0.9.9'));
+ok('isNewer compare correctement', up.isNewer('1.2.0', '1.1.9') && !up.isNewer('1.0.0', '1.0.0') && up.isNewer('0.10.0', '0.9.9') && up.isNewer('0.12.10', '0.12.9') && !up.isNewer('0.12.9', '0.12.10'));
 ok('installeur autorisé : release de notre dépôt (https)', up.isAllowedInstallerUrl('https://github.com/saliox/hasu-client/releases/download/cap-hub-v0.9.3/Cap.Hub.Setup.0.9.3.exe'));
 ok('installeur refusé : autre hôte', !up.isAllowedInstallerUrl('https://evil.example/x.exe'));
 ok('installeur refusé : autre dépôt GitHub', !up.isAllowedInstallerUrl('https://github.com/evil/repo/releases/download/x/x.exe'));

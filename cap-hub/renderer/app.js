@@ -277,6 +277,15 @@ $('#btn-render').addEventListener('click', () => guard('#btn-render', async () =
   else if (!r.canceled) toast(r.error || 'Export impossible', 'err');
 }));
 
+// Copie le rendu 3D courant dans le presse-papiers (partage direct).
+$('#btn-render-copy').addEventListener('click', () => guard('#btn-render-copy', async () => {
+  const url = window.CapePreview && window.CapePreview.snapshot && window.CapePreview.snapshot();
+  if (!url) { toast('Active une cape pour copier le rendu.', 'err'); return; }
+  const r = await window.cap.capes.copyRender(url);
+  if (r.ok) toast('Rendu copié dans le presse-papiers ✔', 'ok');
+  else toast(r.error || 'Copie impossible', 'err');
+}));
+
 // Cache des data URL de capes (miniatures + aperçu) — évite un aller-retour IPC par
 // cape à chaque re-render (recherche, tri, favori…). Clé = id ; le contenu d'un id ne
 // change jamais (un renommage change l'id), donc le cache reste valide.
