@@ -12,7 +12,7 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 // import() dynamique : sur Windows un chemin absolu (D:\...) doit être une URL file://.
 const S = (f) => pathToFileURL(path.join(root, 'src', f)).href;
 
-const { initCapes, listCapes, importCape, importCapeBuffer, validateCape, readCape, resolveCape, renameCape, duplicateCape, deleteCape, readCapeOriginal, setCapeResolution, capeDims } = await import(S('capes.js'));
+const { initCapes, listCapes, importCape, importCapeBuffer, validateCape, readCape, resolveCape, renameCape, duplicateCape, deleteCape, readCapeOriginal, setCapeResolution, setCapeImage, capeDims } = await import(S('capes.js'));
 const { isPng, readPngSize, encodePNG, decodePNG, firstFrameIfAnimated, capeFrames } = await import(S('png.js'));
 const providers = await import(S('providers.js'));
 const proxy = await import(S('proxy.js'));
@@ -84,6 +84,15 @@ ok('capeDims : origine = servie au repos', (() => { const d = capeDims(hdc.id); 
 setCapeResolution(hdc.id, mkPng(64, 32));
 ok('capeDims : origine ≠ servie après réduction', (() => { const d = capeDims(hdc.id); return d && d.ow === 128 && d.oh === 64 && d.sw === 64 && d.sh === 32; })());
 setCapeResolution(hdc.id, null);
+// Édition sur place : remplace l'image d'une cape importée.
+const eImg = importCapeBuffer(mkPng(64, 32), 'A éditer');
+ok('setCapeImage remplace l’image', setCapeImage(eImg.id, mkPng(128, 64)).ok && readPngSize(readCape(eImg.id)).width === 128);
+ok('setCapeImage refuse une image non-cape', setCapeImage(eImg.id, Buffer.from('nope')).ok === false);
+ok('setCapeImage refuse une cape intégrée', setCapeImage(capes.find((c) => c.builtin).id, mkPng(64, 32)).ok === false);
+ok('setCapeImage efface la sauvegarde .orig', (() => {
+  const c2 = importCapeBuffer(mkPng(128, 64), 'B éditer'); setCapeResolution(c2.id, mkPng(64, 32)); // crée .orig (128×64)
+  setCapeImage(c2.id, mkPng(64, 32)); const d = capeDims(c2.id); return d && d.ow === 64 && d.oh === 32; // .orig effacé
+})());
 
 console.log('\n# Réglages (favoris / catégories)');
 const store = await import(S('store.js'));
