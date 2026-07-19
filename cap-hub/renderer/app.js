@@ -253,6 +253,20 @@ $('#toggle-body').addEventListener('click', () => {
   $('#toggle-body').textContent = showBody ? '🧍 Sur un perso' : '🏳️ Cape seule';
 });
 
+// Intensité du vent sur l'aperçu physique — cycle calme / doux / fort.
+const WIND_LEVELS = [
+  { v: 0, label: '🌬️ Vent : off' },
+  { v: 1, label: '🌬️ Vent : doux' },
+  { v: 2.5, label: '🌬️ Vent : fort' },
+];
+let windLevel = 1;
+$('#toggle-wind').addEventListener('click', () => {
+  windLevel = (windLevel + 1) % WIND_LEVELS.length;
+  const w = WIND_LEVELS[windLevel];
+  if (window.CapePreview) window.CapePreview.setWind(w.v);
+  $('#toggle-wind').textContent = w.label;
+});
+
 // Cache des data URL de capes (miniatures + aperçu) — évite un aller-retour IPC par
 // cape à chaque re-render (recherche, tri, favori…). Clé = id ; le contenu d'un id ne
 // change jamais (un renommage change l'id), donc le cache reste valide.

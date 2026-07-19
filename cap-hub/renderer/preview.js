@@ -21,6 +21,7 @@
   let skinImg = null, slim = false, skinTex = null, skinDirty = true;
   let capeImg = null, capeW = 0, capeH = 0, frames = 1, curFrame = 0, lastSwap = 0;
   let capeTex = null;
+  let windScale = 1;                                 // intensité du vent (0 = calme, 1 = doux, 2.5 = fort)
   let defaultSkin = null, defaultTex = null;
   let shadowTex = null, shadowBuf = null;
   let skinBuf = null, skinCount = 0, skinBufSlim = null, skinBufLegacy = false;
@@ -211,8 +212,9 @@
       // Intégration de Verlet + gravité + vent (doux) pour les particules libres (r>0).
       for (let r = 1; r < CH; r++) for (let c = 0; c < CW; c++) {
         const i = idx(r, c);
-        const wz = (Math.sin(t * 1.4 + r * 0.5) * 0.5 + 0.5) * 1.8 * (r / CH); // vent doux (arrière)
-        const wx = Math.sin(t * 1.9 + c * 0.6 + r * 0.25) * 1.1 * (r / CH);    // flottement latéral doux
+        const gust = 1 + 0.6 * Math.sin(t * 0.6) * windScale;                  // rafales lentes quand le vent forcit
+        const wz = (Math.sin(t * 1.4 + r * 0.5) * 0.5 + 0.5) * 1.8 * (r / CH) * windScale * gust; // vent (arrière)
+        const wx = Math.sin(t * 1.9 + c * 0.6 + r * 0.25) * 1.1 * (r / CH) * windScale;           // flottement latéral
         const ax = wx, ay = g, az = -wz;
         const nx = p[i] + (p[i] - pv[i]) * 0.985 + ax * h2;
         const ny = p[i + 1] + (p[i + 1] - pv[i + 1]) * 0.985 + ay * h2;
@@ -517,6 +519,7 @@
   }
 
   function setShowBody(b) { showBody = !!b; skinDirty = true; }
+  function setWind(v) { windScale = Math.max(0, +v || 0); }
 
-  window.CapePreview = { mount, setCape, setSkin, clear, frameCount, setShowBody };
+  window.CapePreview = { mount, setCape, setSkin, clear, frameCount, setShowBody, setWind };
 })();
