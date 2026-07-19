@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('cap', {
     preview: (id) => invoke('capes:preview', id), // -> data URL
     duplicate: (id) => invoke('capes:duplicate', id),
     export: (id) => invoke('capes:export', id),
+    saveRender: (dataUrl, name) => invoke('capes:saveRender', dataUrl, name), // enregistre un rendu 3D PNG
     publish: () => invoke('capes:publish'),
     dims: (id) => invoke('capes:dims', id),                        // -> { ow, oh, sw, sh } (léger)
     setImage: (id, dataUrl) => invoke('capes:setImage', id, dataUrl), // écrase l'image d'une cape (édition sur place)

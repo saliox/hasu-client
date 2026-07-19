@@ -400,6 +400,23 @@ ipcMain.handle('capes:export', async (_e, id) => {
   try { fs.writeFileSync(r.filePath, buf); return { ok: true, path: r.filePath }; }
   catch (e) { return { ok: false, error: e.message }; }
 });
+// Enregistre un rendu 3D de l'aperçu (PNG data URL) via une boîte de dialogue.
+ipcMain.handle('capes:saveRender', async (_e, dataUrl, name) => {
+  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
+  if (!m) return { ok: false, error: 'Image invalide.' };
+  let buf;
+  try { buf = Buffer.from(m[1], 'base64'); } catch { return { ok: false, error: 'Décodage impossible.' }; }
+  if (buf.length > 12 * 1024 * 1024) return { ok: false, error: 'Image trop lourde (max 12 Mo).' };
+  const base = String(name || 'cape').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40) || 'cape';
+  const r = await dialog.showSaveDialog(win, {
+    title: 'Exporter le rendu',
+    defaultPath: `${base} - rendu.png`,
+    filters: [{ name: 'PNG', extensions: ['png'] }],
+  });
+  if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+  try { fs.writeFileSync(r.filePath, buf); return { ok: true, path: r.filePath }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
 ipcMain.handle('capes:publish', async () => {
   const s = getSettings();
   if (!s.username) return { ok: false, error: 'Renseigne ton pseudo Minecraft (Réglages).' };

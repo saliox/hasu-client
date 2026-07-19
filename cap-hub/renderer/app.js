@@ -267,6 +267,16 @@ $('#toggle-wind').addEventListener('click', () => {
   $('#toggle-wind').textContent = w.label;
 });
 
+// Exporte l'aperçu 3D courant en image PNG (fond transparent, pleine résolution).
+$('#btn-render').addEventListener('click', () => guard('#btn-render', async () => {
+  const url = window.CapePreview && window.CapePreview.snapshot && window.CapePreview.snapshot();
+  if (!url) { toast('Active une cape pour exporter le rendu.', 'err'); return; }
+  const act = capeCache.find((c) => c.id === capeActive);
+  const r = await window.cap.capes.saveRender(url, act ? act.name : 'cape');
+  if (r.ok) toast('Rendu exporté ✔', 'ok');
+  else if (!r.canceled) toast(r.error || 'Export impossible', 'err');
+}));
+
 // Cache des data URL de capes (miniatures + aperçu) — évite un aller-retour IPC par
 // cape à chaque re-render (recherche, tri, favori…). Clé = id ; le contenu d'un id ne
 // change jamais (un renommage change l'id), donc le cache reste valide.

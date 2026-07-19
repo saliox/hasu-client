@@ -430,6 +430,13 @@
     }
     if (frames > 1 && ts - lastSwap > 100) { curFrame = (curFrame + 1) % frames; lastSwap = ts; }
 
+    drawFrame(dt);
+    raf = requestAnimationFrame(loop);
+  }
+
+  // Dessine une image (corps + cape) dans le back buffer. Extrait de loop() pour
+  // pouvoir aussi rendre à la demande (capture d'écran).
+  function drawFrame(dt) {
     ensureTextures();
 
     const W = canvas.width, H = canvas.height;
@@ -480,8 +487,24 @@
       gl.bindBuffer(gl.ARRAY_BUFFER, capeBuf); bindAttribs();
       gl.drawArrays(gl.TRIANGLES, 0, capeCount);
     }
+  }
 
-    raf = requestAnimationFrame(loop);
+  // Rend l'image courante et renvoie un PNG (fond transparent, pleine résolution SSAA).
+  function snapshot() {
+    if (!gl || (!capeImg && !skinImg)) return null;
+    drawFrame(0);                                        // (re)dessine dans le back buffer
+    const W = canvas.width, H = canvas.height;
+    const px = new Uint8Array(W * H * 4);
+    gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const img = c.createImageData(W, H);
+    for (let y = 0; y < H; y++) {                        // WebGL a l'origine en bas -> on retourne
+      const src = (H - 1 - y) * W * 4, dst = y * W * 4;
+      img.data.set(px.subarray(src, src + W * 4), dst);
+    }
+    c.putImageData(img, 0, 0);
+    return cv.toDataURL('image/png');
   }
 
   function start() { if (!raf && gl) { t0 = 0; lastTs = 0; raf = requestAnimationFrame(loop); } }
@@ -521,5 +544,5 @@
   function setShowBody(b) { showBody = !!b; skinDirty = true; }
   function setWind(v) { windScale = Math.max(0, +v || 0); }
 
-  window.CapePreview = { mount, setCape, setSkin, clear, frameCount, setShowBody, setWind };
+  window.CapePreview = { mount, setCape, setSkin, clear, frameCount, setShowBody, setWind, snapshot };
 })();
