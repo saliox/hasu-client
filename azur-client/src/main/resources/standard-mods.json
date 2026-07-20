@@ -136,6 +136,11 @@
 		"main": "hud.BossBarMod",
 		"category": "hud"
 	},
+	{
+		"id": "memory",
+		"main": "hud.MemoryMod",
+		"category": "hud"
+	},
 	// utility
 	{
 		"id": "replay",

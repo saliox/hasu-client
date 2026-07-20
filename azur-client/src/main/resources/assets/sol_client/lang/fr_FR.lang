@@ -506,3 +506,7 @@ sol_client.hex=Hex
 sol_client.rgb=RVB
 sol_client.alpha=Alpha
 sol_client.previous_colours=Utilisées récemment
+sol_client.mod.memory.name=Mémoire
+sol_client.mod.memory.description=Affiche la mémoire (RAM) utilisée par le jeu.
+sol_client.mod.memory.option.percentage=En pourcentage
+sol_client.mod.memory.option.showMax=Afficher le maximum
