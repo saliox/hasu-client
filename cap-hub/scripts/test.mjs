@@ -73,6 +73,15 @@ ok('vraie cape intégrée toujours protégée', deleteCape(capes.find((c) => c.b
 // Résolution / qualité de cape (réduction réversible via sauvegarde .orig)
 const hdc = importCapeBuffer(mkPng(128, 64), 'HD test');
 ok('importe une cape HD 128x64', hdc.ok);
+// listCapes expose les métadonnées légères (dimensions + frames) pour filtrer/trier.
+const animMeta = importCapeBuffer(mkPng(64, 96), 'Anim meta');
+{
+  const l = listCapes();
+  const hdMeta = l.find((c) => c.id === hdc.id);
+  const anMeta = l.find((c) => c.id === animMeta.id);
+  ok('listCapes expose dimensions HD (128x64)', hdMeta && hdMeta.w === 128 && hdMeta.h === 64 && hdMeta.frames === 1);
+  ok('listCapes expose le nb d\'images animées (3)', anMeta && anMeta.frames === 3);
+}
 ok('original = 128x64 avant réduction', (() => { const s = readPngSize(readCapeOriginal(hdc.id)); return s.width === 128 && s.height === 64; })());
 ok('réduit la résolution servie -> 64x32', setCapeResolution(hdc.id, mkPng(64, 32)).ok && (() => { const s = readPngSize(readCape(hdc.id)); return s.width === 64 && s.height === 32; })());
 ok('original conservé (128x64) après réduction', (() => { const s = readPngSize(readCapeOriginal(hdc.id)); return s.width === 128 && s.height === 64; })());

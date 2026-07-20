@@ -83,6 +83,7 @@ let capeCats = {};       // id -> catégorie (surcharge)
 let capeSearch = '';
 let capeSort = 'fav';
 let capeCatFilter = '';
+let capeKind = 'all'; // filtre : all | fav | anim | hd
 
 async function loadCapes() {
   // Changement structurel (import/création/suppression/renommage) : on invalide le
@@ -127,13 +128,24 @@ function updateCatFilter() {
   if (dl) dl.innerHTML = cats.map((c) => `<option value="${esc(c)}"></option>`).join('');
 }
 
+// Une cape est « HD » si sa largeur dépasse la planche standard 64px (128, 256… ou 46×N OptiFine).
+function isHdCape(c) { return (c.w || 0) > 64 || (c.w && c.w % 46 === 0 && c.w > 46); }
+function isAnimCape(c) { return (c.frames || 1) > 1; }
+function matchesKind(c) {
+  if (capeKind === 'fav') return capeFavs.has(c.id);
+  if (capeKind === 'anim') return isAnimCape(c);
+  if (capeKind === 'hd') return isHdCape(c);
+  return true;
+}
+
 function sortedFilteredCapes() {
   const q = capeSearch.trim().toLowerCase();
-  let list = capeCache.filter((c) => (!q || c.name.toLowerCase().includes(q)) && (!capeCatFilter || catOf(c) === capeCatFilter));
+  let list = capeCache.filter((c) => (!q || c.name.toLowerCase().includes(q)) && (!capeCatFilter || catOf(c) === capeCatFilter) && matchesKind(c));
   const byName = (a, b) => a.name.localeCompare(b.name);
   if (capeSort === 'name') list.sort(byName);
   else if (capeSort === 'type') list.sort((a, b) => (a.builtin - b.builtin) || byName(a, b));
   else if (capeSort === 'cat') list.sort((a, b) => catOf(a).localeCompare(catOf(b)) || byName(a, b));
+  else if (capeSort === 'res') list.sort((a, b) => ((b.w || 0) * (b.h || 0)) - ((a.w || 0) * (a.h || 0)) || byName(a, b)); // + de pixels d'abord
   else list.sort((a, b) => (capeFavs.has(b.id) - capeFavs.has(a.id)) || byName(a, b)); // favoris d'abord
   return list;
 }
@@ -244,6 +256,13 @@ function startCatEdit(card, c) {
 $('#cape-search').addEventListener('input', (e) => { capeSearch = e.target.value; renderCapeGrid(); });
 $('#cape-sort').addEventListener('change', (e) => { capeSort = e.target.value; renderCapeGrid(); });
 $('#cape-cat').addEventListener('change', (e) => { capeCatFilter = e.target.value; renderCapeGrid(); });
+document.querySelectorAll('.lib-filters .chip').forEach((chip) => {
+  chip.addEventListener('click', () => {
+    capeKind = chip.dataset.kind || 'all';
+    document.querySelectorAll('.lib-filters .chip').forEach((c) => c.classList.toggle('active', c === chip));
+    renderCapeGrid();
+  });
+});
 
 // Bascule « cape sur un personnage » / « cape seule » pour tous les aperçus 3D.
 let showBody = true;
