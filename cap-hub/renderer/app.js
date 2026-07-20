@@ -294,6 +294,11 @@ $('#toggle-wind').addEventListener('click', () => {
   window.cap.settings.save({ previewWind: windLevel }); // mémorise le choix
 });
 
+// Recadre l'aperçu 3D (angle/inclinaison/zoom par défaut).
+$('#btn-reset-view').addEventListener('click', () => {
+  if (window.CapePreview && window.CapePreview.resetView) window.CapePreview.resetView();
+});
+
 // Restaure les préférences d'aperçu mémorisées (perso/cape seule, vent).
 function applyPreviewPrefs(s) {
   showBody = s.previewBody !== false;
