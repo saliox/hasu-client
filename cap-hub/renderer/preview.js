@@ -374,12 +374,16 @@
     if (skinImg || capeImg) start();
   }
 
+  // Remet la caméra dans son cadrage par défaut (angle, inclinaison, zoom).
+  function resetView() { curAngle = 0; curTilt = 0.09; curZoom = 1; }
+
   // Glisser (souris/tactile) pour faire tourner le modèle ; relâcher reprend l'auto-rotation.
   function attachOrbit(el) {
     if (el.dataset.orbit) { el.style.cursor = 'grab'; return; }
     el.dataset.orbit = '1';
     el.style.cursor = 'grab'; el.style.touchAction = 'none';
-    if (!el.title) el.title = 'Glisse pour tourner';
+    if (!el.title) el.title = 'Glisse pour tourner/incliner · molette pour zoomer · double-clic pour recadrer';
+    el.addEventListener('dblclick', (e) => { e.preventDefault(); resetView(); }); // recadrage rapide
     el.addEventListener('pointerdown', (e) => {
       dragging = true; dragX0 = e.clientX; dragY0 = e.clientY; dragA0 = curAngle; dragT0 = curTilt;
       try { el.setPointerCapture(e.pointerId); } catch {}
@@ -587,5 +591,5 @@
   function setShowBody(b) { showBody = !!b; skinDirty = true; }
   function setWind(v) { windScale = Math.max(0, +v || 0); }
 
-  window.CapePreview = { mount, setCape, setSkin, clear, frameCount, setShowBody, setWind, snapshot, captureSpin };
+  window.CapePreview = { mount, setCape, setSkin, clear, frameCount, setShowBody, setWind, snapshot, captureSpin, resetView };
 })();
