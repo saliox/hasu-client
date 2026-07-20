@@ -247,10 +247,14 @@ $('#cape-cat').addEventListener('change', (e) => { capeCatFilter = e.target.valu
 
 // Bascule « cape sur un personnage » / « cape seule » pour tous les aperçus 3D.
 let showBody = true;
-$('#toggle-body').addEventListener('click', () => {
-  showBody = !showBody;
+function applyBodyToggle() {
   if (window.CapePreview) window.CapePreview.setShowBody(showBody);
   $('#toggle-body').textContent = showBody ? '🧍 Sur un perso' : '🏳️ Cape seule';
+}
+$('#toggle-body').addEventListener('click', () => {
+  showBody = !showBody;
+  applyBodyToggle();
+  window.cap.settings.save({ previewBody: showBody }); // mémorise le choix
 });
 
 // Intensité du vent sur l'aperçu physique — cycle calme / doux / fort.
@@ -260,12 +264,24 @@ const WIND_LEVELS = [
   { v: 2.5, label: '🌬️ Vent : fort' },
 ];
 let windLevel = 1;
-$('#toggle-wind').addEventListener('click', () => {
-  windLevel = (windLevel + 1) % WIND_LEVELS.length;
+function applyWindToggle() {
   const w = WIND_LEVELS[windLevel];
   if (window.CapePreview) window.CapePreview.setWind(w.v);
   $('#toggle-wind').textContent = w.label;
+}
+$('#toggle-wind').addEventListener('click', () => {
+  windLevel = (windLevel + 1) % WIND_LEVELS.length;
+  applyWindToggle();
+  window.cap.settings.save({ previewWind: windLevel }); // mémorise le choix
 });
+
+// Restaure les préférences d'aperçu mémorisées (perso/cape seule, vent).
+function applyPreviewPrefs(s) {
+  showBody = s.previewBody !== false;
+  windLevel = [0, 1, 2].includes(s.previewWind) ? s.previewWind : 1;
+  applyBodyToggle();
+  applyWindToggle();
+}
 
 // Exporte l'aperçu 3D courant en image PNG (fond transparent, pleine résolution).
 $('#btn-render').addEventListener('click', () => guard('#btn-render', async () => {
@@ -1532,6 +1548,7 @@ async function loadSettings() {
   $('#in-mc-clientid').value = s.mcClientId || '';
   $('#token-state').textContent = s.hasToken ? '· enregistré' : '· non défini';
   if (!r.encryption) $('#token-state').textContent += ' (⚠ chiffrement indisponible)';
+  applyPreviewPrefs(s);
 }
 
 $('#btn-save').addEventListener('click', async () => {
