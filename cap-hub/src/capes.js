@@ -7,7 +7,7 @@
 // - disposition OptiFine 46x22 et ses multiples (92x44…)
 import fs from 'node:fs';
 import path from 'node:path';
-import { encodePNG, isPng, readPngSize } from './png.js';
+import { encodePNG, isPng, readPngSize, capeFrames } from './png.js';
 
 let DIR = null;          // userData/capes
 let BUILTIN_DIR = null;  // userData/capes/builtin
@@ -173,7 +173,19 @@ export function listCapes() {
     try {
       return fs.readdirSync(dir)
         .filter((f) => f.toLowerCase().endsWith('.png'))
-        .map((f) => ({ id: builtin ? `builtin/${f}` : f, name: f.replace(/\.png$/i, ''), builtin }));
+        .map((f) => {
+          const cape = { id: builtin ? `builtin/${f}` : f, name: f.replace(/\.png$/i, ''), builtin };
+          // Métadonnées légères : dimensions + nb d'images animées, lues dans le seul
+          // en-tête PNG (24 octets) — pas de lecture du fichier entier (capes HD/4K lourdes).
+          try {
+            const fd = fs.openSync(path.join(dir, f), 'r');
+            const head = Buffer.alloc(33); // > 24 requis par isPng ; IHDR (dim.) tient dans les 24 premiers
+            try { fs.readSync(fd, head, 0, 33, 0); } finally { fs.closeSync(fd); }
+            const size = readPngSize(head);
+            if (size) { cape.w = size.width; cape.h = size.height; cape.frames = capeFrames(size.width, size.height); }
+          } catch {}
+          return cape;
+        });
     } catch { return []; }
   };
   return [...read(DIR, false), ...read(BUILTIN_DIR, true)];

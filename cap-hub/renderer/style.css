@@ -262,6 +262,13 @@ code { background: var(--bg-3); padding: 1px 6px; border-radius: 6px; font-size:
   background: var(--bg-2); border: 1px solid var(--line); color: var(--txt);
   padding: 7px 10px; border-radius: 10px; font-size: 13px;
 }
+.lib-filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 2px 0 6px; }
+.lib-filters .chip {
+  font-size: 12px; padding: 5px 12px; border-radius: 999px; cursor: pointer;
+  background: var(--bg-2); border: 1px solid var(--line); color: var(--muted);
+}
+.lib-filters .chip:hover { color: var(--txt); border-color: var(--accent); }
+.lib-filters .chip.active { color: var(--txt); border-color: var(--accent); background: var(--bg-3); }
 .rename-input {
   width: 100%; background: var(--bg-3); border: 1px solid var(--accent); color: var(--txt);
   padding: 4px 8px; border-radius: 8px; font-size: 13px; font-weight: 600;
