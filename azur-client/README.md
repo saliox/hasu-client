@@ -35,7 +35,7 @@ Changements par rapport à Sol Client :
   l'auteur d'origine est mort ; l'option `broadcastOnline` est maintenant **opt-in**
   et le mod est inerte sans backend configuré
   (`-Dio.github.solclient.client.api=<url>` pour en brancher un).
-- 🔄 **Vérification de mise à jour** pointée sur les releases de ce dépôt.
+- 🔄 **Vérification de mise à jour** via le manifeste `release.json` du dépôt (releases `azur-client-v*` de hasu-client).
 - 🧾 Crédits et licence GPL-3.0 conservés (© TheKodeToad and contributors).
 
 ## 🚀 Installer / builder

@@ -2,7 +2,7 @@
 
 Azur Client se joue en **Minecraft 1.8.9**. Trois façons de l'installer, de la plus
 simple à la plus manuelle. Dans tous les cas, récupère d'abord le dernier
-[**release**](https://github.com/saliox/azur-client/releases/latest) :
+[**release** `azur-client-v*`](https://github.com/saliox/hasu-client/releases) :
 
 | Fichier | Pour quel launcher |
 |---|---|
@@ -29,8 +29,8 @@ simple à la plus manuelle. Dans tous les cas, récupère d'abord le dernier
 ## 🛠️ Depuis les sources
 
 ```bash
-git clone https://github.com/saliox/azur-client.git
-cd azur-client
+git clone https://github.com/saliox/hasu-client.git
+cd hasu-client/azur-client
 ./gradlew dist        # JDK 17 requis — sorties dans build/dist/
 ```
 
@@ -44,4 +44,4 @@ cd azur-client
 - **En jeu** : appuie sur **Échap → Mods** (ou la touche configurée) pour ouvrir
   l'interface d'Azur Client.
 
-Un souci ? [Ouvre une issue](https://github.com/saliox/azur-client/issues/new/choose).
+Un souci ? [Ouvre une issue](https://github.com/saliox/hasu-client/issues/new/choose).

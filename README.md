@@ -14,8 +14,10 @@ Le produit se compose de **deux parties** :
 > **Version actuelle : 1.14.0**
 
 > 📂 **Code source dans ce dépôt** : le launcher nouvelle génération vit dans
-> [`launcher/`](launcher/) (Electron, open source, releases `launcher-v*`) et
-> l'app de capes dans [`cap-hub/`](cap-hub/) (releases `cap-hub-v*`).
+> [`launcher/`](launcher/) (Electron, open source, releases `launcher-v*`),
+> l'app de capes dans [`cap-hub/`](cap-hub/) (releases `cap-hub-v*`), et
+> **[Azur Client](azur-client/)** — client Minecraft 1.8.9 complet (fork audité
+> de Sol Client, GPL-3.0, releases `azur-client-v*`) — dans [`azur-client/`](azur-client/).
 
 ---
 

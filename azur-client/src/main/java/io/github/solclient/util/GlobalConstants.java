@@ -42,8 +42,10 @@ public class GlobalConstants {
 	// constants
 	public final String KEY_TRANSLATION_KEY = "sol_client.key";
 	public final String KEY_CATEGORY = KEY_TRANSLATION_KEY + ".category";
+	// Manifeste de version (champ "name" = SemVer de la dernière release publiée),
+	// maintenu par le workflow de release — Azur Client vit dans le dépôt hasu-client.
 	public final URL RELEASE_API = Utils.sneakyParse(System.getProperty("io.github.solclient.client.release_api",
-			"https://api.github.com/repos/saliox/azur-client/releases/latest"));
+			"https://raw.githubusercontent.com/saliox/hasu-client/main/azur-client/release.json"));
 	// Application Discord par défaut : héritée de Sol Client (le nom affiché dans la
 	// Rich Presence vient de cette app). TODO : créer une app « Azur Client » sur
 	// discord.com/developers et remplacer l'ID (ou le fournir via la propriété ci-dessous

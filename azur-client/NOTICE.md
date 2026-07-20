@@ -13,7 +13,7 @@ Modifications apportées par Azur Client (© 2026 saliox), à partir du commit
 - Désactivation par défaut du backend « amis en ligne » (l'endpoint d'origine
   n'existe plus) ; backend configurable par propriété système ; option
   `broadcastOnline` désormais désactivée par défaut.
-- Vérification de mise à jour pointée sur `saliox/azur-client`.
+- Vérification de mise à jour pointée sur le manifeste `azur-client/release.json` du dépôt `saliox/hasu-client` (foyer du projet).
 - Identifiants d'applications tierces (Discord Rich Presence, imgur) rendus
   configurables par propriétés système.
 - Traduction française complétée (parité avec l'anglais).
