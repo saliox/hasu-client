@@ -135,9 +135,15 @@ public class CoreMod extends StandardMod {
 
 		if (remindMeToUpdate) {
 			Thread thread = new Thread(() -> {
-				try (InputStream in = GlobalConstants.RELEASE_API.openStream()) {
-					JsonObject object = new JsonParser().parse(new InputStreamReader(in)).getAsJsonObject();
-					latestRelease = SemVer.parseOrNull(object.get("name").getAsString());
+				try {
+					// timeouts : un manifeste injoignable ne doit pas bloquer le thread
+					java.net.URLConnection connection = GlobalConstants.RELEASE_API.openConnection();
+					connection.setConnectTimeout(10000);
+					connection.setReadTimeout(10000);
+					try (InputStream in = connection.getInputStream()) {
+						JsonObject object = new JsonParser().parse(new InputStreamReader(in)).getAsJsonObject();
+						latestRelease = SemVer.parseOrNull(object.get("name").getAsString());
+					}
 				} catch (Throwable error) {
 					logger.warn("Could not check for updates", error);
 				}
