@@ -1,0 +1,44 @@
+name: 🐛 Rapport de bug
+description: Un crash, un HUD cassé, un souci visuel ou de performance
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Ce qui se passe
+      description: Décris le problème, et ce que tu attendais à la place.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Étapes pour reproduire
+      placeholder: |
+        1. Lancer …
+        2. Ouvrir …
+        3. Le bug apparaît
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version d'Azur Client
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: launcher
+    attributes:
+      label: Launcher utilisé
+      options:
+        - Prism Launcher / MultiMC
+        - Launcher Minecraft officiel
+        - Autre (précise dans la description)
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / crash report
+      description: Colle le contenu de `logs/latest.log` ou du crash report (dans un bloc de code).
+      render: text

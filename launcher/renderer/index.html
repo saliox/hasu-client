@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <!-- CSP stricte : aucune ressource distante, aucun eval. Tout est local + data:. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self';" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hasu Launcher</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-theme="nuit">
+  <!-- Barre latérale façon Lunar : logo + navigation + compte en bas -->
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <div>
+        <div class="brand-name">HASU</div>
+        <div class="ver" id="ver"></div>
+      </div>
+    </div>
+    <nav class="nav" role="tablist" aria-label="Sections">
+      <button class="nav-item active" data-tab="play" role="tab" aria-selected="true">▶ Jouer</button>
+      <button class="nav-item" data-tab="account" role="tab" aria-selected="false">👤 Compte</button>
+      <button class="nav-item" data-tab="console" role="tab" aria-selected="false">🖥️ Console</button>
+      <button class="nav-item" data-tab="settings" role="tab" aria-selected="false">⚙️ Réglages</button>
+      <button class="nav-item" data-tab="about" role="tab" aria-selected="false">ℹ️ À propos</button>
+    </nav>
+    <div class="account-chip" id="account-chip" title="Compte actif">
+      <span class="dot off" id="account-dot"></span>
+      <span id="account-name">Non connecté</span>
+    </div>
+  </aside>
+
+  <main>
+    <!-- JOUER -->
+    <section id="tab-play" class="panel active" role="tabpanel">
+      <div class="hero">
+        <div class="hero-inner">
+          <h1>Hasu <span class="accent">Client</span></h1>
+          <p class="tagline">Minecraft 1.8.9 + Forge — léger, légitime, prêt en un clic.</p>
+
+          <div class="play-row">
+            <button id="btn-play" class="btn-play">JOUER</button>
+            <div class="play-side">
+              <label class="field-label" for="sel-version">Version</label>
+              <select id="sel-version"></select>
+              <button id="btn-offline" class="btn ghost small" title="Lancer sans compte (solo uniquement)">Jouer en hors-ligne</button>
+            </div>
+          </div>
+
+          <div id="launch-status" class="launch-status hidden">
+            <div class="stage-row">
+              <span id="stage-text">Préparation…</span>
+              <button id="btn-stop" class="btn danger small">Arrêter</button>
+            </div>
+            <div class="bar"><div id="bar-fill" class="bar-fill"></div></div>
+            <div id="progress-detail" class="muted small-text"></div>
+          </div>
+
+          <div id="update-banner" class="update-banner hidden">
+            <span id="update-text"></span>
+            <button id="btn-update" class="btn small">Mettre à jour</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="cards">
+        <div class="card"><h3>🎮 Client en jeu</h3><p>HUDs, ClickGUI, fullbright, toggle-sprint — 100 % fair-play, dans l'esprit de Lunar Client.</p></div>
+        <div class="card"><h3>🔐 Compte Microsoft</h3><p>Connexion par le flux officiel : tes identifiants ne passent jamais par nous.</p></div>
+        <div class="card"><h3>☕ Java intégré</h3><p>Le JRE officiel Mojang est téléchargé et vérifié automatiquement — rien à installer.</p></div>
+      </div>
+    </section>
+
+    <!-- COMPTE -->
+    <section id="tab-account" class="panel" role="tabpanel">
+      <h2>Compte Minecraft</h2>
+      <div class="card">
+        <div id="account-off">
+          <p>Connecte ton compte <b>Microsoft</b> par le flux officiel (device code) : un code à saisir sur <b>microsoft.com/link</b>, jamais de mot de passe dans le launcher.</p>
+          <button id="btn-login" class="btn">Se connecter avec Microsoft</button>
+          <div id="login-flow" class="login-flow hidden">
+            <p>Va sur <a href="#" id="login-url" class="link"></a> et saisis le code :</p>
+            <div class="user-code" id="login-code"></div>
+            <p class="muted">En attente de validation… <button id="btn-login-cancel" class="btn ghost small">Annuler</button></p>
+          </div>
+          <p id="login-error" class="error hidden"></p>
+        </div>
+        <div id="account-on" class="hidden">
+          <p>Connecté en tant que <b id="account-username"></b></p>
+          <p class="muted small-text" id="account-uuid"></p>
+          <button id="btn-logout" class="btn ghost">Se déconnecter</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Mode hors-ligne</h3>
+        <p class="muted">Sans compte (ou en cas de panne Microsoft), joue en solo avec un pseudo libre.</p>
+        <label class="field-label" for="in-offline-name">Pseudo hors-ligne</label>
+        <input id="in-offline-name" maxlength="16" placeholder="Joueur" spellcheck="false" />
+      </div>
+    </section>
+
+    <!-- CONSOLE -->
+    <section id="tab-console" class="panel" role="tabpanel">
+      <div class="row between">
+        <h2>Console de jeu</h2>
+        <button id="btn-clear-log" class="btn ghost small">Vider</button>
+      </div>
+      <pre id="console" class="console" aria-live="polite"></pre>
+    </section>
+
+    <!-- RÉGLAGES -->
+    <section id="tab-settings" class="panel" role="tabpanel">
+      <h2>Réglages</h2>
+      <div class="card">
+        <h3>Jeu</h3>
+        <label class="field-label" for="in-ram">Mémoire allouée : <b id="ram-label">2048 Mo</b></label>
+        <input id="in-ram" type="range" min="1024" max="8192" step="256" value="2048" />
+        <label class="check"><input id="in-forge" type="checkbox" checked /> Lancer avec <b>Forge</b> (client Hasu) — 1.8.9 uniquement</label>
+        <label class="check"><input id="in-keepopen" type="checkbox" checked /> Garder le launcher ouvert pendant le jeu</label>
+      </div>
+      <div class="card">
+        <h3>Dossier du jeu</h3>
+        <p class="muted small-text">Isolé de ton <code>.minecraft</code> officiel — Hasu ne touche jamais à ton installation vanilla.</p>
+        <div class="row">
+          <code id="gamedir-path" class="path"></code>
+        </div>
+        <div class="row">
+          <button id="btn-gamedir" class="btn ghost small">Changer…</button>
+          <button id="btn-gamedir-open" class="btn ghost small">Ouvrir le dossier</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Compte Microsoft (avancé)</h3>
+        <p class="muted small-text">ID d'application Azure (public client, scope XboxLive.signin, approuvé Minecraft) — le même que Cap Hub.</p>
+        <label class="field-label" for="in-clientid">Azure Client ID</label>
+        <input id="in-clientid" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" spellcheck="false" />
+      </div>
+      <div class="card">
+        <h3>Apparence</h3>
+        <label class="field-label" for="sel-theme">Thème</label>
+        <select id="sel-theme">
+          <option value="nuit">Nuit</option>
+          <option value="clair">Clair</option>
+          <option value="cyber">Cyber</option>
+          <option value="sang">Sang</option>
+          <option value="ocean">Océan</option>
+          <option value="foret">Forêt</option>
+        </select>
+      </div>
+    </section>
+
+    <!-- À PROPOS -->
+    <section id="tab-about" class="panel" role="tabpanel">
+      <h2>À propos</h2>
+      <div class="card">
+        <p><b>Hasu Launcher</b> <span id="about-version"></span> — un launcher Minecraft dans l'esprit de <b>Lunar Client</b> : confort, lisibilité, performances. <b>Sans aucune triche.</b></p>
+        <p class="muted">Auto-update : chaque nouvelle version est vérifiée par empreinte SHA-256 avant installation, et ne peut venir que des releases GitHub du dépôt.</p>
+        <div class="row">
+          <button id="btn-check-update" class="btn ghost small">Vérifier les mises à jour</button>
+          <span id="update-status" class="muted small-text"></span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Fair-play par conception</h3>
+        <p class="muted">Uniquement du visuel, du confort et de la performance : HUDs, ClickGUI, fullbright, toggle-sprint, FOV. Rien n'automatise le combat ou les déplacements — pour la même raison que Lunar et Badlion sont autorisés sur les grands serveurs.</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

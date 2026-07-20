@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💡 Idée / suggestion
+    url: https://github.com/saliox/hasu-client/discussions
+    about: Propose une fonctionnalité ou une amélioration (dans l'esprit fair-play du client — pas de triche).

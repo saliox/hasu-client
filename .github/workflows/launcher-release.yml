@@ -1,0 +1,72 @@
+# Build & publication du Hasu Launcher (launcher/) SANS PC Windows : ce workflow
+# tourne sur un runner windows-latest, construit l'installeur NSIS + la version
+# portable via electron-builder, publie la Release GitHub (tag launcher-v<version>)
+# et met à jour launcher/version.json pour armer l'auto-update.
+#
+# Déclenchement MANUEL uniquement (onglet Actions -> "Hasu Launcher — build & release"
+# -> Run workflow). Isolé : n'affecte jamais les releases de Cap Hub (tags cap-hub-v*).
+name: Hasu Launcher — build & release
+
+on:
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: "Notes de version (facultatif)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: launcher-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: launcher
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Installer les dépendances
+        run: npm install --no-audit --no-fund
+
+      - name: (Re)générer les icônes
+        run: npm run icon
+
+      - name: Tests
+        run: npm test
+
+      - name: Construire l'installeur (NSIS + portable)
+        run: npm run dist
+
+      - name: Publier la Release + mettre à jour version.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/publish-update.mjs "${{ github.event.inputs.notes }}"
+
+      - name: Publier l'installeur comme artefact du workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: launcher-installer
+          path: launcher/dist/*.exe
+          if-no-files-found: error
+
+      - name: Recommiter version.json (auto-update)
+        working-directory: .
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add launcher/version.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore(launcher): update version.json for release [skip ci]'
+            git push origin HEAD:${{ github.ref_name }}
+          fi

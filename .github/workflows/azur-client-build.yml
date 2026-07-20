@@ -1,0 +1,101 @@
+# Build & release d'Azur Client (azur-client/).
+#
+# - À chaque push touchant azur-client/ : build de validation + artefacts.
+# - Onglet Actions -> "Azur Client — build & release" -> Run workflow avec
+#   release=true : publie en plus la release GitHub azur-client-v<version>
+#   (version lue dans azur-client/version.txt, packs Prism/Mojang + wrapper jar)
+#   et met à jour azur-client/release.json (manifeste de l'auto-notification en jeu).
+#
+# Isolé des releases Cap Hub (cap-hub-v*) et launcher (launcher-v*).
+name: Azur Client — build & release
+
+on:
+  push:
+    paths:
+      - "azur-client/**"
+      - ".github/workflows/azur-client-build.yml"
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Publier une release azur-client-v<version> ?"
+        type: boolean
+        required: false
+        default: false
+      notes:
+        description: "Notes de version (facultatif)"
+        required: false
+        default: ""
+
+concurrency:
+  group: azur-client-build-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: azur-client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+          cache-dependency-path: |
+            azur-client/**/*.gradle*
+            azur-client/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Build (dist)
+        run: ./gradlew --no-daemon dist
+
+      - name: Upload wrapper jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: azur-client-wrapper
+          path: azur-client/build/libs/*.jar
+
+      - name: Upload dist (packs launcher)
+        uses: actions/upload-artifact@v4
+        with:
+          name: azur-client-dist
+          path: azur-client/build/dist/*
+
+      - name: Version
+        id: version
+        run: echo "version=$(head -n1 version.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Créer la release GitHub
+        if: github.event_name == 'workflow_dispatch' && inputs.release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES: ${{ github.event.inputs.notes }}
+        run: |
+          tag="azur-client-v${{ steps.version.outputs.version }}"
+          title="Azur Client ${{ steps.version.outputs.version }}"
+          notes="${NOTES:-$title}"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" build/dist/* build/libs/*.jar --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$tag" build/dist/* build/libs/*.jar \
+              --repo "$GITHUB_REPOSITORY" --title "$title" --notes "$notes"
+          fi
+
+      - name: Armer l'auto-notification (release.json)
+        if: github.event_name == 'workflow_dispatch' && inputs.release
+        run: |
+          printf '{\n  "name": "%s"\n}\n' "${{ steps.version.outputs.version }}" > release.json
+          cd ..
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add azur-client/release.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore(azur-client): update release.json for release [skip ci]'
+            git push origin HEAD:${{ github.ref_name }}
+          fi

@@ -1,0 +1,6 @@
+{
+  "version": "2.0.0",
+  "url": "",
+  "sha256": "",
+  "notes": "Nouvelle génération du Hasu Launcher : code source ouvert dans launcher/, connexion Microsoft (device code), Minecraft 1.8.9 + Forge en un clic, JRE Mojang intégré, console en direct, auto-update signé SHA-256."
+}
