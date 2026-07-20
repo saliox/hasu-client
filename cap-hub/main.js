@@ -417,6 +417,23 @@ ipcMain.handle('capes:saveRender', async (_e, dataUrl, name) => {
   try { fs.writeFileSync(r.filePath, buf); return { ok: true, path: r.filePath }; }
   catch (e) { return { ok: false, error: e.message }; }
 });
+// Enregistre un GIF animé de l'aperçu (data URL image/gif) via une boîte de dialogue.
+ipcMain.handle('capes:saveGif', async (_e, dataUrl, name) => {
+  const m = /^data:image\/gif;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
+  if (!m) return { ok: false, error: 'GIF invalide.' };
+  let buf;
+  try { buf = Buffer.from(m[1], 'base64'); } catch { return { ok: false, error: 'Décodage impossible.' }; }
+  if (buf.length > 24 * 1024 * 1024) return { ok: false, error: 'GIF trop lourd (max 24 Mo).' };
+  const base = String(name || 'cape').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40) || 'cape';
+  const r = await dialog.showSaveDialog(win, {
+    title: 'Exporter le GIF animé',
+    defaultPath: `${base} - anime.gif`,
+    filters: [{ name: 'GIF', extensions: ['gif'] }],
+  });
+  if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+  try { fs.writeFileSync(r.filePath, buf); return { ok: true, path: r.filePath }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
 // Copie un rendu 3D (PNG data URL) dans le presse-papiers (partage direct : Discord…).
 ipcMain.handle('capes:copyRender', (_e, dataUrl) => {
   const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));

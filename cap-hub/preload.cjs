@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('cap', {
     export: (id) => invoke('capes:export', id),
     saveRender: (dataUrl, name) => invoke('capes:saveRender', dataUrl, name), // enregistre un rendu 3D PNG
     copyRender: (dataUrl) => invoke('capes:copyRender', dataUrl),              // copie le rendu dans le presse-papiers
+    saveGif: (dataUrl, name) => invoke('capes:saveGif', dataUrl, name),        // enregistre un GIF animé
     publish: () => invoke('capes:publish'),
     dims: (id) => invoke('capes:dims', id),                        // -> { ow, oh, sw, sh } (léger)
     setImage: (id, dataUrl) => invoke('capes:setImage', id, dataUrl), // écrase l'image d'une cape (édition sur place)
