@@ -107,6 +107,10 @@ ok('écriture atomique : sauvegarde .bak après ré-écriture', fs.existsSync(pa
 ok('closeToTray défaut oui / launchAtStartup défaut non', store.getSettings().closeToTray === true && store.getSettings().launchAtStartup === false);
 const trayCfg = store.saveSettings({ closeToTray: false, launchAtStartup: true });
 ok('closeToTray / launchAtStartup persistés', trayCfg.closeToTray === false && trayCfg.launchAtStartup === true);
+ok('préférences aperçu : défauts (perso + vent doux)', store.getSettings().previewBody === true && store.getSettings().previewWind === 1);
+const prefCfg = store.saveSettings({ previewBody: false, previewWind: 2 });
+ok('préférences aperçu persistées (cape seule + vent fort)', prefCfg.previewBody === false && prefCfg.previewWind === 2);
+ok('previewWind hors bornes ignoré', store.saveSettings({ previewWind: 9 }).previewWind === 2);
 
 console.log('\n# Fournisseur OptiFine (seul canal)');
 ok('un seul fournisseur : optifine', providers.PROVIDERS.length === 1 && providers.PROVIDERS[0].id === 'optifine');

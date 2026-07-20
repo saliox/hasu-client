@@ -54,6 +54,9 @@ export function getSettings() {
     // (tokens) est stockée à part, chiffrée (voir setMcSession/getMcSession).
     mcClientId: typeof s.mcClientId === 'string' ? s.mcClientId : '',
     hasMcSession: !!s.mcSessionEnc,
+    // Préférences d'aperçu 3D (mémorisées entre les sessions).
+    previewBody: s.previewBody !== false,                                    // perso (défaut) vs cape seule
+    previewWind: [0, 1, 2].includes(s.previewWind) ? s.previewWind : 1,      // 0 off / 1 doux / 2 fort
   };
 }
 
@@ -65,6 +68,8 @@ export function saveSettings(patch) {
   for (const k of ['autoApply', 'autoProxy', 'launchAtStartup', 'closeToTray']) {
     if (typeof patch[k] === 'boolean') s[k] = patch[k];
   }
+  if (typeof patch.previewBody === 'boolean') s.previewBody = patch.previewBody;
+  if ([0, 1, 2].includes(patch.previewWind)) s.previewWind = patch.previewWind;
   if (Array.isArray(patch.favorites)) {
     s.favorites = [...new Set(patch.favorites.filter((x) => typeof x === 'string'))].slice(0, 500);
   }
