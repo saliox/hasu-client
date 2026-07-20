@@ -149,7 +149,10 @@ code { background: var(--bg-3); padding: 1px 6px; border-radius: 6px; font-size:
 }
 #cape-preview { border-radius: 10px; image-rendering: pixelated; }
 #preview-label { font-size: 12px; }
-.preview-toggles { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.preview-toggles { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; align-items: center; }
+.preview-toggles .toggle-group { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.preview-toggles .toggle-sep { width: 1px; align-self: stretch; min-height: 20px; background: var(--line); opacity: .8; }
+.btn.small:disabled { opacity: .42; cursor: default; }
 .preview-hint { max-width: 340px; }
 .preview-hint p { margin: 6px 0; }
 

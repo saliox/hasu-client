@@ -395,6 +395,7 @@ const previewState = { id: null, canvas: null };
 async function renderPreview(id, name) {
   if (!window.CapePreview) return;
   mountPreview('#cape-preview');
+  updateShareButtons(!!id);
   if (previewState.id === id && previewState.canvas === '#cape-preview') {
     $('#preview-label').textContent = id ? (name || '') : 'Aucune cape active';
     return; // déjà affichée sur ce canvas -> rien à refaire
@@ -405,6 +406,12 @@ async function renderPreview(id, name) {
   if (!url) { window.CapePreview.clear(); return; }
   window.CapePreview.setCape(url);
   $('#preview-label').textContent = name || '';
+}
+// Active/désactive les boutons de partage du rendu selon qu'une cape est affichée.
+function updateShareButtons(on) {
+  for (const sel of ['#btn-render', '#btn-render-copy']) {
+    const b = $(sel); if (b) b.disabled = !on;
+  }
 }
 
 // Métadonnées visuelles d'une cape à partir de son image (résolution par frame,

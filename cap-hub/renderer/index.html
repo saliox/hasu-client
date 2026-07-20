@@ -69,10 +69,15 @@
           <canvas id="cape-preview" width="260" height="320"></canvas>
           <div id="preview-label" class="muted">Aucune cape active</div>
           <div class="preview-toggles">
-            <button id="toggle-body" class="btn small" title="Voir la cape portée sur un personnage, ou la cape seule">🧍 Sur un perso</button>
-            <button id="toggle-wind" class="btn small" title="Intensité du vent sur l'aperçu physique de la cape">🌬️ Vent : doux</button>
-            <button id="btn-render" class="btn small" title="Exporter l'aperçu 3D en image PNG (fond transparent)">📸 Exporter le rendu</button>
-            <button id="btn-render-copy" class="btn small" title="Copier le rendu 3D dans le presse-papiers (à coller dans Discord, un message…)">📋 Copier le rendu</button>
+            <div class="toggle-group" role="group" aria-label="Affichage de l'aperçu">
+              <button id="toggle-body" class="btn small" title="Voir la cape portée sur un personnage, ou la cape seule">🧍 Sur un perso</button>
+              <button id="toggle-wind" class="btn small" title="Intensité du vent sur l'aperçu physique de la cape">🌬️ Vent : doux</button>
+            </div>
+            <span class="toggle-sep" aria-hidden="true"></span>
+            <div class="toggle-group" role="group" aria-label="Partager le rendu">
+              <button id="btn-render" class="btn small" title="Exporter l'aperçu 3D en image PNG (fond transparent)" disabled>📸 Exporter</button>
+              <button id="btn-render-copy" class="btn small" title="Copier le rendu 3D dans le presse-papiers (à coller dans Discord, un message…)" disabled>📋 Copier</button>
+            </div>
           </div>
         </div>
         <div class="preview-hint muted">
