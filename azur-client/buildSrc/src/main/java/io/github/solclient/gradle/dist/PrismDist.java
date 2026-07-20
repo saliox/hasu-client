@@ -65,6 +65,13 @@ public final class PrismDist {
 								"MMC-filename", "azur-client-wrapper.jar"
 							)
 						),
+						// Réglages G1 éprouvés en 1.8.9 : limite les à-coups de GC (additifs,
+						// n'écrasent pas les réglages Java globaux du joueur).
+						"+jvmArgs", arr(
+							"-XX:+UseG1GC", "-XX:+UnlockExperimentalVMOptions",
+							"-XX:G1NewSizePercent=20", "-XX:G1ReservePercent=20",
+							"-XX:MaxGCPauseMillis=50", "-XX:G1HeapRegionSize=32M"
+						),
 						"mainClass", "io.github.solclient.wrapper.Launcher"
 					),
 			writer);
@@ -86,7 +93,19 @@ public final class PrismDist {
 			out.putNextEntry(new ZipEntry("instance.cfg"));
 			writer.write("InstanceType=OneSix\n");
 			writer.write("name=Azur Client\n");
+			writer.write("iconKey=azur\n");
 			writer.flush();
+
+			// Icône d'instance : le badge Azur, lu directement dans le jar du wrapper.
+			try (java.util.zip.ZipFile wrapperZip = new java.util.zip.ZipFile(input.toFile())) {
+				java.util.zip.ZipEntry icon = wrapperZip.getEntry("assets/sol_client/textures/gui/icon.png");
+				if (icon != null) {
+					out.putNextEntry(new ZipEntry("azur.png"));
+					try (InputStream iconIn = wrapperZip.getInputStream(icon)) {
+						iconIn.transferTo(out);
+					}
+				}
+			}
 
 			out.putNextEntry(new ZipEntry("libraries/azur-client-wrapper.jar"));
 			try (InputStream wrapperIn = Files.newInputStream(input)) {
