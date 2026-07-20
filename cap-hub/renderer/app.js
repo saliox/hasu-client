@@ -321,6 +321,26 @@ $('#btn-render-copy').addEventListener('click', () => guard('#btn-render-copy', 
   else toast(r.error || 'Copie impossible', 'err');
 }));
 
+// Exporte un GIF animé (tour complet) de l'aperçu — idéal pour Discord.
+$('#btn-render-gif').addEventListener('click', () => guard('#btn-render-gif', async () => {
+  if (!window.CapePreview || !window.CapePreview.captureSpin || !window.GifEncoder) {
+    toast('Export GIF indisponible.', 'err'); return;
+  }
+  toast('Génération du GIF animé…');
+  // Rendu du hors-frame (laisse le toast s'afficher avant la capture synchrone).
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const cap = window.CapePreview.captureSpin(36, 240); // 36 images, ~240px de large
+  if (!cap || !cap.frames.length) { toast('Active une cape pour exporter un GIF.', 'err'); return; }
+  const bytes = window.GifEncoder.encode(cap.frames, cap.w, cap.h, cap.delayCs, { loop: 0 });
+  let bin = ''; const CH = 0x8000;
+  for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  const dataUrl = 'data:image/gif;base64,' + btoa(bin);
+  const act = capeCache.find((c) => c.id === capeActive);
+  const r = await window.cap.capes.saveGif(dataUrl, act ? act.name : 'cape');
+  if (r.ok) toast('GIF animé exporté ✔', 'ok');
+  else if (!r.canceled) toast(r.error || 'Export GIF impossible', 'err');
+}));
+
 // Cache des data URL de capes (miniatures + aperçu) — évite un aller-retour IPC par
 // cape à chaque re-render (recherche, tri, favori…). Clé = id ; le contenu d'un id ne
 // change jamais (un renommage change l'id), donc le cache reste valide.
@@ -444,7 +464,7 @@ async function renderPreview(id, name) {
 }
 // Active/désactive les boutons de partage du rendu selon qu'une cape est affichée.
 function updateShareButtons(on) {
-  for (const sel of ['#btn-render', '#btn-render-copy']) {
+  for (const sel of ['#btn-render', '#btn-render-copy', '#btn-render-gif']) {
     const b = $(sel); if (b) b.disabled = !on;
   }
 }

@@ -489,10 +489,9 @@
     }
   }
 
-  // Rend l'image courante et renvoie un PNG (fond transparent, pleine résolution SSAA).
-  function snapshot() {
-    if (!gl || (!capeImg && !skinImg)) return null;
-    drawFrame(0);                                        // (re)dessine dans le back buffer
+  // Lit le back buffer WebGL dans un canvas 2D (retourné verticalement). Suppose qu'un
+  // drawFrame() vient d'être appelé.
+  function readToCanvas() {
     const W = canvas.width, H = canvas.height;
     const px = new Uint8Array(W * H * 4);
     gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
@@ -504,7 +503,51 @@
       img.data.set(px.subarray(src, src + W * 4), dst);
     }
     c.putImageData(img, 0, 0);
-    return cv.toDataURL('image/png');
+    return cv;
+  }
+
+  // Rend l'image courante et renvoie un PNG (fond transparent, pleine résolution SSAA).
+  function snapshot() {
+    if (!gl || (!capeImg && !skinImg)) return null;
+    drawFrame(0);                                        // (re)dessine dans le back buffer
+    return readToCanvas().toDataURL('image/png');
+  }
+
+  // Capture une animation en boucle de l'aperçu (tour complet en mode perso, léger
+  // balancement en mode cape seule). Synchrone -> la boucle rAF ne s'intercale pas.
+  // Renvoie { w, h, delayCs, frames:[Uint8ClampedArray RGBA] } ou null.
+  function captureSpin(count, targetW) {
+    if (!gl || (!capeImg && !skinImg)) return null;
+    count = Math.max(2, count | 0);
+    const W = canvas.width, H = canvas.height;
+    const tw = Math.max(16, targetW | 0);
+    const th = Math.max(16, Math.round(tw * H / W));
+    const delayCs = 6;                                    // ~16 fps
+    const dt = delayCs / 100;
+    // sauvegarde de l'état d'animation
+    const save = { curAngle, spinClock, curFrame, lastSwap, dragging };
+    dragging = true;                                      // fige toute interaction pendant la capture
+    const scale = document.createElement('canvas'); scale.width = tw; scale.height = th;
+    const sc = scale.getContext('2d');
+    const outFrames = [];
+    let animClock = 0;
+    for (let i = 0; i < count; i++) {
+      const u = i / count;
+      // Angle : tour complet (perso) ou balancement sinusoïdal bouclé (cape seule)
+      curAngle = showBody ? u * Math.PI * 2 : Math.sin(u * Math.PI * 2) * 0.5;
+      spinClock += dt;
+      // Défilement des capes animées (image toutes les 100 ms) — `frames` = nb d'images du PNG
+      animClock += dt * 1000;
+      if (frames > 1 && animClock >= 100) { curFrame = (curFrame + 1) % frames; animClock = 0; }
+      drawFrame(dt);
+      const full = readToCanvas();
+      sc.clearRect(0, 0, tw, th);
+      sc.drawImage(full, 0, 0, tw, th);
+      outFrames.push(sc.getImageData(0, 0, tw, th).data);
+    }
+    // restauration
+    curAngle = save.curAngle; spinClock = save.spinClock; curFrame = save.curFrame; lastSwap = save.lastSwap; dragging = save.dragging;
+    return { w: tw, h: th, delayCs, frames: outFrames };
   }
 
   function start() { if (!raf && gl) { t0 = 0; lastTs = 0; raf = requestAnimationFrame(loop); } }
@@ -544,5 +587,5 @@
   function setShowBody(b) { showBody = !!b; skinDirty = true; }
   function setWind(v) { windScale = Math.max(0, +v || 0); }
 
-  window.CapePreview = { mount, setCape, setSkin, clear, frameCount, setShowBody, setWind, snapshot };
+  window.CapePreview = { mount, setCape, setSkin, clear, frameCount, setShowBody, setWind, snapshot, captureSpin };
 })();
