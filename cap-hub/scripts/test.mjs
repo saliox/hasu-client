@@ -42,6 +42,15 @@ ok('firstFrameIfAnimated 64x64 -> 64x32', (() => { const ff = firstFrameIfAnimat
 ok('firstFrameIfAnimated laisse une cape fixe intacte', (() => { const p = mkPng(64, 32); return firstFrameIfAnimated(p) === p; })());
 ok('decodePNG round-trip couleur', (() => { const p = encodePNG(2, 1, Buffer.from([10, 20, 30, 255, 40, 50, 60, 255])); const d = decodePNG(p); return d && d.rgba[0] === 10 && d.rgba[6] === 60; })());
 ok('decodePNG borne un chunk corrompu (null, pas d’exception)', (() => { try { const bad = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from([0xff, 0xff, 0xff, 0xf0]), Buffer.from('IHDR')]); return decodePNG(bad) === null; } catch { return false; } })());
+ok('decodePNG refuse des dimensions démesurées (anti-bombe de décompression)', (() => {
+  try {
+    const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(100000, 0); ihdr.writeUInt32BE(100000, 4); ihdr[8] = 8; ihdr[9] = 6; // 100000x100000 RGBA
+    const chunk = (type, data) => { const len = Buffer.alloc(4); len.writeUInt32BE(data.length, 0); return Buffer.concat([len, Buffer.from(type), data, Buffer.alloc(4)]); };
+    const png = Buffer.concat([sig, chunk('IHDR', ihdr), chunk('IEND', Buffer.alloc(0))]);
+    return decodePNG(png) === null; // rejeté avant toute allocation
+  } catch { return false; }
+})());
 const src = path.join(ud, 'in.png'); fs.writeFileSync(src, mkPng(64, 32));
 const imp = importCape(src, 'x/../y');
 ok('import assaini (pas de ..)', imp.ok && !imp.id.includes('..'));

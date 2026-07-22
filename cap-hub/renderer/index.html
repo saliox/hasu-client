@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <!-- CSP stricte : aucune ressource distante, aucun eval. Tout est local + data:. -->
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self';" />
+        content="default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'; connect-src 'none';" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Cap Hub</title>
   <link rel="stylesheet" href="style.css" />

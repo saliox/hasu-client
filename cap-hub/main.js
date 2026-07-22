@@ -53,9 +53,22 @@ function createWindow() {
   });
   win.removeMenu();
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  // Tout lien externe s'ouvre dans le navigateur, jamais dans l'app.
-  win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
+  // Tout lien externe s'ouvre dans le navigateur, jamais dans l'app — et UNIQUEMENT en
+  // http/https (on refuse file:, javascript:, protocoles personnalisés… via shell.openExternal).
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    try { const u = new URL(url); if (u.protocol === 'http:' || u.protocol === 'https:') shell.openExternal(url); } catch {}
+    return { action: 'deny' };
+  });
   win.webContents.on('will-navigate', (e) => e.preventDefault());
+  // Sécurité : cette app locale ne réclame aucune permission web sensible (caméra, micro,
+  // géolocalisation, notifications navigateur…). On refuse tout, SAUF l'écriture presse-papiers
+  // (copie du code de connexion). La lecture du presse-papiers et le reste restent bloqués.
+  try {
+    const ses = win.webContents.session;
+    const ALLOWED = new Set(['clipboard-sanitized-write', 'clipboard-write']);
+    ses.setPermissionRequestHandler((_wc, perm, cb) => cb(ALLOWED.has(perm)));
+    ses.setPermissionCheckHandler((_wc, perm) => ALLOWED.has(perm));
+  } catch {}
   // Fermer la fenêtre = réduire dans la barre système (si l'option est active) pour que
   // la détection de Minecraft continue de tourner en arrière-plan.
   win.on('close', (e) => {
@@ -262,10 +275,14 @@ ipcMain.handle('capes:list', () => {
 });
 // Assigne (ou retire si vide) la catégorie d'une cape.
 ipcMain.handle('capes:setCategory', (_e, id, cat) => {
+  const key = String(id || '');
+  // On ne catégorise qu'une cape RÉELLE : empêche un renderer compromis de gonfler
+  // settings.json avec un nombre illimité de clés arbitraires (épuisement de stockage).
+  if (!listCapes().some((x) => x.id === key)) return { ok: false, error: 'Cape introuvable.' };
   const s = getSettings();
   const cats = { ...s.categories };
   const c = String(cat || '').slice(0, 30).trim();
-  if (c) cats[id] = c; else delete cats[id];
+  if (c) cats[key] = c; else delete cats[key];
   const saved = saveSettings({ categories: cats });
   return { ok: true, categories: saved.categories };
 });

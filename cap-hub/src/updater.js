@@ -74,7 +74,12 @@ export async function applyUpdate(appQuit, onProgress) {
   if (!lastInfo) return { ok: false, error: 'Aucune mise à jour prête.' };
   try {
     if (!isAllowedInstallerUrl(lastInfo.url)) throw new Error('URL d’installeur non autorisée — mise à jour refusée.');
-    const dest = path.join(os.tmpdir(), 'CapHub-Setup.exe');
+    // Sécurité : on stage l'installeur et le script de lancement dans un dossier temporaire
+    // à nom ALÉATOIRE (mkdtemp). Des chemins fixes/prévisibles dans %TEMP% permettraient à un
+    // autre processus (même utilisateur) de réécrire l'installeur vérifié entre l'écriture et
+    // l'exécution (TOCTOU), contournant la vérification SHA-256. Un nom aléatoire ferme cette fenêtre.
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'caphub-upd-'));
+    const dest = path.join(workDir, 'CapHub-Setup.exe');
     const r = await fetch(lastInfo.url, { signal: AbortSignal.timeout(180000) });
     if (!r.ok) throw new Error(`Téléchargement : HTTP ${r.status}`);
     const total = Number(r.headers.get('content-length') || 0);
@@ -86,7 +91,7 @@ export async function applyUpdate(appQuit, onProgress) {
     }
     fs.writeFileSync(dest, buf);
     if (onProgress) { try { onProgress(100); } catch {} }
-    const script = path.join(os.tmpdir(), 'caphub-update.cmd');
+    const script = path.join(workDir, 'run.cmd');
     const body =
       '@echo off\r\n' +
       'ping 127.0.0.1 -n 2 >nul\r\n' +

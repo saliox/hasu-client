@@ -81,10 +81,16 @@ export function decodePNG(buf) {
     pos += 12 + len;
   }
   if (bitDepth !== 8 || interlace !== 0 || !width || !height) return null;
+  // Anti-bombe de décompression : un IDAT minuscule peut prétendre décompresser vers des
+  // Go (surtout via une cape du registre, dont les dimensions ne sont pas pré-validées).
+  // On borne la surface décodée ET la sortie de l'inflate. MAX_PIXELS couvre largement
+  // une cape 4K même animée, mais rejette toute dimension déraisonnable.
+  const MAX_PIXELS = 8192 * 4096; // ~33,5 Mpx
+  if (width * height > MAX_PIXELS) return null;
   const CH = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 }[colorType];
   if (!CH) return null;
   let raw;
-  try { raw = zlib.inflateSync(Buffer.concat(idat)); } catch { return null; }
+  try { raw = zlib.inflateSync(Buffer.concat(idat), { maxOutputLength: MAX_PIXELS * 5 }); } catch { return null; }
   const rowBytes = width * CH, bpp = CH;
   const out = Buffer.alloc(rowBytes * height);
   const paeth = (a, b, c) => { const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c); return pa <= pb && pa <= pc ? a : (pb <= pc ? b : c); };
