@@ -141,6 +141,16 @@
 		"main": "hud.MemoryMod",
 		"category": "hud"
 	},
+	{
+		"id": "session",
+		"main": "hud.SessionMod",
+		"category": "hud"
+	},
+	{
+		"id": "day_counter",
+		"main": "hud.DayCounterMod",
+		"category": "hud"
+	},
 	// utility
 	{
 		"id": "replay",

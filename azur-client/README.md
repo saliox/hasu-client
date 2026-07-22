@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="src/main/resources/assets/sol_client/textures/gui/icon.png" width="96" alt="Azur Client" />
+
 # 💠 Azur Client
 
 **Client Minecraft 1.8.9 open source, dans l'esprit de Lunar Client — 100 % fair-play.**
