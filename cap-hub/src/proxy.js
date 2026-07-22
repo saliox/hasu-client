@@ -22,6 +22,24 @@ const log = (level, msg) => proxyEvents.emit('log', { level, msg, t: Date.now() 
 const ipCache = new Map(); // host -> { ip, t }
 const IP_TTL = 60 * 60 * 1000;
 
+// Rejette les IPv4 loopback / privées / link-local (RFC1918, 169.254/16, 100.64/10 CGNAT,
+// 0.0.0.0/8) : le relais ne doit JAMAIS sortir vers une adresse interne, même si la résolution
+// DNS du fournisseur était détournée (défense en profondeur contre le SSRF).
+function isPublicIpv4(ip) {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(String(ip || ''));
+  if (!m) return false;
+  const o = m.slice(1).map(Number);
+  if (o.some((n) => n > 255)) return false;
+  const [a, b] = o;
+  if (a === 10 || a === 127 || a === 0) return false;
+  if (a === 172 && b >= 16 && b <= 31) return false;
+  if (a === 192 && b === 168) return false;
+  if (a === 169 && b === 254) return false;           // link-local
+  if (a === 100 && b >= 64 && b <= 127) return false; // CGNAT
+  if (a >= 224) return false;                          // multicast / réservé
+  return true;
+}
+
 async function resolveRealIp(host) {
   const c = ipCache.get(host);
   if (c && Date.now() - c.t < IP_TTL) return c.ip;
@@ -33,7 +51,7 @@ async function resolveRealIp(host) {
       const r = await fetch(url, { headers: { accept: 'application/dns-json' }, signal: AbortSignal.timeout(5000) });
       if (!r.ok) continue;
       const j = await r.json();
-      const a = (j.Answer || []).find((x) => x.type === 1 && x.data && x.data !== '127.0.0.1');
+      const a = (j.Answer || []).find((x) => x.type === 1 && isPublicIpv4(x.data));
       if (a) { ipCache.set(host, { ip: a.data, t: Date.now() }); return a.data; }
     } catch {}
   }

@@ -7,7 +7,6 @@
 // - Écriture élevée (UAC ponctuel via PowerShell Start-Process -Verb RunAs).
 // - La liste des domaines est fournie par l'appelant (dépend des canaux activés).
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 
@@ -69,15 +68,18 @@ function buildScript(domains) {
 
 function runElevated(script) {
   return new Promise((resolve, reject) => {
-    const ps1 = path.join(os.tmpdir(), `caphub-hosts-${process.pid}.ps1`);
-    fs.writeFileSync(ps1, script, 'utf8');
+    // Sécurité : on ne dépose PAS le script élevé sur le disque. Un fichier .ps1 dans un
+    // dossier temp inscriptible par l'utilisateur, exécuté ensuite en administrateur via
+    // -File, permettrait à un autre processus (même utilisateur, intégrité moyenne) de le
+    // réécrire pendant la fenêtre UAC -> exécution de code arbitraire en admin (TOCTOU/EoP).
+    // On passe donc le script EN LIGNE, encodé, via -EncodedCommand (rien sur le disque).
+    const enc = Buffer.from(script, 'utf16le').toString('base64');
     const outer =
       `$p = Start-Process powershell -Verb RunAs -Wait -PassThru -WindowStyle Hidden ` +
-      `-ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File','${ps1.replace(/'/g, "''")}'); ` +
+      `-ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand','${enc}'); ` +
       `exit $p.ExitCode`;
     execFile('powershell.exe', ['-NoProfile', '-Command', outer], { windowsHide: true, timeout: 120000 }, (err) => {
-      try { fs.unlinkSync(ps1); } catch {}
-      if (err) reject(new Error('Élévation refusée ou échec de l’écriture du fichier hosts.'));
+      if (err) reject(new Error('Élévation refusée ou échec de la modification du fichier hosts.'));
       else resolve();
     });
   });

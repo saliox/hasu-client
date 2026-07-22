@@ -1,6 +1,6 @@
 {
   "name": "cap-hub",
-  "version": "0.12.15",
+  "version": "0.12.16",
   "description": "Cap Hub — capes Minecraft personnalisées via le canal OptiFine (HTTP, sans certificat ni CA), gestion des capes officielles Mojang (compte Microsoft/token), registre partagé entre joueurs 100 % GitHub, aperçu animé, détection automatique du lancement de Minecraft, auto-update",
   "type": "module",
   "main": "main.js",
