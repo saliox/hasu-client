@@ -110,7 +110,10 @@ public class DiscordSocket extends WebSocketClient {
 
 						voiceCallUsers.computeIfAbsent(userId, User::new).update(data, userData);
 					} else if (evt.equals("VOICE_STATE_DELETE") && userId != null) {
-						voiceCallUsers.remove(userId).deleteTexture();
+						User removed = voiceCallUsers.remove(userId);
+						if (removed != null) {
+							removed.deleteTexture();
+						}
 					} else if (evt.equals("SPEAKING_START") || evt.equals("SPEAKING_STOP")) {
 						User user = voiceCallUsers.get(data.get("user_id").getAsString());
 
@@ -250,17 +253,15 @@ public class DiscordSocket extends WebSocketClient {
 		connection.setRequestProperty("Content-Type", "application/json");
 		connection.setRequestProperty("Accept", "application/json");
 
-		OutputStream out = connection.getOutputStream();
-		out.write(command.toString().getBytes());
+		JsonObject result;
 
-		InputStream in;
+		try (OutputStream out = connection.getOutputStream()) {
+			out.write(command.toString().getBytes());
 
-		in = connection.getInputStream();
-
-		JsonObject result = new JsonParser().parse(IOUtils.toString(in, StandardCharsets.UTF_8)).getAsJsonObject();
-
-		out.close();
-		in.close();
+			try (InputStream in = connection.getInputStream()) {
+				result = new JsonParser().parse(IOUtils.toString(in, StandardCharsets.UTF_8)).getAsJsonObject();
+			}
+		}
 
 		auth(result.has("access_token") ? result.get("access_token").getAsString() : "none");
 	}

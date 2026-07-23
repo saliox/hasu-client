@@ -45,7 +45,8 @@ public class FolderResourcePackEntry extends ResourcePackWidget {
 		this.folder = folder;
 		this.list = list;
 		this.name = folder.getName();
-		this.size = folder.list().length;
+		String[] entries = folder.list();
+		this.size = entries == null ? 0 : entries.length;
 	}
 
 	@Override

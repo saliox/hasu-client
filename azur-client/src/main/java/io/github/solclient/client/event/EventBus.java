@@ -94,7 +94,9 @@ public final class EventBus {
 		try {
 			toRemove.clear();
 			inPost = true;
-			for (MethodData method : handlers.get(event.getClass())) {
+			// Iterate a defensive snapshot so a handler registering (or unregistering)
+			// a listener mid-post cannot throw a ConcurrentModificationException.
+			for (MethodData method : new ArrayList<>(handlers.get(event.getClass()))) {
 				try {
 					method.target.invoke(method.instance, event);
 				} catch (WrongMethodTypeException error) {

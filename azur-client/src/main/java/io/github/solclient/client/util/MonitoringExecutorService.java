@@ -28,7 +28,7 @@ public class MonitoringExecutorService extends ThreadPoolExecutor {
 		super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue);
 	}
 
-	private final List<Future<?>> futures = new LinkedList<>();
+	private final List<Future<?>> futures = new CopyOnWriteArrayList<>();
 
 	public List<Future<?>> getFutures() {
 		return futures;
@@ -40,6 +40,9 @@ public class MonitoringExecutorService extends ThreadPoolExecutor {
 
 	@Override
 	public Future<?> submit(Runnable task) {
+		// Prune already-finished futures so this list doesn't grow unbounded
+		// over the lifetime of a session.
+		futures.removeIf(Future::isDone);
 		Future<?> future = super.submit(task);
 		futures.add(future);
 		return future;

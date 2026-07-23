@@ -138,16 +138,20 @@ public final class OnlineIndicatorsMod extends StandardMod {
 		if (GlobalConstants.API.isEmpty())
 			return;
 		lastUpdate = ZonedDateTime.now();
-		new URL(GlobalConstants.API + "/online/log_in/" + MinecraftUtils.getPlayerUuid().toString()).openConnection()
-				.getInputStream();
+		try (InputStream in = new URL(
+				GlobalConstants.API + "/online/log_in/" + MinecraftUtils.getPlayerUuid().toString()).openConnection()
+						.getInputStream()) {
+		}
 	}
 
 	public void logOut() throws IOException {
 		if (GlobalConstants.API.isEmpty())
 			return;
 		lastUpdate = null;
-		new URL(GlobalConstants.API + "/online/log_out/" + MinecraftUtils.getPlayerUuid().toString()).openConnection()
-				.getInputStream();
+		try (InputStream in = new URL(
+				GlobalConstants.API + "/online/log_out/" + MinecraftUtils.getPlayerUuid().toString()).openConnection()
+						.getInputStream()) {
+		}
 	}
 
 	public void clearCache() {

@@ -19,6 +19,7 @@
 package io.github.solclient.client.mod.impl.hypixeladditions;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.*;
 import java.util.stream.Collectors;
 
@@ -106,7 +107,7 @@ public class HypixelAdditionsMod extends StandardMod {
 	@Expose
 	@Option
 	public boolean levelhead;
-	private final Map<UUID, String> levelCache = new HashMap<>();
+	private final Map<UUID, String> levelCache = new ConcurrentHashMap<>();
 	@Expose
 	private String apiKey;
 	private HypixelAPI api;
@@ -374,8 +375,8 @@ public class HypixelAdditionsMod extends StandardMod {
 							&& !(locationData.getMode().startsWith("solo_")
 									|| locationData.getMode().startsWith("ranked_")))
 					|| ("TNTGAMES".equals(locationData.getType()) && locationData.getMode().equals("CAPTURE"))
-					|| ("UHC".equals(locationData.getType()) && !"SOLO".equals(locationData.getType()))
-					|| ("SPEED_UHC".equals(locationData.getType()) && !"solo_nomal".equals(locationData.getType()))
+					|| ("UHC".equals(locationData.getType()) && !"SOLO".equals(locationData.getMode()))
+					|| ("SPEED_UHC".equals(locationData.getType()) && !"SOLO_NORMAL".equals(locationData.getMode()))
 					|| "BATTLEGROUND" /* Warlords */ .equals(locationData.getType()))) {
 				mc.player.sendChatMessage("/shout " + autoglMessage);
 			} else {

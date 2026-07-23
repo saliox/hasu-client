@@ -182,7 +182,8 @@ public class ScreenshotsMod extends StandardMod {
 						new URL(IMGUR_URL + "/" + hash));
 				connection.setRequestMethod("DELETE");
 				connection.setRequestProperty("Authorization", "Client-ID " + GlobalConstants.IMGUR_APPLICATION);
-				connection.getInputStream();
+				try (InputStream in = connection.getInputStream()) {
+				}
 				mc.inGameHud.getChatHud().addMessage(new TranslatableText(getTranslationKey("deleted"))
 						.setStyle(new Style().setFormatting(Formatting.RED)));
 			} catch (Throwable error) {

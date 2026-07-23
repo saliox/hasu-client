@@ -22,11 +22,15 @@ import java.io.*;
 import java.nio.file.*;
 import java.util.*;
 
+import org.apache.logging.log4j.*;
+
 import io.github.solclient.client.mod.*;
 import io.github.solclient.client.mod.option.*;
 import io.github.solclient.client.mod.option.impl.TextFileOption;
 
 public class FilePollingTask implements Runnable, Closeable {
+
+	private static final Logger LOGGER = LogManager.getLogger();
 
 	private Map<String, ModOption<?>> files = new HashMap<>();
 	private WatchKey key;
@@ -52,6 +56,7 @@ public class FilePollingTask implements Runnable, Closeable {
 				try {
 					((TextFileOption) option).read();
 				} catch (IOException error) {
+					LOGGER.warn("Could not reload config file " + ((TextFileOption) option).getPath(), error);
 				}
 			}
 		}

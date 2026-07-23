@@ -76,7 +76,16 @@ public class QuickPlayMod extends StandardMod {
 		super.onEnable();
 		if (!got) {
 			got = true;
-			Thread thread = new Thread(() -> database = new QuickPlayDatabase());
+			Thread thread = new Thread(() -> {
+				try {
+					database = new QuickPlayDatabase();
+				} catch (Throwable error) {
+					logger.error("Could not load quick play database", error);
+					// Allow a future onEnable() call to retry instead of permanently
+					// leaving the database null after a transient failure.
+					got = false;
+				}
+			});
 			thread.setDaemon(true);
 			thread.start();
 		}
