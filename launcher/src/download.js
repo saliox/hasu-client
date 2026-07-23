@@ -54,6 +54,21 @@ export async function fetchJson(url, opts) {
   return JSON.parse(buf.toString('utf8').replace(/^﻿/, ''));
 }
 
+// Récupère l'empreinte SHA-1 publiée en sidecar par les dépôts Maven (<url>.sha1) —
+// utilisée pour vérifier les artefacts (jar Forge, bibliothèques au vieux format) qui
+// ne fournissent pas leur empreinte dans un manifeste JSON. Renvoie null si le sidecar
+// est absent/invalide : mieux vaut avoir essayé une vraie empreinte que ne jamais
+// vérifier, mais l'appelant doit rester tolérant à son absence.
+export async function fetchMavenSha1(url, opts) {
+  try {
+    const buf = await fetchBuffer(url + '.sha1', { timeout: 15000, ...opts });
+    const match = buf.toString('utf8').trim().match(/[0-9a-fA-F]{40}/);
+    return match ? match[0].toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
 // Télécharge url -> file si absent/corrompu ; vérifie le SHA-1 si fourni.
 export async function downloadFile(url, file, sha1, opts) {
   if (isFresh(file, sha1)) return { file, skipped: true, bytes: 0 };

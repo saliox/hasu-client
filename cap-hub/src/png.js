@@ -68,7 +68,7 @@ export function decodePNG(buf) {
   while (pos + 8 <= buf.length) {
     const len = buf.readUInt32BE(pos); const type = buf.toString('ascii', pos + 4, pos + 8);
     // Longueur de chunk hors limites (PNG corrompu/malveillant) -> on abandonne proprement.
-    if (len < 0 || pos + 12 + len > buf.length) return null;
+    if (pos + 12 + len > buf.length) return null;
     const data = buf.subarray(pos + 8, pos + 8 + len);
     if (type === 'IHDR') {
       if (len < 13) return null;

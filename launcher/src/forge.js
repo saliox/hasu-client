@@ -3,7 +3,7 @@
 // maven officiel Forge, on lit ce JSON, et on FUSIONNE avec le JSON vanilla
 // (mainClass launchwrapper + tweaker FML + bibliothèques supplémentaires).
 import path from 'node:path';
-import { downloadFile } from './download.js';
+import { downloadFile, fetchMavenSha1 } from './download.js';
 import { readZipFile } from './zip.js';
 import { mavenToPath, LIBRARIES_URL } from './mojang.js';
 
@@ -20,7 +20,12 @@ export function forgeUniversalUrl(build = FORGE_BUILD) {
 export async function ensureForge(librariesDir, build = FORGE_BUILD) {
   const rel = `net/minecraftforge/forge/${build}/forge-${build}-universal.jar`;
   const jar = path.join(librariesDir, ...rel.split('/'));
-  await downloadFile(forgeUniversalUrl(build), jar, null, { timeout: 120000 });
+  const url = forgeUniversalUrl(build);
+  // Le maven Forge ne fournit pas de sha1 dans un manifeste ; on récupère le sidecar
+  // <url>.sha1 qu'il publie pour vérifier quand même l'intégrité (défense en profondeur,
+  // en plus de HTTPS) — reste null (téléchargement non vérifié) si le sidecar est absent.
+  const sha1 = await fetchMavenSha1(url, { timeout: 30000 });
+  await downloadFile(url, jar, sha1, { timeout: 120000 });
   const raw = readZipFile(jar, 'version.json');
   if (!raw) throw new Error('version.json introuvable dans le jar Forge — build inattendue.');
   return { jar, versionJson: JSON.parse(raw.toString('utf8')) };
@@ -28,7 +33,10 @@ export async function ensureForge(librariesDir, build = FORGE_BUILD) {
 
 // Bibliothèques Forge (vieux format : name + url, flags clientreq/serverreq).
 // Renvoie des tâches { url, file, sha1: null } ; le jar Forge lui-même est exclu
-// (déjà téléchargé par ensureForge, il va en tête de classpath).
+// (déjà téléchargé par ensureForge, il va en tête de classpath). Le sha1 manquant est
+// récupéré depuis le sidecar Maven par prepareAndLaunch (launch.js) juste avant le
+// téléchargement effectif, pour garder cette fonction pure/synchrone (et testable hors
+// réseau).
 export function resolveForgeLibraries(forgeJson, librariesDir) {
   const tasks = [];
   for (const lib of forgeJson.libraries || []) {

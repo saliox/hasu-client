@@ -62,7 +62,10 @@ export function resolveLibraries(versionJson, librariesDir, os = osName(), arch 
         sha1: dl.artifact.sha1,
       });
     } else if (lib.name && !lib.natives) {
-      // Vieux format (Forge) : pas de bloc "downloads", juste name (+ url maven).
+      // Vieux format (Forge) : pas de bloc "downloads", juste name (+ url maven), donc
+      // pas de sha1 connu ici. prepareAndLaunch (launch.js) récupère le sidecar Maven
+      // <url>.sha1 avant le téléchargement effectif ; cette fonction reste pure/
+      // synchrone (et testable hors réseau).
       const rel = mavenToPath(lib.name);
       const base = (lib.url || LIBRARIES_URL + '/').replace(/\/?$/, '/');
       classpath.push({ url: base + rel, file: path.join(librariesDir, ...rel.split('/')), sha1: null });

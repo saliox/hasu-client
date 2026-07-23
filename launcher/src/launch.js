@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { downloadAll, downloadFile, fetchJson, isFresh } from './download.js';
+import { downloadAll, downloadFile, fetchJson, fetchMavenSha1, isFresh } from './download.js';
 import { getVersionJson, resolveLibraries, resolveAssets, buildGameArgs, osName } from './mojang.js';
 import { ensureForge, resolveForgeLibraries, mergeVersionJson, FORGE_MC_VERSION } from './forge.js';
 import { ensureJava } from './java.js';
@@ -94,6 +94,10 @@ export async function prepareAndLaunch(opts, hooks = {}) {
     tasks.push(...resolveForgeLibraries(forge.versionJson, librariesDir));
     launchJson = mergeVersionJson(vjson, forge.versionJson);
   }
+  // Bibliothèques au vieux format (Forge) : pas de sha1 dans le manifeste JSON, on
+  // récupère le sidecar Maven <url>.sha1 pour vérifier quand même l'intégrité avant
+  // téléchargement, plutôt que de les laisser passer sans aucun contrôle.
+  await Promise.all(tasks.filter((t) => !t.sha1).map(async (t) => { t.sha1 = await fetchMavenSha1(t.url); }));
   await downloadAll(tasks, { onProgress: progress('libraries') });
 
   // 5. Assets.
@@ -114,7 +118,11 @@ export async function prepareAndLaunch(opts, hooks = {}) {
   fs.mkdirSync(nativesDir, { recursive: true });
   for (const n of natives) {
     const exclude = n.extract?.exclude || ['META-INF/'];
-    extractZip(n.file, nativesDir, { exclude });
+    try {
+      extractZip(n.file, nativesDir, { exclude });
+    } catch (e) {
+      throw new Error(`Extraction des natives échouée pour ${path.basename(n.file)} : ${e.message}`);
+    }
   }
 
   // 7. Classpath : Forge d'abord, puis ses libs, puis vanilla, client jar en dernier.

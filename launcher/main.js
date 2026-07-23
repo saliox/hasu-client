@@ -54,21 +54,30 @@ function gameDir() {
 }
 
 // --- Compte : session prête à jouer (refresh silencieux si expirée) ---
+let mcRefreshPromise = null; // dé-duplique les refresh concurrents (le refresh token MS est à usage unique)
 async function readySession() {
   const session = getMcSession();
   if (!session) return null;
   if (session.expiresAt && Date.now() < session.expiresAt && session.profile) return session;
   if (!session.msRefreshToken) return session.profile ? session : null;
   const s = getSettings();
-  try {
-    const fresh = await ms.refreshSession(s.mcClientId, session.msRefreshToken);
-    setMcSession(fresh);
-    return fresh;
-  } catch {
-    // Refresh impossible (hors-ligne / token révoqué) : on garde l'ancienne session si
-    // elle a un profil — le bouton « Jouer en hors-ligne » reste disponible de toute façon.
-    return session.profile ? session : null;
-  }
+  // Un seul refresh à la fois : plusieurs appels concurrents ne doivent pas redemander
+  // en parallèle avec le même refresh token (rotation MS -> le perdant échoue en 401).
+  if (mcRefreshPromise) return mcRefreshPromise;
+  mcRefreshPromise = (async () => {
+    try {
+      const fresh = await ms.refreshSession(s.mcClientId, session.msRefreshToken);
+      setMcSession(fresh);
+      return fresh;
+    } catch {
+      // Refresh impossible (hors-ligne / token révoqué) : on garde l'ancienne session si
+      // elle a un profil — le bouton « Jouer en hors-ligne » reste disponible de toute façon.
+      return session.profile ? session : null;
+    } finally {
+      mcRefreshPromise = null;
+    }
+  })();
+  return mcRefreshPromise;
 }
 
 function accountView(session) {
