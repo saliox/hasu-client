@@ -19,6 +19,7 @@
 package io.github.solclient.client.mod.impl.hud;
 
 import io.github.solclient.client.mod.impl.SolClientSimpleHudMod;
+import io.github.solclient.client.mod.impl.core.mixins.LevelPropertiesAccessor;
 import net.minecraft.client.resource.language.I18n;
 
 /**
@@ -33,7 +34,9 @@ public final class DayCounterMod extends SolClientSimpleHudMod {
 		if (editMode || mc.world == null)
 			day = 128;
 		else
-			day = mc.world.getLevelProperties().getTimeOfDay() / 24000;
+			// champ brut (accessor) : la valeur de getTimeOfDay() peut être truquée par
+			// le mod Time Changer, ce qui figerait le compteur à « Jour 0 »
+			day = ((LevelPropertiesAccessor) mc.world.getLevelProperties()).azur$getRawTimeOfDay() / 24000;
 
 		return I18n.translate("sol_client.mod.day_counter.text", day);
 	}
