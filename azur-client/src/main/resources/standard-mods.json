@@ -151,6 +151,16 @@
 		"main": "hud.DayCounterMod",
 		"category": "hud"
 	},
+	{
+		"id": "direction",
+		"main": "hud.DirectionMod",
+		"category": "hud"
+	},
+	{
+		"id": "server_address",
+		"main": "hud.ServerAddressMod",
+		"category": "hud"
+	},
 	// utility
 	{
 		"id": "replay",
