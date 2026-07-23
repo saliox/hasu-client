@@ -40,6 +40,18 @@ Changements par rapport à Sol Client :
 - 🔄 **Vérification de mise à jour** via le manifeste `release.json` du dépôt (releases `azur-client-v*` de hasu-client).
 - 🧾 Crédits et licence GPL-3.0 conservés (© TheKodeToad and contributors).
 
+## ✨ Mods exclusifs Azur (absents de Sol Client)
+
+| Mod | Ce qu'il affiche |
+|---|---|
+| 🧠 **Mémoire** | RAM utilisée/max du jeu (Mo ou %) |
+| ⏱️ **Session** | Durée de jeu depuis le lancement (pratique en stream) |
+| 📅 **Compteur de jours** | Jour actuel du monde |
+| 🧭 **Direction** | Direction cardinale (angle exact optionnel) |
+| 🌐 **IP du serveur** | Adresse du serveur actuel (« Solo » sinon) |
+
+Tous positionnables dans l'éditeur de HUD, traduits en français et en anglais.
+
 ## 🚀 Installer / builder
 
 **Joueurs** : suis le guide [INSTALL.md](INSTALL.md) (Prism/MultiMC en 3 clics, ou launcher officiel).
