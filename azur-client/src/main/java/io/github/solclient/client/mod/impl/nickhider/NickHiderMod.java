@@ -18,16 +18,24 @@
 
 package io.github.solclient.client.mod.impl.nickhider;
 
+import com.google.gson.annotations.Expose;
+
 import io.github.solclient.client.mod.impl.StandardMod;
+import io.github.solclient.client.mod.option.annotation.*;
 
 /**
- * Nick hider (Azur Client) - hides your own name tag on your screen (F5,
- * mirrors), in the style of Lunar Client's Nick Hider. Purely visual and
- * client-side: other players still see your real name.
+ * Nick hider (Azur Client) - hides or replaces your own name tag on your
+ * screen (F5, mirrors), in the style of Lunar Client's Nick Hider. Purely
+ * visual and client-side: other players still see your real name.
  */
 public final class NickHiderMod extends StandardMod {
 
 	public static NickHiderMod instance;
+
+	@Expose
+	@Option
+	@TextField("sol_client.mod.nick_hider.hidden")
+	private String nick = "";
 
 	@Override
 	public void init() {
@@ -37,6 +45,15 @@ public final class NickHiderMod extends StandardMod {
 
 	public static boolean shouldHideOwnName() {
 		return instance != null && instance.isEnabled();
+	}
+
+	/**
+	 * @return the replacement name, or null to hide the tag entirely.
+	 */
+	public static String getReplacement() {
+		if (instance == null || instance.nick.trim().isEmpty())
+			return null;
+		return instance.nick.trim();
 	}
 
 }

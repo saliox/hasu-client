@@ -52,7 +52,8 @@ Changements par rapport à Sol Client :
 | ⚔️ **Objet en main** | Nom de l'objet tenu |
 | 🧱 **Position de chunk** | Chunk actuel + position dans le chunk |
 | ✨ **Niveau d'XP** | Niveau d'expérience |
-| 🕶️ **Nick Hider** | Cache ton propre pseudo à l'écran (F5) |
+| 🕶️ **Nick Hider** | Cache ou remplace ton propre pseudo à l'écran (F5) |
+| 🌿 **Biome** | Biome dans lequel tu te trouves |
 
 Tous positionnables dans l'éditeur de HUD, traduits en français et en anglais.
 
