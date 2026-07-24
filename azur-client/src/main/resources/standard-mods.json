@@ -161,6 +161,21 @@
 		"main": "hud.ServerAddressMod",
 		"category": "hud"
 	},
+	{
+		"id": "held_item",
+		"main": "hud.HeldItemMod",
+		"category": "hud"
+	},
+	{
+		"id": "chunk_position",
+		"main": "hud.ChunkPositionMod",
+		"category": "hud"
+	},
+	{
+		"id": "xp_level",
+		"main": "hud.XpLevelMod",
+		"category": "hud"
+	},
 	// utility
 	{
 		"id": "replay",
@@ -194,6 +209,12 @@
 	{
 		"id": "tnt_timer",
 		"main": "tnttimer.TNTTimerMod",
+		"category": "utility"
+	},
+	{
+		"id": "nick_hider",
+		"main": "nickhider.NickHiderMod",
+		"mixins": "@nickhider.mixins",
 		"category": "utility"
 	},
 	{

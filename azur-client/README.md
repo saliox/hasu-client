@@ -49,6 +49,10 @@ Changements par rapport à Sol Client :
 | 📅 **Compteur de jours** | Jour actuel du monde |
 | 🧭 **Direction** | Direction cardinale (angle exact optionnel) |
 | 🌐 **IP du serveur** | Adresse du serveur actuel (« Solo » sinon) |
+| ⚔️ **Objet en main** | Nom de l'objet tenu |
+| 🧱 **Position de chunk** | Chunk actuel + position dans le chunk |
+| ✨ **Niveau d'XP** | Niveau d'expérience |
+| 🕶️ **Nick Hider** | Cache ton propre pseudo à l'écran (F5) |
 
 Tous positionnables dans l'éditeur de HUD, traduits en français et en anglais.
 
