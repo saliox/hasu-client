@@ -551,3 +551,7 @@ sol_client.mod.xp_level.description=Display your experience level.
 sol_client.mod.xp_level.text=Level %s
 sol_client.mod.nick_hider.name=Nick Hider
 sol_client.mod.nick_hider.description=Hide your own name tag on your screen (F5). Others still see your real name.
+sol_client.mod.biome.name=Biome
+sol_client.mod.biome.description=Display the biome you are in.
+sol_client.mod.nick_hider.option.nick=Replacement name
+sol_client.mod.nick_hider.hidden=(hidden)

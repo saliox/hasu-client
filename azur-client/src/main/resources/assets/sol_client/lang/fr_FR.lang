@@ -533,3 +533,7 @@ sol_client.mod.xp_level.description=Affiche ton niveau d'expérience.
 sol_client.mod.xp_level.text=Niveau %s
 sol_client.mod.nick_hider.name=Nick Hider
 sol_client.mod.nick_hider.description=Cache ton propre pseudo sur ton écran (F5). Les autres voient toujours ton vrai pseudo.
+sol_client.mod.biome.name=Biome
+sol_client.mod.biome.description=Affiche le biome dans lequel tu te trouves.
+sol_client.mod.nick_hider.option.nick=Pseudo de remplacement
+sol_client.mod.nick_hider.hidden=(masqué)

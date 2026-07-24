@@ -25,17 +25,37 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import io.github.solclient.client.mod.impl.nickhider.NickHiderMod;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.AbstractClientPlayerEntity;
-import net.minecraft.client.render.entity.PlayerEntityRenderer;
+import net.minecraft.client.render.entity.*;
 
 @Mixin(PlayerEntityRenderer.class)
-public class PlayerEntityRendererMixin {
+public abstract class PlayerEntityRendererMixin extends EntityRenderer<AbstractClientPlayerEntity> {
+
+	protected PlayerEntityRendererMixin(EntityRenderDispatcher dispatcher) {
+		super(dispatcher);
+	}
+
+	// garde anti-récursion : renderLabelIfPresent peut repasser par la même méthode
+	private static boolean azur$reentrant;
 
 	// même cible que le levelhead Hypixel : le rendu du pseudo au-dessus du joueur
 	@Inject(method = "method_10209(Lnet/minecraft/client/network/AbstractClientPlayerEntity;DDDLjava/lang/String;FD)V", at = @At("HEAD"), cancellable = true)
 	public void azur$hideOwnName(AbstractClientPlayerEntity entity, double x, double y, double z, String str,
 			float delta, double distance, CallbackInfo callback) {
-		if (NickHiderMod.shouldHideOwnName() && entity == MinecraftClient.getInstance().player)
-			callback.cancel();
+		if (azur$reentrant)
+			return;
+		if (!NickHiderMod.shouldHideOwnName() || entity != MinecraftClient.getInstance().player)
+			return;
+
+		callback.cancel();
+		String replacement = NickHiderMod.getReplacement();
+		if (replacement != null) {
+			azur$reentrant = true;
+			try {
+				renderLabelIfPresent(entity, replacement, x, y, z, 64);
+			} finally {
+				azur$reentrant = false;
+			}
+		}
 	}
 
 }

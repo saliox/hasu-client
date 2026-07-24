@@ -176,6 +176,11 @@
 		"main": "hud.XpLevelMod",
 		"category": "hud"
 	},
+	{
+		"id": "biome",
+		"main": "hud.BiomeMod",
+		"category": "hud"
+	},
 	// utility
 	{
 		"id": "replay",
