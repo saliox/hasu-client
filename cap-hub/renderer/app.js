@@ -254,6 +254,9 @@ function startCatEdit(card, c) {
 }
 
 $('#cape-search').addEventListener('input', (e) => { capeSearch = e.target.value; renderCapeGrid(); });
+$('#cape-search').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { e.target.value = ''; capeSearch = ''; renderCapeGrid(); e.target.blur(); }
+});
 $('#cape-sort').addEventListener('change', (e) => { capeSort = e.target.value; renderCapeGrid(); });
 $('#cape-cat').addEventListener('change', (e) => { capeCatFilter = e.target.value; renderCapeGrid(); });
 document.querySelectorAll('.lib-filters .chip').forEach((chip) => {
@@ -794,6 +797,30 @@ window.addEventListener('keydown', (e) => {
   const undo = onEditor ? edDoUndo : pxUndo, redo = onEditor ? edDoRedo : pxRedo;
   if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
   else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo(); }
+});
+
+// Raccourcis clavier globaux (navigation & recherche).
+function inTypingField(el) {
+  return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+}
+window.addEventListener('keydown', (e) => {
+  // Ctrl/Cmd + 1..9 -> aller à l'onglet N (fonctionne même en saisie).
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && /^[1-9]$/.test(e.key)) {
+    const t = tabEls[+e.key - 1];
+    if (t) { e.preventDefault(); t.focus(); activateTab(t); }
+    return;
+  }
+  // Ctrl/Cmd + F -> focus la recherche de capes (onglet Mes capes).
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'f') {
+    const s = $('#cape-search');
+    if (s && $('#tab-capes').classList.contains('active')) { e.preventDefault(); s.focus(); s.select(); }
+    return;
+  }
+  if (inTypingField(document.activeElement)) return; // les touches nues ci-dessous ne s'appliquent pas en saisie
+  // "/" -> focus la recherche de capes.
+  if (e.key === '/' && $('#tab-capes').classList.contains('active')) {
+    const s = $('#cape-search'); if (s) { e.preventDefault(); s.focus(); }
+  }
 });
 
 // Import d'image quelconque.
