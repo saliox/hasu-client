@@ -49,6 +49,10 @@ public final class PrismDist {
 					),
 			writer);
 			// @formatter:on
+			// Le Writer bufferise en mémoire : il FAUT le vider dans le ZipOutputStream avant
+			// de passer à l'entrée suivante, sinon ce JSON se retrouve vide (ou mélangé à
+			// l'entrée suivante) dans l'archive produite.
+			writer.flush();
 
 			out.putNextEntry(new ZipEntry("patches/" + UID + ".json"));
 			// @formatter:off
@@ -76,6 +80,7 @@ public final class PrismDist {
 					),
 			writer);
 			// @formatter:on
+			writer.flush();
 
 			out.putNextEntry(new ZipEntry("patches/" + OPTIFINE_UID + ".json"));
 			// @formatter:off
