@@ -191,6 +191,21 @@
 		"main": "hud.StopwatchMod",
 		"category": "hud"
 	},
+	{
+		"id": "game_time",
+		"main": "hud.GameTimeMod",
+		"category": "hud"
+	},
+	{
+		"id": "arrow_count",
+		"main": "hud.ArrowCountMod",
+		"category": "hud"
+	},
+	{
+		"id": "durability",
+		"main": "hud.DurabilityMod",
+		"category": "hud"
+	},
 	// utility
 	{
 		"id": "replay",

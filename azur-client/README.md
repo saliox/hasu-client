@@ -57,6 +57,9 @@ Changements par rapport à Sol Client :
 | 🍗 **Saturation** | Faim et saturation |
 | ⏲️ **Chronomètre** | Chrono en jeu (touches démarrer/pause/zéro) |
 | 🌦️ **Météo visuelle** | Force l'affichage dégagé ou pluie (visuel uniquement) |
+| 🕰️ **Heure du jeu** | L'heure Minecraft en HH:MM |
+| 🏹 **Compteur de flèches** | Flèches restantes dans l'inventaire |
+| 🛡️ **Durabilité** | Durabilité restante de l'objet en main |
 
 Tous positionnables dans l'éditeur de HUD, traduits en français et en anglais.
 
