@@ -54,6 +54,9 @@ Changements par rapport à Sol Client :
 | ✨ **Niveau d'XP** | Niveau d'expérience |
 | 🕶️ **Nick Hider** | Cache ou remplace ton propre pseudo à l'écran (F5) |
 | 🌿 **Biome** | Biome dans lequel tu te trouves |
+| 🍗 **Saturation** | Faim et saturation |
+| ⏲️ **Chronomètre** | Chrono en jeu (touches démarrer/pause/zéro) |
+| 🌦️ **Météo visuelle** | Force l'affichage dégagé ou pluie (visuel uniquement) |
 
 Tous positionnables dans l'éditeur de HUD, traduits en français et en anglais.
 
