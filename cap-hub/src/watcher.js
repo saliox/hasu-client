@@ -113,8 +113,11 @@ async function scan() {
     // ouvert (sinon fermer le jeu launcher-ouvert n'émettait jamais game-stop).
     const inGame = (m) => [...m.keys()].some((k) => k.startsWith('java:'));
     const hadGame = inGame(known);
+    const hadAny = known.size > 0;
     known = current;
-    if (hadGame && !inGame(current)) watcherEvents.emit('game-stop');
+    // game-stop si le jeu Java s'arrête, OU si TOUT client détecté a disparu (un launcher
+    // ouvert puis fermé sans jamais lancer Java laissait sinon la pastille bloquée « on »).
+    if ((hadGame && !inGame(current)) || (hadAny && current.size === 0)) watcherEvents.emit('game-stop');
   } finally { scanning = false; }
 }
 

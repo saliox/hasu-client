@@ -189,7 +189,7 @@ function renderCapeGrid() {
     const del = el.querySelector('.act-del');
     if (del) del.addEventListener('click', () => removeCape(c.id, c.name));
     grid.appendChild(el);
-    loadThumb(el.querySelector('.thumb'), c.id);
+    loadThumb(el.querySelector('.thumb'), c);
     const res = el.querySelector('.act-res');
     if (res) initResSelect(res, c);
   }
@@ -466,6 +466,7 @@ async function renderPreview(id, name) {
   previewState.id = id; previewState.canvas = '#cape-preview';
   if (!id) { window.CapePreview.clear(); $('#preview-label').textContent = 'Aucune cape active'; return; }
   const url = await capeDataUrl(id);
+  if (previewState.id !== id) return; // une activation plus récente a pris la main pendant l'await
   if (!url) { window.CapePreview.clear(); return; }
   window.CapePreview.setCape(url);
   $('#preview-label').textContent = name || '';
@@ -501,20 +502,24 @@ function capeMeta(url) {
   });
 }
 
-async function loadThumb(el, id) {
-  const url = await capeDataUrl(id);
+async function loadThumb(el, c) {
+  const url = await capeDataUrl(c.id);
   if (!url) return;
   el.style.backgroundImage = `url(${await capeFrontThumb(url)})`;
-  const meta = await capeMeta(url);
   const box = el.querySelector('.thumb-meta');
-  if (!meta || !box) return;
-  const fh = Math.round(meta.frameH);
-  const badges = [`${meta.w}×${fh}`];
-  if (meta.frames > 1) badges.push(`🎞 ${meta.frames}`);
+  if (!box) return;
+  // Dimensions/frames viennent de capes.list (lues dans l'en-tête PNG côté backend) : pas
+  // besoin de re-décoder l'image entière. Repli sur un décodage si l'en-tête n'a pas été lu.
+  let w = c.w, h = c.h, frames = c.frames;
+  if (!w || !h) { const m = await capeMeta(url); if (!m) return; w = m.w; h = m.h; frames = m.frames; }
+  const fh = Math.round(h / (frames || 1));
+  const optifine = (w % 46 === 0 && w % 64 !== 0);
+  const badges = [`${w}×${fh}`];
+  if (frames > 1) badges.push(`🎞 ${frames}`);
   box.textContent = badges.join('  ·  ');
-  box.title = meta.frames > 1
-    ? `Cape animée — ${meta.frames} images de ${meta.w}×${fh}${meta.optifine ? ' (OptiFine)' : ''}`
-    : `Résolution ${meta.w}×${fh}${meta.optifine ? ' (OptiFine)' : ''}`;
+  box.title = frames > 1
+    ? `Cape animée — ${frames} images de ${w}×${fh}${optifine ? ' (OptiFine)' : ''}`
+    : `Résolution ${w}×${fh}${optifine ? ' (OptiFine)' : ''}`;
   box.classList.remove('hidden');
 }
 
@@ -790,6 +795,7 @@ $('#px-reset').addEventListener('click', () => { pxSnapshot(); pxGrid.fill($('#p
 // Raccourcis Annuler/Rétablir (uniquement sur le créateur en mode pixel).
 window.addEventListener('keydown', (e) => {
   if (!(e.ctrlKey || e.metaKey)) return;
+  if (inTypingField(document.activeElement)) return; // ne pas voler Ctrl+Z à un champ texte (nom de cape…)
   const k = e.key.toLowerCase();
   const onEditor = $('#tab-editor').classList.contains('active');
   const onCreatorPixel = $('#tab-creator').classList.contains('active') && $('#cr-mode').value === 'pixel';
@@ -1610,6 +1616,7 @@ async function loadSettings() {
   $('#in-theme').value = s.theme || 'nuit';
   applyTheme(s.theme || 'nuit');
   $('#in-username').value = s.username || '';
+  $('#username-warn').classList.toggle('hidden', !(s.username && !s.usernameValid));
   $('#in-autoapply').checked = s.autoApply;
   $('#in-autoproxy').checked = s.autoProxy;
   $('#in-tray').checked = s.closeToTray;

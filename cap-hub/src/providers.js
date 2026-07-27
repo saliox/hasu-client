@@ -38,10 +38,14 @@ export const PROVIDERS = [optifine];
 
 export const byId = (id) => PROVIDERS.find((p) => p.id === id) || null;
 
-// Table domaine -> fournisseur, pour router une requête entrante.
+// Table domaine -> fournisseur, pour router une requête entrante. PROVIDERS est statique,
+// donc on construit la Map une seule fois (appelée sur le chemin chaud du proxy).
+let _hostIndex = null;
 export function hostIndex() {
+  if (_hostIndex) return _hostIndex;
   const idx = new Map();
   for (const p of PROVIDERS) for (const h of p.hosts) idx.set(h.toLowerCase(), p);
+  _hostIndex = idx;
   return idx;
 }
 

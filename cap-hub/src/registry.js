@@ -11,7 +11,6 @@ import path from 'node:path';
 import { isPng } from './png.js';
 
 const NAME_RE = /^[a-z0-9_]{1,16}$/;                 // pseudo Minecraft valide
-const CAPE_RE = /^capes\/[a-z0-9_]{1,16}\.png$/;      // chemin de cape attendu dans l'index
 const MAX_CAPE = 12 * 1024 * 1024;
 
 const DEFAULT_REPO = 'saliox/hasu-client';
@@ -35,8 +34,10 @@ export function initRegistry(userDataDir, options = {}) {
 }
 
 export function configureRegistry({ repo, branch } = {}) {
-  if (repo && /^[\w.-]+\/[\w.-]+$/.test(repo)) cfg.repo = repo;
-  if (branch && /^[\w./-]+$/.test(branch)) cfg.branch = branch;
+  // On rejette explicitement les segments « .. » : repo/branch sont interpolés dans des
+  // URLs GitHub, et une traversée pointerait le registre vers un tout autre dépôt.
+  if (repo && /^[\w.-]+\/[\w.-]+$/.test(repo) && !repo.includes('..')) cfg.repo = repo;
+  if (branch && /^[\w./-]+$/.test(branch) && !branch.includes('..')) cfg.branch = branch;
 }
 
 // ---------- Lecture (public, sans token) ----------
@@ -46,7 +47,9 @@ export async function refreshIndex(force = false) {
     const r = await fetch(`${rawBase()}/capes.json?t=${Date.now()}`, { signal: AbortSignal.timeout(10000) });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const j = await r.json();
-    if (j && typeof j.players === 'object') {
+    // typeof null === 'object' : on exige un vrai objet non-nul et non-tableau, sinon un
+    // « players: null » distant écraserait le cache disque valide et viderait le registre.
+    if (j && j.players && typeof j.players === 'object' && !Array.isArray(j.players)) {
       index = j;
       lastFetch = Date.now();
       fs.writeFileSync(path.join(cacheDir, 'capes.json'), JSON.stringify(j, null, 2));
@@ -70,7 +73,9 @@ export async function getRegistryCape(nameLower) {
   // chemin de cape avant de construire un chemin disque ou une URL (anti-traversée).
   if (!NAME_RE.test(String(nameLower || ''))) return null;
   const entry = (index.players || {})[nameLower];
-  if (!entry || !CAPE_RE.test(String(entry.cape || ''))) return null;
+  // Le chemin de cape DOIT correspondre exactement à la clé (capes/<pseudo>.png) : sinon un
+  // index corrompu pourrait servir la cape d'un autre joueur sous ce pseudo (usurpation).
+  if (!entry || entry.cape !== `capes/${nameLower}.png`) return null;
   const cached = path.join(cacheDir, `${nameLower}.png`);
   try {
     const st = fs.statSync(cached);

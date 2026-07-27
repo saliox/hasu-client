@@ -269,6 +269,9 @@ code { background: var(--bg-3); padding: 1px 6px; border-radius: 6px; font-size:
 }
 .lib-filters .chip:hover { color: var(--txt); border-color: var(--accent); }
 .lib-filters .chip.active { color: var(--txt); border-color: var(--accent); background: var(--bg-3); }
+
+.warn-text { display: block; margin-top: 6px; color: var(--warn); font-size: 12px; }
+.warn-text.hidden { display: none; }
 .rename-input {
   width: 100%; background: var(--bg-3); border: 1px solid var(--accent); color: var(--txt);
   padding: 4px 8px; border-radius: 8px; font-size: 13px; font-weight: 600;

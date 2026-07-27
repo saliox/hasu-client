@@ -29,6 +29,9 @@ export function validateCape(buf) {
   const size = readPngSize(buf);
   if (!size) return { ok: false, error: 'Impossible de lire la taille du PNG.' };
   const { width: w, height: h } = size;
+  // Plafond de surface aligné sur le décodeur (png.decodePNG) : sinon une cape « valide »
+  // trop grande (ex. 4096×131072) serait refusée au décodage et servie brute à OptiFine.
+  if (w * h > 8192 * 4096) return { ok: false, error: 'Cape trop grande (surface excessive).' };
 
   let okVanilla = false, frames = 1;
   const vs = w / 64;                                   // échelle HD (1 = 64px, 64 = 4096px)
@@ -151,16 +154,12 @@ export function renameCape(id, newName) {
   const file = resolveCape(id);
   if (!file) return { ok: false, error: 'Cape introuvable.' };
   if (isBuiltinFile(file)) return { ok: false, error: 'Cape intégrée (non renommable).' };
-  const safe = String(newName || '')
-    .replace(/[^A-Za-z0-9 _.-]/g, '_')
-    .replace(/\.{2,}/g, '_')
-    .replace(/^[.\s]+/, '')
-    .slice(0, 40).trim();
-  if (!safe) return { ok: false, error: 'Nom invalide.' };
-  let dest = path.join(DIR, `${safe}.png`);
+  if (!String(newName || '').trim()) return { ok: false, error: 'Nom invalide.' };
+  const clean = safeName(newName); // même sanitation anti-traversée que l'import (source unique)
+  let dest = path.join(DIR, `${clean}.png`);
   if (path.basename(dest) === path.basename(file)) return { ok: true, id: path.basename(file) };
   let i = 2;
-  while (fs.existsSync(dest)) dest = path.join(DIR, `${safe}-${i++}.png`);
+  while (fs.existsSync(dest)) dest = path.join(DIR, `${clean}-${i++}.png`);
   try {
     fs.renameSync(file, dest);
     try { if (fs.existsSync(file + '.orig')) fs.renameSync(file + '.orig', dest + '.orig'); } catch {} // suit la sauvegarde
@@ -212,7 +211,10 @@ export function duplicateCape(id) {
 
 export function readCape(id) {
   const file = resolveCape(id);
-  return file ? fs.readFileSync(file) : null;
+  if (!file) return null;
+  // resolveCape a fait un existsSync, mais le fichier peut disparaître d'ici la lecture
+  // (suppression/renommage concurrent, EBUSY) : on renvoie null au lieu de lever.
+  try { return fs.readFileSync(file); } catch { return null; }
 }
 
 // ---------- Capes intégrées (générées, disposition vanilla 64x32) ----------

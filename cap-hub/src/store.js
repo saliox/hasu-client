@@ -21,13 +21,17 @@ function read() {
 // Écriture ATOMIQUE : tmp -> rename (le rename est atomique sur le même volume), avec
 // une copie .bak de l'ancien contenu. Une coupure en plein write ne tronque donc jamais
 // settings.json (qui contient aussi le token et la session Minecraft chiffrés).
+// Renvoie true si la persistance a réussi, false sinon (disque plein, verrou, permissions).
+// Les appelants qui écrivent des données critiques (token, session) DOIVENT vérifier ce
+// résultat au lieu de supposer que l'écriture a abouti.
 function write(obj) {
   try {
     const tmp = FILE + '.tmp';
     fs.writeFileSync(tmp, JSON.stringify(obj, null, 2));
     try { if (fs.existsSync(FILE)) fs.copyFileSync(FILE, FILE + '.bak'); } catch {}
     fs.renameSync(tmp, FILE);
-  } catch {}
+    return true;
+  } catch { return false; }
 }
 
 const encAvailable = () => { try { return safe && safe.isEncryptionAvailable(); } catch { return false; } };
@@ -54,6 +58,9 @@ export function getSettings() {
     // (tokens) est stockée à part, chiffrée (voir setMcSession/getMcSession).
     mcClientId: typeof s.mcClientId === 'string' ? s.mcClientId : '',
     hasMcSession: !!s.mcSessionEnc,
+    // Un pseudo n'est servable via OptiFine que s'il tient dans [A-Za-z0-9_]{1,16} (comme
+    // la clé de requête). Sinon la cape ne sera jamais servie : l'UI doit en avertir.
+    usernameValid: /^[A-Za-z0-9_]{1,16}$/.test(s.username || ''),
     // Préférences d'aperçu 3D (mémorisées entre les sessions).
     previewBody: s.previewBody !== false,                                    // perso (défaut) vs cape seule
     previewWind: [0, 1, 2].includes(s.previewWind) ? s.previewWind : 1,      // 0 off / 1 doux / 2 fort
@@ -73,10 +80,14 @@ export function saveSettings(patch) {
   if (Array.isArray(patch.favorites)) {
     s.favorites = [...new Set(patch.favorites.filter((x) => typeof x === 'string'))].slice(0, 500);
   }
-  if (patch.categories && typeof patch.categories === 'object') {
+  if (patch.categories && typeof patch.categories === 'object' && !Array.isArray(patch.categories)) {
     const clean = {};
+    let n = 0;
     for (const [k, v] of Object.entries(patch.categories)) {
-      if (typeof k === 'string' && typeof v === 'string' && v.trim()) clean[k] = v.slice(0, 30).trim();
+      if (typeof k === 'string' && typeof v === 'string' && v.trim()) {
+        clean[k] = v.slice(0, 30).trim();
+        if (++n >= 500) break; // borne le nombre de clés (comme favorites) : anti-épuisement de stockage
+      }
     }
     s.categories = clean;
   }
@@ -88,7 +99,7 @@ export function saveSettings(patch) {
 export function setToken(token) {
   const s = read();
   const t = String(token || '').trim();
-  if (!t) { delete s.tokenEnc; delete s.tokenPlain; write(s); return { ok: true, cleared: true }; }
+  if (!t) { delete s.tokenEnc; delete s.tokenPlain; const okc = write(s); return okc ? { ok: true, cleared: true } : { ok: false, error: 'Écriture impossible (disque plein ou fichier verrouillé ?).' }; }
   if (encAvailable()) {
     s.tokenEnc = safe.encryptString(t).toString('base64');
     delete s.tokenPlain;
@@ -97,7 +108,8 @@ export function setToken(token) {
     s.tokenPlain = t;
     delete s.tokenEnc;
   }
-  write(s);
+  // On vérifie la persistance : sinon on annoncerait « enregistré » alors que le token est perdu.
+  if (!write(s)) return { ok: false, error: 'Écriture impossible (disque plein ou fichier verrouillé ?).' };
   return { ok: true, encrypted: !!s.tokenEnc };
 }
 
@@ -115,11 +127,11 @@ export function getToken() {
 // disponible, on REFUSE de la persister (pas de repli en clair pour des tokens).
 export function setMcSession(session) {
   const s = read();
-  if (!session) { delete s.mcSessionEnc; write(s); return { ok: true, cleared: true }; }
+  if (!session) { delete s.mcSessionEnc; const okc = write(s); return okc ? { ok: true, cleared: true } : { ok: false, error: 'Écriture impossible.' }; }
   if (!encAvailable()) return { ok: false, error: 'Chiffrement indisponible : session non enregistrée (reconnexion nécessaire à chaque lancement).' };
   try {
     s.mcSessionEnc = safe.encryptString(JSON.stringify(session)).toString('base64');
-    write(s);
+    if (!write(s)) return { ok: false, error: 'Écriture impossible (disque plein ou fichier verrouillé ?).' };
     return { ok: true, encrypted: true };
   } catch {
     return { ok: false, error: 'Chiffrement de la session impossible.' };
