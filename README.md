@@ -1,139 +1,97 @@
-# 🐦‍⬛ Hasu Client
+# Hasu Client
 
-**Hasu Client** est un client Minecraft **léger et 100 % légitime** pour **Minecraft 1.8.9 (Forge)**,
-dans l'esprit de **Lunar Client** et **Badlion Client**. Il se concentre sur le confort de jeu, la
-lisibilité en PvP et les performances — **sans aucune triche**.
+Un client Minecraft léger pour **1.8.9 (Forge)**, dans l'esprit de Lunar ou Badlion.
+Il rend le jeu plus lisible et plus fluide — et il ne triche pas.
 
-Le produit se compose de **deux parties** :
+Il y a deux morceaux :
 
-- **🚀 Hasu Launcher** — l'application de bureau (Windows) qui te connecte avec ton compte Microsoft,
-  se met à jour toute seule et lance le jeu en un clic.
-- **🎮 Le client en jeu** — le mod Forge 1.8.9 qui ajoute les HUDs, l'interface (ClickGUI), les thèmes
-  et les optimisations une fois en partie.
+- **Le launcher** — l'appli Windows qui te connecte avec ton compte Microsoft et lance le jeu en un clic.
+- **Le client** — le mod Forge qui ajoute les HUD, l'interface et les optimisations une fois en partie.
 
 > **Version actuelle : 1.57.0**
 
 ---
 
-## ✨ La philosophie : légitime par conception
+## Pourquoi tu ne risques rien
 
-Hasu Client ne contient **que** des éléments visuels, de confort ou de performance. **Rien** n'automatise
-le combat ou les déplacements, et **rien** n'est envoyé au serveur — exactement pour la même raison que
-Lunar Client et Badlion Client sont autorisés sur des réseaux comme Hypixel.
+Hasu Client ne contient que du visuel, du confort et de la performance. Rien n'automatise le combat,
+rien n'est envoyé au serveur. C'est exactement pour cette raison que Lunar et Badlion sont autorisés
+sur des réseaux comme Hypixel.
 
-| ✅ Inclus (fair-play) | ❌ Volontairement absent (hors périmètre) |
-|---|---|
-| HUDs (infos à l'écran) | Reach / modification de portée |
-| ClickGUI & thèmes | Modification des hitbox |
-| Fullbright (voir dans le noir) | Auto-clicker |
-| Boost FPS | KillAura / aim-assist |
-| Toggle-sprint, réglage du FOV | Velocity / anti-knockback |
-| Éditeur de HUD | ESP / X-ray / révélation d'infos cachées |
+**Ce qu'il y a dedans :** les HUD, le ClickGUI et ses thèmes, le fullbright, le boost FPS, le
+toggle-sprint, le réglage du FOV, l'éditeur de HUD.
 
-**Compatible OptiFine** (détecté, non fourni).
+**Ce qu'il n'y aura jamais :** reach, hitbox modifiées, auto-clicker, killaura, anti-knockback,
+ESP ou X-ray.
+
+Compatible OptiFine — il est détecté automatiquement, mais pas fourni.
 
 ---
 
-## 🚀 Hasu Launcher (l'application de bureau)
+## Le launcher
 
-Une application moderne au design épuré (thème sombre) qui gère tout ce qu'il faut avant la partie :
+- **Connexion Microsoft officielle.** Le flux Xbox Live / Minecraft classique. Tes identifiants ne
+  passent jamais par nous, seulement un jeton de session — chiffré sur ta machine.
+- **Un seul bouton.** « Jouer » lance Minecraft, Forge et le client. Aucun dossier ni profil à toucher.
+- **Pas de Java à installer.** Le launcher embarque le sien.
+- **Mises à jour automatiques.** Il vérifie au démarrage, télécharge, contrôle l'empreinte SHA-256,
+  installe. Tu n'as rien à faire.
+- **Mode hors-ligne de secours.** Si la connexion Microsoft échoue, un bouton « Jouer en hors-ligne »
+  te laisse quand même entrer en jeu.
+- **Console intégrée.** Les logs de la partie défilent en direct — pratique quand quelque chose cloche.
 
-- **Connexion Microsoft officielle** — authentification Xbox Live / Minecraft par le flux officiel
-  Microsoft. Tes identifiants ne transitent jamais par nous ; seul un jeton de session est utilisé.
-- **Mode hors-ligne de secours** — en cas d'erreur côté Microsoft, un bouton **« Jouer en hors-ligne »**
-  te laisse quand même lancer le jeu.
-- **Bouton « Jouer » unique** — lance Minecraft **1.8.9 + Forge + le client** automatiquement, sans
-  manipulation de dossiers ni de profils.
-- **Mise à jour automatique** — le launcher vérifie la dernière version au démarrage, télécharge la mise
-  à jour et la **vérifie par empreinte SHA-256** avant installation. Toujours à jour, sans effort.
-- **Console de jeu intégrée** — les logs de la partie s'affichent en direct dans le launcher (pratique
-  pour comprendre un souci).
-- **Aucun Java à installer** — le launcher est livré avec son propre environnement d'exécution intégré.
-- **Session mémorisée en sécurité** — ton compte et tes préférences sont conservés localement, le jeton
-  de connexion étant **chiffré** sur ta machine.
-
-### Formats de distribution
-
-| Livrable | Pour qui |
-|---|---|
-| **HasuLauncher-Setup.exe** | Installateur classique (raccourci bureau + menu Démarrer, se met à jour tout seul) |
-| **HasuLauncher-portable.zip** | Version portable, sans installation (clé USB, PC sans droits admin) |
-
-*(Windows 64 bits. Icône dédiée, JRE embarqué.)*
+Deux formats au téléchargement : **`HasuLauncher-Setup.exe`** (installation classique, se met à jour
+tout seul) ou **`HasuLauncher-portable.zip`** (clé USB, PC sans droits admin). Windows 64 bits.
 
 ---
 
-## 🎮 Le client en jeu (le mod)
+## En jeu
 
-Une fois en partie, Hasu Client ajoute une couche d'interface et d'affichage soignée.
+**Les HUD** sont tous déplaçables avec l'éditeur intégré : keystrokes (ZQSD + clics), CPS, FPS, ping,
+durabilité de l'armure, effets de potion en cours, coordonnées, compteur de combo.
 
-### HUDs (informations à l'écran)
-Déplaçables librement grâce à l'éditeur intégré :
+**Le ClickGUI** range les modules par catégorie — HUD, joueur, visuel, performance. Chaque module a ses
+réglages dépliables et son raccourci clavier. Trois thèmes : sombre, minimal, ou ta propre palette.
 
-- **Keystrokes** — visualisation des touches (ZQSD + clics)
-- **CPS** — clics par seconde
-- **FPS** — images par seconde
-- **Ping** — latence au serveur
-- **Armor** — durabilité de l'armure et de l'objet en main
-- **Potions** — effets actifs et leur durée
-- **Coordinates** — position (X / Y / Z)
-- **Combo** — nombre de coups enchaînés en combat
+**Les modules** : toggle-sprint et FOV changer côté joueur, fullbright côté visuel, FPS boost côté
+performance.
 
-### Interface (ClickGUI)
-- Panneaux par **catégorie** (HUD / Joueur / Visuel / Performance), déplaçables
-- Réglages **en ligne** pour chaque module (interrupteurs, valeurs, modes)
-- **Raccourcis clavier** personnalisables par module
-- **Thèmes** : Sombre, Minimal, ou Personnalisé (palette au choix)
-
-### Modules
-- **Joueur** — *Toggle-Sprint* (sprint permanent), *FOV Changer* (champ de vision)
-- **Visuel** — *Fullbright* (luminosité maximale, voir dans le noir)
-- **Performance** — *FPS Boost* (rendu allégé pour plus d'images/seconde)
-
-### Commandes
-| Touche | Action |
+| Touche | Ce que ça fait |
 |---|---|
-| **Maj droite** (Right Shift) | Ouvrir le ClickGUI |
-| **Ctrl droite** (Right Ctrl) | Ouvrir l'éditeur de HUD (glisser-déposer les éléments) |
-| Clic gauche *(dans le ClickGUI)* | Activer / désactiver un module |
+| Maj droite | Ouvrir le ClickGUI |
+| Ctrl droite | Ouvrir l'éditeur de HUD |
+| Clic gauche sur un module | L'activer ou le couper |
 | Clic droit sur un module | Déplier ses réglages |
-| Survoler un module + une touche | Assigner ce raccourci au module |
+| Survoler un module + une touche | Lui assigner ce raccourci |
 
-Tous les réglages (modules actifs, raccourcis, position des HUD, thème) sont **sauvegardés
-automatiquement** et retrouvés à la prochaine session.
-
----
-
-## 🧩 Compatibilité & prérequis
-
-- **Jeu** : Minecraft Java Edition **1.8.9** avec **Forge**.
-- **Compte** : un **compte Microsoft / Minecraft officiel** (les comptes crackés ne sont pas pris en charge).
-- **Système** : Windows 64 bits pour le launcher.
-- **OptiFine 1.8.9** : compatible, peut cohabiter avec le client.
+Tout est sauvegardé tout seul : modules actifs, raccourcis, position des HUD, thème.
 
 ---
 
-## ❓ FAQ
+## Ce qu'il te faut
 
-**Est-ce que je peux me faire bannir avec Hasu Client ?**
-Non. Le client n'envoie rien au serveur et ne modifie aucune interaction de combat. Il est dans la même
-catégorie que Lunar/Badlion : ce sont des améliorations visuelles et de performance, autorisées.
-
-**Faut-il installer Java ou Forge à la main ?**
-Non. Le launcher embarque son propre environnement d'exécution et se charge de lancer Minecraft + Forge +
-le client pour toi.
-
-**Comment se font les mises à jour ?**
-Automatiquement : le launcher détecte la dernière version, la télécharge et vérifie son intégrité
-(SHA-256) avant de l'installer.
-
-**Que se passe-t-il si la connexion Microsoft échoue ?**
-Un bouton **« Jouer en hors-ligne »** apparaît pour te permettre de lancer le jeu malgré tout.
+Minecraft Java **1.8.9 avec Forge**, un **compte Microsoft officiel** (les comptes crackés ne
+fonctionnent pas), et Windows 64 bits pour le launcher.
 
 ---
 
-## 📌 Statut
+## Questions fréquentes
 
-Projet en **bêta**, activement développé. Les retours et suggestions sont les bienvenus.
+**Je peux me faire bannir ?**
+Non. Le client n'envoie rien au serveur et ne touche à aucune interaction de combat. Même catégorie
+que Lunar et Badlion.
 
-*Hasu Client n'est pas affilié à Mojang, Microsoft, Lunar Client ni Badlion Client.*
+**Je dois installer Java ou Forge à la main ?**
+Non, le launcher s'occupe de tout.
+
+**Et les mises à jour ?**
+Automatiques, avec vérification de l'empreinte SHA-256 avant installation.
+
+**La connexion Microsoft plante, je fais quoi ?**
+Le bouton « Jouer en hors-ligne » apparaît, tu peux lancer le jeu quand même.
+
+---
+
+Projet en bêta, développé activement. Les retours sont les bienvenus.
+
+*Hasu Client n'est affilié ni à Mojang, ni à Microsoft, ni à Lunar Client, ni à Badlion Client.*
