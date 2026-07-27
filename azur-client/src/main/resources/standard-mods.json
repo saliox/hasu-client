@@ -181,6 +181,16 @@
 		"main": "hud.BiomeMod",
 		"category": "hud"
 	},
+	{
+		"id": "saturation",
+		"main": "hud.SaturationMod",
+		"category": "hud"
+	},
+	{
+		"id": "stopwatch",
+		"main": "hud.StopwatchMod",
+		"category": "hud"
+	},
 	// utility
 	{
 		"id": "replay",
@@ -284,6 +294,12 @@
 	{
 		"id": "particles",
 		"main": "ParticlesMod",
+		"category": "visual"
+	},
+	{
+		"id": "weather_changer",
+		"main": "weatherchanger.WeatherChangerMod",
+		"mixins": "@weatherchanger.mixins",
 		"category": "visual"
 	},
 	{
