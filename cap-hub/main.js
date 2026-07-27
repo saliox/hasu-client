@@ -329,6 +329,7 @@ ipcMain.handle('capes:remove', (_e, id) => {
     const patch = {};
     if (s.activeCape === id) patch.activeCape = '';
     if (s.favorites.includes(id)) patch.favorites = s.favorites.filter((x) => x !== id);
+    if (s.categories[id]) { const cats = { ...s.categories }; delete cats[id]; patch.categories = cats; } // pas de clé orpheline
     if (Object.keys(patch).length) saveSettings(patch);
   }
   return res;
@@ -337,22 +338,40 @@ ipcMain.handle('capes:rename', (_e, id, name) => {
   const s = getSettings();
   const res = renameCape(id, name);
   if (res.ok && res.id !== id) {
-    // Reporte l'état (actif/favori) sur le nouvel id.
+    // Reporte l'état (actif/favori/dossier) sur le nouvel id.
     const patch = {};
     if (s.activeCape === id) patch.activeCape = res.id;
     if (s.favorites.includes(id)) patch.favorites = s.favorites.map((x) => (x === id ? res.id : x));
+    if (s.categories[id]) { const cats = { ...s.categories }; cats[res.id] = cats[id]; delete cats[id]; patch.categories = cats; }
     if (Object.keys(patch).length) saveSettings(patch);
   }
   return res;
 });
-// Crée une cape depuis l'éditeur : dataUrl PNG (data:image/png;base64,...) -> buffer -> validée + sauvée.
-ipcMain.handle('capes:create', (_e, name, dataUrl) => {
-  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
-  if (!m) return { ok: false, error: 'Image invalide.' };
+// Décode un data URL image (base64) en Buffer borné. Source unique de la validation
+// dataUrl->buffer partagée par tous les handlers (création, édition, résolution, rendu…).
+function decodeImageDataUrl(dataUrl, opts = {}) {
+  const { mime = 'png', maxBytes = 12 * 1024 * 1024, invalid = 'Image invalide.', heavy = 'Image trop lourde (max 12 Mo).' } = opts;
+  const m = new RegExp('^data:image/' + mime + ';base64,([A-Za-z0-9+/=]+)$').exec(String(dataUrl || ''));
+  if (!m) return { ok: false, error: invalid };
   let buf;
   try { buf = Buffer.from(m[1], 'base64'); } catch { return { ok: false, error: 'Décodage impossible.' }; }
-  if (buf.length > 12 * 1024 * 1024) return { ok: false, error: 'Image trop lourde (max 12 Mo).' };
-  return importCapeBuffer(buf, name || 'Ma cape');
+  if (buf.length > maxBytes) return { ok: false, error: heavy };
+  return { ok: true, buf };
+}
+// Écrit un Buffer vers un fichier choisi par l'utilisateur (boîte de dialogue) avec un nom
+// par défaut nettoyé. Source unique des handlers d'export (cape, rendu, GIF).
+async function saveBufferViaDialog(buf, { title, defaultName, ext }) {
+  const base = String(defaultName || 'cape').replace(/[\\/:*?"<>|]/g, '_').slice(0, 60) || 'cape';
+  const r = await dialog.showSaveDialog(win, { title, defaultPath: `${base}.${ext}`, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] });
+  if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+  try { fs.writeFileSync(r.filePath, buf); return { ok: true, path: r.filePath }; }
+  catch (e) { return { ok: false, error: e.message }; }
+}
+// Crée une cape depuis l'éditeur : dataUrl PNG (data:image/png;base64,...) -> buffer -> validée + sauvée.
+ipcMain.handle('capes:create', (_e, name, dataUrl) => {
+  const d = decodeImageDataUrl(dataUrl);
+  if (!d.ok) return d;
+  return importCapeBuffer(d.buf, name || 'Ma cape');
 });
 ipcMain.handle('capes:favorite', (_e, id, on) => {
   const s = getSettings();
@@ -384,22 +403,16 @@ ipcMain.handle('capes:original', (_e, id) => {
 });
 // Remplace l'image d'une cape (édition sur place).
 ipcMain.handle('capes:setImage', (_e, id, dataUrl) => {
-  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
-  if (!m) return { ok: false, error: 'Image invalide.' };
-  let buf;
-  try { buf = Buffer.from(m[1], 'base64'); } catch { return { ok: false, error: 'Décodage impossible.' }; }
-  if (buf.length > 12 * 1024 * 1024) return { ok: false, error: 'Image trop lourde (max 12 Mo).' };
-  return setCapeImage(id, buf);
+  const d = decodeImageDataUrl(dataUrl);
+  if (!d.ok) return d;
+  return setCapeImage(id, d.buf);
 });
 // Change la résolution servie (aperçu + proxy en jeu). dataUrl null -> restaure l'original.
 ipcMain.handle('capes:setResolution', (_e, id, dataUrl) => {
   if (dataUrl == null) return setCapeResolution(id, null);
-  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
-  if (!m) return { ok: false, error: 'Image invalide.' };
-  let buf;
-  try { buf = Buffer.from(m[1], 'base64'); } catch { return { ok: false, error: 'Décodage impossible.' }; }
-  if (buf.length > 12 * 1024 * 1024) return { ok: false, error: 'Image trop lourde (max 12 Mo).' };
-  return setCapeResolution(id, buf);
+  const d = decodeImageDataUrl(dataUrl);
+  if (!d.ok) return d;
+  return setCapeResolution(id, d.buf);
 });
 // Duplique une cape (intégrée ou importée) en une copie modifiable.
 ipcMain.handle('capes:duplicate', (_e, id) => duplicateCape(id));
@@ -408,58 +421,26 @@ ipcMain.handle('capes:export', async (_e, id) => {
   const buf = readCape(id);
   if (!buf) return { ok: false, error: 'Cape introuvable.' };
   const src = listCapes().find((c) => c.id === id);
-  const r = await dialog.showSaveDialog(win, {
-    title: 'Exporter la cape',
-    defaultPath: `${(src?.name || 'cape').replace(/[\\/:*?"<>|]/g, '_')}.png`,
-    filters: [{ name: 'PNG', extensions: ['png'] }],
-  });
-  if (r.canceled || !r.filePath) return { ok: false, canceled: true };
-  try { fs.writeFileSync(r.filePath, buf); return { ok: true, path: r.filePath }; }
-  catch (e) { return { ok: false, error: e.message }; }
+  return saveBufferViaDialog(buf, { title: 'Exporter la cape', defaultName: src?.name || 'cape', ext: 'png' });
 });
 // Enregistre un rendu 3D de l'aperçu (PNG data URL) via une boîte de dialogue.
 ipcMain.handle('capes:saveRender', async (_e, dataUrl, name) => {
-  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
-  if (!m) return { ok: false, error: 'Image invalide.' };
-  let buf;
-  try { buf = Buffer.from(m[1], 'base64'); } catch { return { ok: false, error: 'Décodage impossible.' }; }
-  if (buf.length > 12 * 1024 * 1024) return { ok: false, error: 'Image trop lourde (max 12 Mo).' };
-  const base = String(name || 'cape').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40) || 'cape';
-  const r = await dialog.showSaveDialog(win, {
-    title: 'Exporter le rendu',
-    defaultPath: `${base} - rendu.png`,
-    filters: [{ name: 'PNG', extensions: ['png'] }],
-  });
-  if (r.canceled || !r.filePath) return { ok: false, canceled: true };
-  try { fs.writeFileSync(r.filePath, buf); return { ok: true, path: r.filePath }; }
-  catch (e) { return { ok: false, error: e.message }; }
+  const d = decodeImageDataUrl(dataUrl);
+  if (!d.ok) return d;
+  return saveBufferViaDialog(d.buf, { title: 'Exporter le rendu', defaultName: `${name || 'cape'} - rendu`, ext: 'png' });
 });
 // Enregistre un GIF animé de l'aperçu (data URL image/gif) via une boîte de dialogue.
 ipcMain.handle('capes:saveGif', async (_e, dataUrl, name) => {
-  const m = /^data:image\/gif;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
-  if (!m) return { ok: false, error: 'GIF invalide.' };
-  let buf;
-  try { buf = Buffer.from(m[1], 'base64'); } catch { return { ok: false, error: 'Décodage impossible.' }; }
-  if (buf.length > 24 * 1024 * 1024) return { ok: false, error: 'GIF trop lourd (max 24 Mo).' };
-  const base = String(name || 'cape').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40) || 'cape';
-  const r = await dialog.showSaveDialog(win, {
-    title: 'Exporter le GIF animé',
-    defaultPath: `${base} - anime.gif`,
-    filters: [{ name: 'GIF', extensions: ['gif'] }],
-  });
-  if (r.canceled || !r.filePath) return { ok: false, canceled: true };
-  try { fs.writeFileSync(r.filePath, buf); return { ok: true, path: r.filePath }; }
-  catch (e) { return { ok: false, error: e.message }; }
+  const d = decodeImageDataUrl(dataUrl, { mime: 'gif', maxBytes: 24 * 1024 * 1024, invalid: 'GIF invalide.', heavy: 'GIF trop lourd (max 24 Mo).' });
+  if (!d.ok) return d;
+  return saveBufferViaDialog(d.buf, { title: 'Exporter le GIF animé', defaultName: `${name || 'cape'} - anime`, ext: 'gif' });
 });
 // Copie un rendu 3D (PNG data URL) dans le presse-papiers (partage direct : Discord…).
 ipcMain.handle('capes:copyRender', (_e, dataUrl) => {
-  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
-  if (!m) return { ok: false, error: 'Image invalide.' };
-  let buf;
-  try { buf = Buffer.from(m[1], 'base64'); } catch { return { ok: false, error: 'Décodage impossible.' }; }
-  if (buf.length > 12 * 1024 * 1024) return { ok: false, error: 'Image trop lourde (max 12 Mo).' };
+  const d = decodeImageDataUrl(dataUrl);
+  if (!d.ok) return d;
   try {
-    const img = nativeImage.createFromBuffer(buf);
+    const img = nativeImage.createFromBuffer(d.buf);
     if (img.isEmpty()) return { ok: false, error: 'Image illisible.' };
     clipboard.writeImage(img);
     return { ok: true };
@@ -583,7 +564,10 @@ function mcView(session) {
     capes,
     activeCapeId: (capes.find((c) => c.state === 'ACTIVE') || {}).id || '',
     expiresAt: session.expiresAt || null,
-    canRefresh: !!session.msRefreshToken,
+    // Rafraîchissable seulement si on a À LA FOIS le refresh token MS ET l'ID client Azure :
+    // sans clientId, ensureMcSession ne peut pas renouveler, et la bannière « expiré » doit
+    // s'afficher au lieu de laisser croire la session utilisable.
+    canRefresh: !!session.msRefreshToken && !!getSettings().mcClientId,
   };
 }
 
@@ -617,6 +601,22 @@ async function ensureMcSession() {
     }
   })();
   return mcRefreshPromise;
+}
+
+// Action de profil Minecraft : session valide -> fn(session) renvoie un profil -> on
+// persiste et renvoie la vue. Factorise le boilerplate identique de mc:refresh/setCape/hideCape.
+async function withMcProfile(fn, { emptyError, failError } = {}) {
+  const session = await ensureMcSession();
+  if (!session) return { ok: false, error: 'Non connecté.' };
+  try {
+    const profile = await fn(session);
+    if (!profile) return { ok: false, error: emptyError || failError || 'Action impossible.' };
+    const updated = { ...session, profile };
+    setMcSession(updated);
+    return { ok: true, ...mcView(updated) };
+  } catch (e) {
+    return { ok: false, error: e.message || failError || 'Action impossible.' };
+  }
 }
 
 let mcLoginState = null; // { cancelled } pour interrompre le device-code en cours
@@ -670,33 +670,13 @@ ipcMain.handle('mc:cancelLogin', () => { if (mcLoginState) mcLoginState.cancelle
 ipcMain.handle('mc:logout', () => { clearMcSession(); return { ok: true, connected: false }; });
 
 // Rafraîchit le profil (relit les capes officielles depuis l'API).
-ipcMain.handle('mc:refresh', async () => {
-  const session = await ensureMcSession();
-  if (!session) return { ok: false, error: 'Non connecté.' };
-  try {
-    const profile = await mc.getProfile(session.accessToken);
-    if (!profile) return { ok: false, error: 'Aucun profil Java sur ce compte.' };
-    const updated = { ...session, profile };
-    setMcSession(updated);
-    return { ok: true, ...mcView(updated) };
-  } catch (e) {
-    return { ok: false, error: e.message || 'Lecture du profil impossible.' };
-  }
-});
+ipcMain.handle('mc:refresh', () =>
+  withMcProfile((s) => mc.getProfile(s.accessToken), { emptyError: 'Aucun profil Java sur ce compte.', failError: 'Lecture du profil impossible.' }));
 
 // Active une cape officielle du compte.
-ipcMain.handle('mc:setCape', async (_e, capeId) => {
-  const session = await ensureMcSession();
-  if (!session) return { ok: false, error: 'Non connecté.' };
+ipcMain.handle('mc:setCape', (_e, capeId) => {
   if (!capeId) return { ok: false, error: 'Cape non spécifiée.' };
-  try {
-    const profile = await mc.setActiveCape(session.accessToken, capeId);
-    const updated = { ...session, profile };
-    setMcSession(updated);
-    return { ok: true, ...mcView(updated) };
-  } catch (e) {
-    return { ok: false, error: e.message || 'Activation impossible.' };
-  }
+  return withMcProfile((s) => mc.setActiveCape(s.accessToken, capeId), { failError: 'Activation impossible.' });
 });
 
 // Renvoie la texture d'une cape officielle en data URL (récupérée côté main, hors CSP).
@@ -745,15 +725,5 @@ ipcMain.handle('mc:skin', async () => {
 });
 
 // Masque la cape officielle (aucune cape).
-ipcMain.handle('mc:hideCape', async () => {
-  const session = await ensureMcSession();
-  if (!session) return { ok: false, error: 'Non connecté.' };
-  try {
-    const profile = await mc.hideCape(session.accessToken);
-    const updated = { ...session, profile };
-    setMcSession(updated);
-    return { ok: true, ...mcView(updated) };
-  } catch (e) {
-    return { ok: false, error: e.message || 'Masquage impossible.' };
-  }
-});
+ipcMain.handle('mc:hideCape', () =>
+  withMcProfile((s) => mc.hideCape(s.accessToken), { failError: 'Masquage impossible.' }));

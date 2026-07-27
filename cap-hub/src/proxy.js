@@ -71,8 +71,24 @@ function cacheGet(key) {
   return null;
 }
 function cacheSet(key, entry) {
+  passCache.delete(key);                // re-insère en fin pour que l'éviction FIFO purge bien les plus anciens
   passCache.set(key, entry);
   if (passCache.size > PASS_MAX) passCache.delete(passCache.keys().next().value); // éviction FIFO
+}
+
+// Cache du résultat de firstFrameIfAnimated : une cape animée serait sinon DÉCODÉE +
+// ré-encodée (synchrone, coûteux) à CHAQUE requête OptiFine. Clé = source:pseudo,
+// empreinte = longueur + quelques octets (change si la cape change).
+const frameCache = new Map();
+function fingerprint(buf) { return buf.length + ':' + buf[8] + ':' + buf[buf.length - 1] + ':' + buf[buf.length >> 1]; }
+function firstFrameCached(key, buf) {
+  const fp = fingerprint(buf);
+  const hit = frameCache.get(key);
+  if (hit && hit.fp === fp) return hit.out;
+  const out = firstFrameIfAnimated(buf);
+  frameCache.set(key, { fp, out });
+  if (frameCache.size > PASS_MAX) frameCache.delete(frameCache.keys().next().value);
+  return out;
 }
 
 function fetchUpstream(host, urlPath) {
@@ -147,7 +163,7 @@ async function handle(req, res) {
   for (const src of ['own', 'registry']) {
     try {
       const buf = src === 'own' ? await deps.getOwn(name.toLowerCase()) : await deps.getRegistryCape(name.toLowerCase());
-      if (buf) { capePng = firstFrameIfAnimated(buf); break; }
+      if (buf) { capePng = firstFrameCached(`${src}:${name.toLowerCase()}`, buf); break; }
     } catch {}
   }
 

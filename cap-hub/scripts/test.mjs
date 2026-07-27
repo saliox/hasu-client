@@ -37,6 +37,14 @@ ok('accepte animée 64x96 (3 img)', validateCape(mkPng(64, 96)).frames === 3);
 ok('accepte HD 256x128', validateCape(mkPng(256, 128)).ok && validateCape(mkPng(256, 128)).frames === 1);
 ok('accepte 4K 4096x2048', validateCape(mkPng(4096, 2048)).ok);
 ok('rejette 64x48 (hauteur invalide)', validateCape(mkPng(64, 48)).ok === false);
+ok('rejette une surface démesurée (aligné sur decodePNG)', (() => {
+  // PNG à en-tête 8192×8192 (67 Mpx > plafond 33,5 Mpx) sans réellement allouer les pixels.
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(8192, 0); ihdr.writeUInt32BE(8192, 4); ihdr[8] = 8; ihdr[9] = 6;
+  const chunk = (t, d) => { const l = Buffer.alloc(4); l.writeUInt32BE(d.length, 0); return Buffer.concat([l, Buffer.from(t), d, Buffer.alloc(4)]); };
+  const png = Buffer.concat([sig, chunk('IHDR', ihdr), chunk('IEND', Buffer.alloc(0))]);
+  return validateCape(png).ok === false;
+})());
 ok('capeFrames 64x64=2, 128x64=1', capeFrames(64, 64) === 2 && capeFrames(128, 64) === 1);
 ok('firstFrameIfAnimated 64x64 -> 64x32', (() => { const ff = firstFrameIfAnimated(mkPng(64, 64)); const s = readPngSize(ff); return s.width === 64 && s.height === 32; })());
 ok('firstFrameIfAnimated laisse une cape fixe intacte', (() => { const p = mkPng(64, 32); return firstFrameIfAnimated(p) === p; })());
@@ -119,6 +127,15 @@ let ss = store.saveSettings({ favorites: ['a.png', 'a.png', 'b.png'] });
 ok('favoris dédupliqués + persistés', ss.favorites.length === 2 && store.getSettings().favorites.includes('b.png'));
 ss = store.saveSettings({ categories: { 'x.png': 'Cool', 'y.png': '  ' } });
 ok('catégories nettoyées (vide ignoré)', ss.categories['x.png'] === 'Cool' && !('y.png' in ss.categories));
+ok('catégories bornées à 500 clés', (() => {
+  const big = {}; for (let i = 0; i < 800; i++) big['c' + i + '.png'] = 'X';
+  return Object.keys(store.saveSettings({ categories: big }).categories).length === 500;
+})());
+ok('usernameValid : pseudo correct vs invalide', (() => {
+  const okName = store.saveSettings({ username: 'Notch_1' }).usernameValid === true;
+  const badName = store.saveSettings({ username: 'Cool Guy' }).usernameValid === false;
+  return okName && badName;
+})());
 ok('thème par défaut = nuit', store.getSettings().theme === 'nuit');
 ok('écriture atomique : pas de .tmp résiduel', !fs.existsSync(path.join(ud, 'settings.json.tmp')));
 ok('écriture atomique : sauvegarde .bak après ré-écriture', fs.existsSync(path.join(ud, 'settings.json.bak')));

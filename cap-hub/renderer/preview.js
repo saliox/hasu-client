@@ -425,6 +425,7 @@
   function loop(ts) {
     if (!gl || (!capeImg && !skinImg)) { raf = 0; return; }
     if (!t0) t0 = ts;
+    if (!lastSwap) lastSwap = ts; // amorce sur le 1er tick : sinon (lastSwap=0) l'image 0 est sautée d'emblée
     const dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 0; lastTs = ts;
     spinClock += dt;
     if (!dragging) {
@@ -535,22 +536,25 @@
     const sc = scale.getContext('2d');
     const outFrames = [];
     let animClock = 0;
-    for (let i = 0; i < count; i++) {
-      const u = i / count;
-      // Angle : tour complet (perso) ou balancement sinusoïdal bouclé (cape seule)
-      curAngle = showBody ? u * Math.PI * 2 : Math.sin(u * Math.PI * 2) * 0.5;
-      spinClock += dt;
-      // Défilement des capes animées (image toutes les 100 ms) — `frames` = nb d'images du PNG
-      animClock += dt * 1000;
-      if (frames > 1 && animClock >= 100) { curFrame = (curFrame + 1) % frames; animClock = 0; }
-      drawFrame(dt);
-      const full = readToCanvas();
-      sc.clearRect(0, 0, tw, th);
-      sc.drawImage(full, 0, 0, tw, th);
-      outFrames.push(sc.getImageData(0, 0, tw, th).data);
+    try {
+      for (let i = 0; i < count; i++) {
+        const u = i / count;
+        // Angle : tour complet (perso) ou balancement sinusoïdal bouclé (cape seule)
+        curAngle = showBody ? u * Math.PI * 2 : Math.sin(u * Math.PI * 2) * 0.5;
+        spinClock += dt;
+        // Défilement des capes animées (image toutes les 100 ms) — `frames` = nb d'images du PNG
+        animClock += dt * 1000;
+        if (frames > 1 && animClock >= 100) { curFrame = (curFrame + 1) % frames; animClock = 0; }
+        drawFrame(dt);
+        const full = readToCanvas();
+        sc.clearRect(0, 0, tw, th);
+        sc.drawImage(full, 0, 0, tw, th);
+        outFrames.push(sc.getImageData(0, 0, tw, th).data);
+      }
+    } finally {
+      // restauration TOUJOURS (même en cas d'erreur) : sinon l'aperçu live resterait figé.
+      curAngle = save.curAngle; spinClock = save.spinClock; curFrame = save.curFrame; lastSwap = save.lastSwap; dragging = save.dragging;
     }
-    // restauration
-    curAngle = save.curAngle; spinClock = save.spinClock; curFrame = save.curFrame; lastSwap = save.lastSwap; dragging = save.dragging;
     return { w: tw, h: th, delayCs, frames: outFrames };
   }
 
