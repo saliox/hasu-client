@@ -191,6 +191,36 @@
 		"main": "hud.StopwatchMod",
 		"category": "hud"
 	},
+	{
+		"id": "game_time",
+		"main": "hud.GameTimeMod",
+		"category": "hud"
+	},
+	{
+		"id": "arrow_count",
+		"main": "hud.ArrowCountMod",
+		"category": "hud"
+	},
+	{
+		"id": "durability",
+		"main": "hud.DurabilityMod",
+		"category": "hud"
+	},
+	{
+		"id": "health",
+		"main": "hud.HealthMod",
+		"category": "hud"
+	},
+	{
+		"id": "target_health",
+		"main": "hud.TargetHealthMod",
+		"category": "hud"
+	},
+	{
+		"id": "movement",
+		"main": "hud.MovementMod",
+		"category": "hud"
+	},
 	// utility
 	{
 		"id": "replay",
