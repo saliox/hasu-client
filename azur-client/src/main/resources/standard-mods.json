@@ -206,6 +206,21 @@
 		"main": "hud.DurabilityMod",
 		"category": "hud"
 	},
+	{
+		"id": "health",
+		"main": "hud.HealthMod",
+		"category": "hud"
+	},
+	{
+		"id": "target_health",
+		"main": "hud.TargetHealthMod",
+		"category": "hud"
+	},
+	{
+		"id": "movement",
+		"main": "hud.MovementMod",
+		"category": "hud"
+	},
 	// utility
 	{
 		"id": "replay",
