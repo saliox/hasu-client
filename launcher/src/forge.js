@@ -20,6 +20,10 @@ export function forgeUniversalUrl(build = FORGE_BUILD) {
 export async function ensureForge(librariesDir, build = FORGE_BUILD) {
   const rel = `net/minecraftforge/forge/${build}/forge-${build}-universal.jar`;
   const jar = path.join(librariesDir, ...rel.split('/'));
+  // Le manifeste Forge (contrairement à Mojang) ne fournit pas de hash. sha1: null
+  // n'est pas une absence de vérification : downloadFile() (voir download.js) récupère
+  // automatiquement le sidecar .sha1 publié à côté de l'artefact sur le maven avant de
+  // télécharger, comme toutes les autres sources du launcher.
   await downloadFile(forgeUniversalUrl(build), jar, null, { timeout: 120000 });
   const raw = readZipFile(jar, 'version.json');
   if (!raw) throw new Error('version.json introuvable dans le jar Forge — build inattendue.');
@@ -28,7 +32,9 @@ export async function ensureForge(librariesDir, build = FORGE_BUILD) {
 
 // Bibliothèques Forge (vieux format : name + url, flags clientreq/serverreq).
 // Renvoie des tâches { url, file, sha1: null } ; le jar Forge lui-même est exclu
-// (déjà téléchargé par ensureForge, il va en tête de classpath).
+// (déjà téléchargé par ensureForge, il va en tête de classpath). sha1: null déclenche
+// la vérification automatique via sidecar .sha1 dans downloadFile() (voir download.js) —
+// ce n'est pas une absence de contrôle, contrairement à avant.
 export function resolveForgeLibraries(forgeJson, librariesDir) {
   const tasks = [];
   for (const lib of forgeJson.libraries || []) {

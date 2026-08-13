@@ -54,14 +54,37 @@ export async function fetchJson(url, opts) {
   return JSON.parse(buf.toString('utf8').replace(/^﻿/, ''));
 }
 
+// Récupère l'empreinte SHA-1 officielle publiée par un dépôt Maven à côté d'un artefact
+// (sidecar <url>.sha1, convention standard des dépôts Maven) — sert à vérifier des
+// téléchargements dont le manifeste amont ne fournit pas de hash lui-même (ex. Forge,
+// voir forge.js). Renvoie null si le sidecar est indisponible ou invalide ; l'appelant
+// décide alors de continuer sans vérification plutôt que d'échouer (hors-ligne, maven
+// historique sans .sha1) — pas de régression par rapport à l'absence totale de contrôle.
+export async function fetchMavenSha1(url) {
+  try {
+    const buf = await fetchBuffer(`${url}.sha1`, { timeout: 15000, maxBytes: 4096 });
+    const m = buf.toString('utf8').trim().match(/[0-9a-fA-F]{40}/);
+    return m ? m[0].toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
 // Télécharge url -> file si absent/corrompu ; vérifie le SHA-1 si fourni.
 export async function downloadFile(url, file, sha1, opts) {
   if (isFresh(file, sha1)) return { file, skipped: true, bytes: 0 };
+  // Aucune empreinte fournie par l'appelant (ex. bibliothèques Forge, dont le manifeste
+  // ne publie pas de hash contrairement à Mojang) : on tente le sidecar .sha1 publié à
+  // côté de l'artefact sur le maven avant de télécharger, pour ne pas laisser passer un
+  // téléchargement totalement non vérifié quand ce n'est pas nécessaire. Se rabat
+  // silencieusement sur l'absence de vérification si le sidecar est indisponible
+  // (hors-ligne, maven historique sans .sha1) — pas de régression par rapport à avant.
+  const expectedSha1 = sha1 || await fetchMavenSha1(url);
   const buf = await fetchBuffer(url, opts);
-  if (sha1) {
+  if (expectedSha1) {
     const got = crypto.createHash('sha1').update(buf).digest('hex');
-    if (got !== String(sha1).toLowerCase()) {
-      throw new Error(`Empreinte SHA-1 invalide pour ${path.basename(file)} (attendu ${sha1}, reçu ${got}) — téléchargement refusé.`);
+    if (got !== String(expectedSha1).toLowerCase()) {
+      throw new Error(`Empreinte SHA-1 invalide pour ${path.basename(file)} (attendu ${expectedSha1}, reçu ${got}) — téléchargement refusé.`);
     }
   }
   fs.mkdirSync(path.dirname(file), { recursive: true });
