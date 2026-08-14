@@ -17,9 +17,22 @@ import { runtimePlatform, javaExePath } from '../src/java.js';
 import { encodePNG, pngToIco } from '../src/png.js';
 
 let passed = 0;
+const pending = [];
+// `fn` peut être async (ex. forge : résolution des sha1 via réseau mocké) — on
+// exécute toujours, mais on n'attend le résultat qu'à la fin pour garder l'ordre
+// d'affichage des tests synchrones existants.
 function test(name, fn) {
-  try { fn(); passed++; }
-  catch (e) { console.error(`✗ ${name}\n  ${e.message}`); process.exitCode = 1; }
+  try {
+    const r = fn();
+    if (r && typeof r.then === 'function') {
+      pending.push(r.then(
+        () => { passed++; },
+        (e) => { console.error(`✗ ${name}\n  ${e.message}`); process.exitCode = 1; },
+      ));
+    } else {
+      passed++;
+    }
+  } catch (e) { console.error(`✗ ${name}\n  ${e.message}`); process.exitCode = 1; }
 }
 
 // ---------- updater ----------
@@ -166,7 +179,7 @@ test('zip : extraction avec exclusions et protection zip-slip', () => {
 });
 
 // ---------- forge ----------
-test('forge : URL du universal jar + résolution des bibliothèques', () => {
+test('forge : URL du universal jar + résolution des bibliothèques', async () => {
   assert.equal(forgeUniversalUrl(),
     `https://maven.minecraftforge.net/net/minecraftforge/forge/${FORGE_BUILD}/forge-${FORGE_BUILD}-universal.jar`);
   const fjson = {
@@ -177,11 +190,25 @@ test('forge : URL du universal jar + résolution des bibliothèques', () => {
       { name: 'com.google.guava:guava:17.0' },                                   // lib Mojang
     ],
   };
-  const tasks = resolveForgeLibraries(fjson, '/libs');
+  // resolveForgeLibraries récupère désormais le SHA-1 réel via <url>.sha1 (maven) —
+  // on mocke fetch() pour rester hors-réseau, comme le reste de la suite.
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => ({
+    ok: true,
+    arrayBuffer: async () => Buffer.from(crypto.createHash('sha1').update(String(url)).digest('hex')),
+  });
+  let tasks;
+  try {
+    tasks = await resolveForgeLibraries(fjson, '/libs');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
   assert.equal(tasks.length, 2);
   // l'URL http historique est remplacée par le maven officiel HTTPS
   assert.equal(tasks[0].url, 'https://maven.minecraftforge.net/net/minecraft/launchwrapper/1.12/launchwrapper-1.12.jar');
   assert.equal(tasks[1].url, 'https://libraries.minecraft.net/com/google/guava/guava/17.0/guava-17.0.jar');
+  assert.match(tasks[0].sha1, /^[0-9a-f]{40}$/);
+  assert.match(tasks[1].sha1, /^[0-9a-f]{40}$/);
 });
 test('forge : fusion du version.json (mainClass + arguments imposés)', () => {
   const vanilla = { id: '1.8.9', mainClass: 'net.minecraft.client.main.Main', minecraftArguments: '--username ${auth_player_name}', type: 'release' };
@@ -226,4 +253,5 @@ test('encodePNG/pngToIco produisent des signatures valides', () => {
   assert.equal(ico.length, 22 + png.length);
 });
 
+await Promise.all(pending);
 console.log(process.exitCode ? `Échecs — ${passed} test(s) OK` : `✓ ${passed} tests OK`);

@@ -91,7 +91,7 @@ export async function prepareAndLaunch(opts, hooks = {}) {
     stage('Forge…');
     const forge = await ensureForge(librariesDir);
     forgeJar = forge.jar;
-    tasks.push(...resolveForgeLibraries(forge.versionJson, librariesDir));
+    tasks.push(...(await resolveForgeLibraries(forge.versionJson, librariesDir)));
     launchJson = mergeVersionJson(vjson, forge.versionJson);
   }
   await downloadAll(tasks, { onProgress: progress('libraries') });

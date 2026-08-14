@@ -41,8 +41,15 @@ function createWindow() {
   });
   win.removeMenu();
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  // Tout lien externe s'ouvre dans le navigateur, jamais dans l'app.
-  win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
+  // Tout lien externe s'ouvre dans le navigateur, jamais dans l'app — et seulement en
+  // https:, comme le handler IPC open:external (pas de javascript:/file:/etc.).
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const u = new URL(String(url));
+      if (u.protocol === 'https:') shell.openExternal(u.href);
+    } catch {}
+    return { action: 'deny' };
+  });
   win.webContents.on('will-navigate', (e) => e.preventDefault());
 }
 
@@ -126,39 +133,49 @@ ipcMain.handle('versions:list', async () => {
   }
 });
 
+// Drapeau de préparation : `isGameRunning()` ne devient vrai qu'une fois le process du
+// jeu réellement spawné (fin de tous les téléchargements), donc un second appel
+// `game:launch` reçu PENDANT la préparation (téléchargements en cours) passerait outre
+// ce seul contrôle. `launching` couvre toute la fenêtre, dès l'entrée du handler.
+let launching = false;
 ipcMain.handle('game:launch', async (e, { offline } = {}) => {
-  if (isGameRunning()) return { ok: false, error: 'Le jeu tourne déjà.' };
-  const s = getSettings();
-  let session;
-  if (offline) {
-    const name = (s.offlineName || 'Joueur').replace(/[^A-Za-z0-9_]/g, '').slice(0, 16) || 'Joueur';
-    session = { name, uuid: offlineUuid(name), accessToken: '0', userType: 'legacy' };
-  } else {
-    const live = await readySession();
-    if (!live?.profile) return { ok: false, error: 'Aucun compte connecté — connecte-toi ou joue en hors-ligne.' };
-    session = { name: live.profile.name, uuid: live.profile.id, accessToken: live.accessToken, userType: 'msa' };
-  }
+  if (launching || isGameRunning()) return { ok: false, error: 'Le jeu tourne déjà.' };
+  launching = true;
   try {
-    const r = await prepareAndLaunch(
-      {
-        gameDir: gameDir(),
-        versionId: s.versionId || FORGE_MC_VERSION,
-        // Forge n'est fourni que pour la version du client (1.8.9).
-        forge: s.forge && (s.versionId || FORGE_MC_VERSION) === FORGE_MC_VERSION,
-        session,
-        ramMb: s.ramMb,
-      },
-      {
-        onStage: (stage) => send('game-stage', stage),
-        onProgress: (p) => send('game-progress', p),
-        onLog: (line) => send('game-log', line),
-        onExit: (code) => send('game-exit', { code }),
-      },
-    );
-    return { ok: true, pid: r.pid };
-  } catch (err) {
-    send('game-exit', { code: null, error: err.message });
-    return { ok: false, error: err.message };
+    const s = getSettings();
+    let session;
+    if (offline) {
+      const name = (s.offlineName || 'Joueur').replace(/[^A-Za-z0-9_]/g, '').slice(0, 16) || 'Joueur';
+      session = { name, uuid: offlineUuid(name), accessToken: '0', userType: 'legacy' };
+    } else {
+      const live = await readySession();
+      if (!live?.profile) return { ok: false, error: 'Aucun compte connecté — connecte-toi ou joue en hors-ligne.' };
+      session = { name: live.profile.name, uuid: live.profile.id, accessToken: live.accessToken, userType: 'msa' };
+    }
+    try {
+      const r = await prepareAndLaunch(
+        {
+          gameDir: gameDir(),
+          versionId: s.versionId || FORGE_MC_VERSION,
+          // Forge n'est fourni que pour la version du client (1.8.9).
+          forge: s.forge && (s.versionId || FORGE_MC_VERSION) === FORGE_MC_VERSION,
+          session,
+          ramMb: s.ramMb,
+        },
+        {
+          onStage: (stage) => send('game-stage', stage),
+          onProgress: (p) => send('game-progress', p),
+          onLog: (line) => send('game-log', line),
+          onExit: (code) => send('game-exit', { code }),
+        },
+      );
+      return { ok: true, pid: r.pid };
+    } catch (err) {
+      send('game-exit', { code: null, error: err.message });
+      return { ok: false, error: err.message };
+    }
+  } finally {
+    launching = false;
   }
 });
 ipcMain.handle('game:stop', () => { stopGame(); return { ok: true }; });
