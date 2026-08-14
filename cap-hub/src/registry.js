@@ -119,6 +119,15 @@ async function gh(token, url, options = {}) {
   return r.json();
 }
 
+// Identité GitHub réellement authentifiée derrière CE token (jamais le pseudo Minecraft
+// local, qui est du texte libre non vérifié). Sert à vérifier qu'un joueur ne republie pas
+// par-dessus la cape d'un autre en réutilisant simplement son pseudo.
+async function getAuthenticatedIdentity(token) {
+  const j = await gh(token, 'https://api.github.com/user');
+  if (!j || !j.id) return null;
+  return { id: j.id, login: j.login || null };
+}
+
 // GET du fichier via l'API contents : renvoie { sha, buf } ou null s'il n'existe pas.
 // buf est null pour les fichiers ≥ 1 Mo (l'API renvoie alors un content vide).
 async function getFile(token, relPath) {
@@ -157,6 +166,14 @@ export async function publishCape(token, username, pngBuf) {
   if (!NAME_RE.test(name)) return { ok: false, error: 'Pseudo Minecraft invalide.' };
   if (!token) return { ok: false, error: 'Token GitHub manquant (Réglages).' };
   try {
+    // 0) `username` est un pseudo Minecraft en texte libre (Réglages), jamais vérifié —
+    //    n'importe qui peut le régler sur le pseudo d'un autre joueur pour écraser sa cape.
+    //    On identifie donc le COMPTE GITHUB réel derrière le token (seule chose fiable ici),
+    //    et on la compare au propriétaire enregistré la première fois que ce pseudo a été
+    //    publié. Sans identité vérifiable, on refuse plutôt que de publier en aveugle.
+    const identity = await getAuthenticatedIdentity(token);
+    if (!identity) return { ok: false, error: 'Impossible de vérifier l’identité GitHub du token — publication refusée.' };
+
     // 1) Relire l'index distant (sha + contenu) et fusionner AVANT toute écriture, pour
     //    ne JAMAIS écraser les entrées des autres joueurs. Si l'index existe mais reste
     //    illisible, on ANNULE (mieux vaut échouer que remplacer tout le registre par une
@@ -177,10 +194,29 @@ export async function publishCape(token, username, pngBuf) {
       try { players = JSON.parse(text).players || {}; }
       catch { return { ok: false, error: 'Index distant illisible — publication annulée (pour ne pas écraser les autres).' }; }
     }
-    players[name] = { cape: `capes/${name}.png`, updated: new Date().toISOString().slice(0, 10) };
+
+    // 2) Vérification du propriétaire. Une entrée existante SANS `owner` vient d'avant ce
+    //    correctif : elle reste « à réclamer » une seule fois par qui publie en premier après
+    //    la mise à jour, plutôt que de bloquer tout le monde. Une entrée AVEC `owner` ne peut
+    //    plus être republiée que par la même identité GitHub.
+    const existing = players[name];
+    if (existing && existing.owner && existing.owner.id) {
+      if (existing.owner.id !== identity.id) {
+        return {
+          ok: false,
+          error: `Ce pseudo (${name}) est déjà publié par un autre compte GitHub — publication refusée.`,
+        };
+      }
+    }
+
+    players[name] = {
+      cape: `capes/${name}.png`,
+      updated: new Date().toISOString().slice(0, 10),
+      owner: { id: identity.id, login: identity.login },
+    };
     const json = JSON.stringify({ format: 1, players }, null, 2) + '\n';
 
-    // 2) Écrire le PNG puis l'index (sha = verrou optimiste : 409 si un autre a publié entre-temps).
+    // 3) Écrire le PNG puis l'index (sha = verrou optimiste : 409 si un autre a publié entre-temps).
     await putFile(token, `capes/${name}.png`, pngBuf, `Cap Hub : cape de ${name}`);
     await putFile(token, 'capes.json', Buffer.from(json), `Cap Hub : index (+${name})`, cur ? cur.sha : undefined);
 

@@ -212,6 +212,7 @@ const origFetch = global.fetch;
 global.fetch = async (url, opts = {}) => {
   url = String(url); const method = opts.method || 'GET';
   const R = (status, obj) => ({ ok: status < 400, status, json: async () => obj, text: async () => JSON.stringify(obj) });
+  if (url === 'https://api.github.com/user') return R(200, { id: 111, login: 'newguy-gh' });
   if (url.includes('/registry/capes/')) return method === 'PUT' ? R(200, {}) : R(404, null);
   if (url.includes('/registry/capes.json')) {
     if (method === 'PUT') { puts.push(JSON.parse(opts.body)); return R(200, {}); }
@@ -226,6 +227,7 @@ ok('publishCape réussit', pr.ok === true);
 const idxPut = puts.map((p) => { try { return JSON.parse(Buffer.from(p.content, 'base64').toString('utf8')).players; } catch { return null; } }).find(Boolean) || {};
 ok('fusionne « newguy » SANS effacer « other »', !!idxPut.other && !!idxPut.newguy);
 ok('réutilise le sha distant (pas d’écrasement aveugle)', puts.some((p) => p.sha === 'abc'));
+ok('enregistre le propriétaire GitHub authentifié sur la nouvelle entrée', idxPut.newguy?.owner?.id === 111);
 
 // ABORT si l'index distant est illisible (JSON corrompu / contenu vide des gros fichiers) :
 // on ne doit JAMAIS remplacer tout le registre par notre seule entrée.
@@ -233,6 +235,7 @@ const puts2 = [];
 global.fetch = async (url, opts = {}) => {
   url = String(url); const method = opts.method || 'GET';
   const R = (status, obj, text) => ({ ok: status < 400, status, json: async () => obj, text: async () => (text !== undefined ? text : JSON.stringify(obj)) });
+  if (url === 'https://api.github.com/user') return R(200, { id: 111, login: 'newguy-gh' });
   if (url.includes('/registry/capes/') && method === 'PUT') return R(200, {});
   if (url.includes('/registry/capes.json')) {
     if (method === 'PUT') { puts2.push('index'); return R(200, {}); }
@@ -245,6 +248,64 @@ const prBad = await reg.publishCape('tok', 'newguy', mkPng(64, 32));
 global.fetch = origFetch;
 ok('publishCape ANNULE si l’index distant est illisible', prBad.ok === false);
 ok('publishCape n’écrit PAS l’index quand il est illisible', !puts2.includes('index'));
+
+// Anti-usurpation : republier un pseudo déjà revendiqué par un AUTRE compte GitHub échoue,
+// et republier avec le MÊME compte que le owner enregistré réussit toujours.
+const puts3 = [];
+global.fetch = async (url, opts = {}) => {
+  url = String(url); const method = opts.method || 'GET';
+  const R = (status, obj) => ({ ok: status < 400, status, json: async () => obj, text: async () => JSON.stringify(obj) });
+  if (url === 'https://api.github.com/user') return R(200, { id: 999, login: 'attaquant' });
+  if (url.includes('/registry/capes/')) return method === 'PUT' ? R(200, {}) : R(404, null);
+  if (url.includes('/registry/capes.json')) {
+    if (method === 'PUT') { puts3.push(JSON.parse(opts.body)); return R(200, {}); }
+    const content = Buffer.from(JSON.stringify({ format: 1, players: { newguy: { cape: 'capes/newguy.png', updated: '2026-01-01', owner: { id: 111, login: 'newguy-gh' } } } })).toString('base64');
+    return R(200, { sha: 'def', content });
+  }
+  return R(500, {});
+};
+const prSteal = await reg.publishCape('tok-attaquant', 'newguy', mkPng(64, 32));
+global.fetch = origFetch;
+ok('publishCape REJETTE la republication par un autre compte GitHub', prSteal.ok === false);
+ok('publishCape n’écrit rien lors d’un rejet de propriété', puts3.length === 0);
+
+const puts4 = [];
+global.fetch = async (url, opts = {}) => {
+  url = String(url); const method = opts.method || 'GET';
+  const R = (status, obj) => ({ ok: status < 400, status, json: async () => obj, text: async () => JSON.stringify(obj) });
+  if (url === 'https://api.github.com/user') return R(200, { id: 111, login: 'newguy-gh' });
+  if (url.includes('/registry/capes/')) return method === 'PUT' ? R(200, {}) : R(404, null);
+  if (url.includes('/registry/capes.json')) {
+    if (method === 'PUT') { puts4.push(JSON.parse(opts.body)); return R(200, {}); }
+    const content = Buffer.from(JSON.stringify({ format: 1, players: { newguy: { cape: 'capes/newguy.png', updated: '2026-01-01', owner: { id: 111, login: 'newguy-gh' } } } })).toString('base64');
+    return R(200, { sha: 'def', content });
+  }
+  return R(500, {});
+};
+const prSame = await reg.publishCape('tok', 'newguy', mkPng(64, 32));
+global.fetch = origFetch;
+ok('publishCape autorise le même propriétaire à republier', prSame.ok === true);
+
+// Entrée héritée SANS `owner` (publiée avant ce correctif) : « à réclamer » une seule fois
+// par qui publie en premier après la mise à jour, pas bloquée.
+const puts5 = [];
+global.fetch = async (url, opts = {}) => {
+  url = String(url); const method = opts.method || 'GET';
+  const R = (status, obj) => ({ ok: status < 400, status, json: async () => obj, text: async () => JSON.stringify(obj) });
+  if (url === 'https://api.github.com/user') return R(200, { id: 222, login: 'premier-a-reclamer' });
+  if (url.includes('/registry/capes/')) return method === 'PUT' ? R(200, {}) : R(404, null);
+  if (url.includes('/registry/capes.json')) {
+    if (method === 'PUT') { puts5.push(JSON.parse(opts.body)); return R(200, {}); }
+    const content = Buffer.from(JSON.stringify({ format: 1, players: { vieux: { cape: 'capes/vieux.png', updated: '2025-01-01' } } })).toString('base64');
+    return R(200, { sha: 'legacy', content });
+  }
+  return R(500, {});
+};
+const prClaim = await reg.publishCape('tok', 'vieux', mkPng(64, 32));
+global.fetch = origFetch;
+ok('publishCape réclame une entrée héritée sans owner', prClaim.ok === true);
+const idxClaim = puts5.map((p) => { try { return JSON.parse(Buffer.from(p.content, 'base64').toString('utf8')).players; } catch { return null; } }).find(Boolean) || {};
+ok('l’entrée héritée réclamée porte désormais un owner', idxClaim.vieux?.owner?.id === 222);
 
 // Validation anti-traversée sur les clés/chemins venant de l'index distant.
 fs.mkdirSync(path.join(ud, 'registry-cache'), { recursive: true });
