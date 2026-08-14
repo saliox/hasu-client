@@ -37,7 +37,7 @@ public final class HeldItemMod extends SolClientSimpleHudMod {
 		if (stack == null)
 			return I18n.translate("sol_client.mod.held_item.none");
 
-		return stack.getCustomName();
+		return stack.getDisplayName();
 	}
 
 }

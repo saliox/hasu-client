@@ -90,7 +90,10 @@ public class CoreMod extends StandardMod {
 	@Option
 	public boolean smoothScrolling = true;
 
-	public SemVer latestRelease;
+	// Written from the update-check background Thread (onEnable), read from the tick
+	// thread (onWorldLoad) — volatile so the reader is guaranteed to see the written
+	// reference instead of a stale/torn one cached before the write happened.
+	public volatile SemVer latestRelease;
 	private boolean remindedUpdate;
 	private FilePollingTask pollingTask;
 
