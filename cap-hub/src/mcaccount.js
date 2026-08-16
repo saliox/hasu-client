@@ -15,12 +15,13 @@ const TOKEN_URL = `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/token
 const SCOPE = 'XboxLive.signin offline_access';
 const MC = 'https://api.minecraftservices.com';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const T = 15000; // délai max par appel réseau : un socket bloqué ne doit jamais figer le sous-système MC
 
 async function form(url, params) {
-  return fetch(url, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(params) });
+  return fetch(url, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(params), signal: AbortSignal.timeout(T) });
 }
 async function json(url, body) {
-  return fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify(body) });
+  return fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(T) });
 }
 
 // --- Étape 1 : device code Microsoft ---
@@ -54,8 +55,9 @@ export async function fetchCapeTexture(url) {
   try { u = new URL(String(url)); } catch { return null; }
   if (!/(^|\.)minecraft\.net$/i.test(u.hostname)) return null;
   let r;
-  try { r = await fetch(u.href, { redirect: 'error' }); } catch { return null; }
+  try { r = await fetch(u.href, { redirect: 'error', signal: AbortSignal.timeout(10000) }); } catch { return null; }
   if (!r.ok) return null;
+  if (Number(r.headers?.get?.('content-length') || 0) > 512 * 1024) return null; // rejet avant de tout charger
   const buf = Buffer.from(await r.arrayBuffer());
   if (buf.length > 512 * 1024 || !isPng(buf)) return null;
   return 'data:image/png;base64,' + buf.toString('base64');
@@ -70,7 +72,7 @@ export async function pollDeviceCode(clientId, deviceCode, interval, expiresIn, 
     if (isCancelled && isCancelled()) throw new Error('Connexion annulée.');
     await sleep(iv * 1000);
     const r = await form(TOKEN_URL, { grant_type: 'urn:ietf:params:oauth:grant-type:device_code', client_id: clientId, device_code: deviceCode });
-    const data = await r.json();
+    const data = await r.json().catch(() => ({ error: 'invalid_response', error_description: 'Réponse Microsoft illisible.' }));
     if (r.ok) return microsoftToSession(clientId, data);
     if (data.error === 'authorization_pending') continue;
     if (data.error === 'slow_down') { iv += 5; continue; }
@@ -93,8 +95,10 @@ async function xbl(msAccessToken) {
     RelyingParty: 'http://auth.xboxlive.com', TokenType: 'JWT',
   });
   if (!r.ok) throw new Error(`Xbox Live ${r.status}`);
-  const d = await r.json();
-  return { token: d.Token, uhs: d.DisplayClaims.xui[0].uhs };
+  const d = await r.json().catch(() => ({}));
+  const uhs = d?.DisplayClaims?.xui?.[0]?.uhs;
+  if (!d?.Token || !uhs) throw new Error('Réponse Xbox Live inattendue.');
+  return { token: d.Token, uhs };
 }
 async function xsts(xblToken) {
   const r = await json('https://xsts.auth.xboxlive.com/xsts/authorize', {
@@ -107,8 +111,10 @@ async function xsts(xblToken) {
     throw new Error(`XSTS refusé : ${m[d.XErr] || d.XErr || 'inconnu'}`);
   }
   if (!r.ok) throw new Error(`XSTS ${r.status}`);
-  const d = await r.json();
-  return { token: d.Token, uhs: d.DisplayClaims.xui[0].uhs };
+  const d = await r.json().catch(() => ({}));
+  const uhs = d?.DisplayClaims?.xui?.[0]?.uhs;
+  if (!d?.Token || !uhs) throw new Error('Réponse XSTS inattendue.');
+  return { token: d.Token, uhs };
 }
 async function mcLogin(uhs, xstsToken) {
   const r = await json(`${MC}/authentication/login_with_xbox`, { identityToken: `XBL3.0 x=${uhs};${xstsToken}` });
@@ -131,14 +137,24 @@ async function microsoftToSession(clientId, msTok, prevRefresh) {
 }
 
 // Rafraîchit une session Microsoft expirée (si refresh token dispo).
+// IMPORTANT : Microsoft (offline_access) FAIT TOURNER le refresh token — l'ancien est
+// invalidé dès que refreshMs réussit. Si la chaîne Xbox/XSTS/Minecraft échoue ensuite
+// (panne transitoire), on renvoie quand même le NOUVEAU refresh token (accessToken:null)
+// pour que l'appelant le persiste, sinon une simple coupure « bricke » la session.
 export async function refreshSession(clientId, msRefreshToken) {
-  const msTok = await refreshMs(clientId, msRefreshToken);
-  return microsoftToSession(clientId, msTok, msRefreshToken);
+  const msTok = await refreshMs(clientId, msRefreshToken); // throw = refresh réellement invalide -> reconnexion
+  const newRefresh = msTok.refresh_token || msRefreshToken;
+  try {
+    const s = await msToMinecraft(msTok.access_token);
+    return { msRefreshToken: newRefresh, ...s };
+  } catch {
+    return { msRefreshToken: newRefresh, accessToken: null };
+  }
 }
 
 // --- Profil & capes officielles ---
 export async function getProfile(accessToken) {
-  const r = await fetch(`${MC}/minecraft/profile`, { headers: { authorization: `Bearer ${accessToken}` } });
+  const r = await fetch(`${MC}/minecraft/profile`, { headers: { authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(T) });
   if (r.status === 404) return null; // pas de profil Java (Minecraft non acheté)
   if (r.status === 401) throw new Error('Token Minecraft invalide ou expiré — reconnecte-toi.');
   if (!r.ok) throw new Error(`profile ${r.status}`);
@@ -147,7 +163,7 @@ export async function getProfile(accessToken) {
 export async function setActiveCape(accessToken, capeId) {
   const r = await fetch(`${MC}/minecraft/profile/capes/active`, {
     method: 'PUT', headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ capeId }),
+    body: JSON.stringify({ capeId }), signal: AbortSignal.timeout(T),
   });
   if (r.status === 401) throw new Error('Token invalide — reconnecte-toi.');
   if (!r.ok) throw new Error(`activation cape ${r.status}`);
@@ -155,7 +171,7 @@ export async function setActiveCape(accessToken, capeId) {
 }
 export async function hideCape(accessToken) {
   const r = await fetch(`${MC}/minecraft/profile/capes/active`, {
-    method: 'DELETE', headers: { authorization: `Bearer ${accessToken}` },
+    method: 'DELETE', headers: { authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(T),
   });
   if (r.status === 401) throw new Error('Token invalide — reconnecte-toi.');
   if (!r.ok && r.status !== 200) throw new Error(`masquage cape ${r.status}`);
