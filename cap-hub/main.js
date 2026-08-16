@@ -11,6 +11,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell, Notification, safeStorage, 
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
+import dns from 'node:dns';
 import { fileURLToPath } from 'node:url';
 import { isPng, firstFrameIfAnimated } from './src/png.js';
 
@@ -179,10 +180,25 @@ app.whenReady().then(async () => {
   // Relaie les logs du proxy vers l'UI.
   proxyEvents.on('log', (e) => send('log', e));
 
-  // Démarre le proxy au lancement si l'option est active.
-  if (s0.autoProxy) {
+  // Démarre le proxy au lancement si l'option est active OU si la redirection hosts est
+  // déjà en place (elle persiste dans le fichier hosts entre deux sessions). Sinon on aurait
+  // s.optifine.net -> 127.0.0.1:80 SANS rien qui écoute : OptiFine reçoit un « connection
+  // refused » et n'affiche PLUS AUCUNE cape (ni la tienne, ni le relais des autres joueurs).
+  // Coupler les deux cycles de vie est la garantie que le canal OptiFine reste fonctionnel.
+  const redirectPresent = isApplied();
+  if (s0.autoProxy || redirectPresent) {
     const r = await startProxy(proxyDeps());
-    if (!r.ok) notify('Cap Hub', 'Proxy non démarré : ' + r.error);
+    if (!r.ok) {
+      // Redirection active mais proxy impossible (port 80 pris…) : la redirection casserait
+      // toutes les capes OptiFine. On la retire pour ne pas laisser le jeu dans un état pire
+      // qu'avant, et on prévient l'utilisateur.
+      if (redirectPresent) {
+        try { await removeRedirect(); } catch {}
+        notify('Cap Hub', 'Proxy impossible (' + r.error + '). Redirection retirée pour ne pas bloquer les capes OptiFine.');
+      } else {
+        notify('Cap Hub', 'Proxy non démarré : ' + r.error);
+      }
+    }
     send('proxy-changed', await proxyStatus());
   }
 
@@ -235,12 +251,15 @@ function wireWatcher() {
       defaultId: 0, cancelId: 1,
       title: 'Cap Hub',
       message: `${info.client} vient de démarrer.`,
-      detail: 'Veux-tu appliquer Cap Hub pour afficher tes capes personnalisées (et celles des autres joueurs Cap Hub) dans le jeu ?',
+      detail: 'Veux-tu appliquer Cap Hub pour afficher tes capes personnalisées (et celles des autres joueurs Cap Hub) dans le jeu ?\n\n'
+        + 'Important : OptiFine lit les capes une seule fois au démarrage du jeu. Comme Minecraft est déjà lancé, il faudra le FERMER COMPLÈTEMENT puis le relancer (rejoindre un monde ne suffit pas). Idéalement, applique Cap Hub AVANT de lancer Minecraft.',
     });
     if (response === 0) {
       const r = await enableEverything();
       send('proxy-changed', await proxyStatus());
-      notify('Cap Hub', r.ok ? 'Cap Hub appliqué ✔ — relance/rejoins un monde pour voir les capes.' : 'Échec : ' + r.error);
+      notify('Cap Hub', r.ok
+        ? 'Cap Hub appliqué ✔ — ferme complètement Minecraft puis relance-le pour voir les capes (OptiFine met les capes en cache au démarrage).'
+        : 'Échec : ' + r.error);
     }
    } catch (e) {
     send('log', { level: 'error', msg: 'Détection Minecraft : ' + (e.message || 'erreur'), t: Date.now() });
@@ -526,6 +545,25 @@ ipcMain.handle('proxy:selfTest', async () => {
 
   add(isRunning(), 'Proxy de capes démarré', isRunning() ? '' : 'Démarre-le (onglet État) ou clique « Appliquer Cap Hub ».');
   add(isApplied(), 'Redirection s.optifine.net active', isApplied() ? '' : 'Clique « Appliquer Cap Hub » (fenêtre admin).');
+
+  // Vérifie que le SYSTÈME résout réellement s.optifine.net vers 127.0.0.1. Le bloc peut
+  // être présent dans le fichier hosts SANS être effectif : cache DNS pas vidé, DNS-over-HTTPS
+  // (Windows 11 / navigateur), VPN ou résolveur tiers qui court-circuitent hosts. C'est la
+  // cause n°1 des « cape appliquée mais rien en jeu » : le fichier est bon, la résolution non.
+  if (isApplied()) {
+    let resolvedIp = null;
+    try {
+      resolvedIp = await new Promise((resolve) => {
+        dns.lookup('s.optifine.net', { family: 4 }, (err, addr) => resolve(err ? null : addr));
+      });
+    } catch {}
+    const effective = resolvedIp === '127.0.0.1';
+    add(effective, 'Résolution DNS effective (s.optifine.net → 127.0.0.1)',
+      effective ? '' : (resolvedIp
+        ? `Le système résout encore vers ${resolvedIp}. Vide le cache DNS (redémarre le PC) ou désactive le DNS-over-HTTPS / VPN qui contourne le fichier hosts.`
+        : 'Résolution impossible à vérifier. Redémarre le PC pour vider le cache DNS.'));
+  }
+
   add(!!s.username, 'Pseudo Minecraft renseigné', s.username ? `« ${s.username} »` : 'Renseigne ton pseudo (Réglages).');
   add(!!s.activeCape, 'Cape active choisie', s.activeCape ? '' : 'Choisis une cape et clique « Utiliser ».');
 

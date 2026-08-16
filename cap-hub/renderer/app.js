@@ -1621,7 +1621,7 @@ $('#btn-selftest').addEventListener('click', () => guard('#btn-selftest', async 
   const summary = document.createElement('div');
   summary.className = 'diag-summary ' + (r.allOk ? 'ok' : 'ko');
   summary.textContent = r.allOk
-    ? '🎉 Tout est bon — relance/rejoins un monde, ta cape doit apparaître.'
+    ? '🎉 Tout est bon — ferme complètement Minecraft puis relance-le (OptiFine met les capes en cache au démarrage), ta cape doit apparaître.'
     : '⚠️ Un ou plusieurs points bloquent l’affichage — corrige les ❌ ci-dessus.';
   box.appendChild(summary);
 }));
