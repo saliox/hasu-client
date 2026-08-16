@@ -94,6 +94,18 @@ let timer = null;
 let known = new Map(); // key -> { client, username, pid }
 let scanning = false;
 
+// Transitions entre l'état connu et l'état courant (PUR -> testable) : nouvelles clés à
+// signaler (game-start) et faut-il émettre game-stop. game-stop si le jeu Java s'arrête OU
+// si TOUT client détecté a disparu (un launcher ouvert puis fermé sans lancer Java laissait
+// sinon la pastille bloquée « on »).
+export function diffScan(known, current) {
+  const starts = [];
+  for (const key of current.keys()) if (!known.has(key)) starts.push(key);
+  const inGame = (m) => { for (const k of m.keys()) if (k.startsWith('java:')) return true; return false; };
+  const stop = (inGame(known) && !inGame(current)) || (known.size > 0 && current.size === 0);
+  return { starts, stop };
+}
+
 async function scan() {
   if (scanning) return;
   scanning = true;
@@ -105,19 +117,10 @@ async function scan() {
       const c = classify(p);
       if (c) current.set(c.key, { client: c.client, username: c.username, pid: p.ProcessId });
     }
-    // Nouveaux processus -> game-start (une seule fois par clé).
-    for (const [key, info] of current) {
-      if (!known.has(key)) watcherEvents.emit('game-start', { key, ...info });
-    }
-    // game-stop = plus aucun JEU en cours (clés « java: »), même si un launcher reste
-    // ouvert (sinon fermer le jeu launcher-ouvert n'émettait jamais game-stop).
-    const inGame = (m) => [...m.keys()].some((k) => k.startsWith('java:'));
-    const hadGame = inGame(known);
-    const hadAny = known.size > 0;
+    const { starts, stop } = diffScan(known, current);
+    for (const key of starts) watcherEvents.emit('game-start', { key, ...current.get(key) });
     known = current;
-    // game-stop si le jeu Java s'arrête, OU si TOUT client détecté a disparu (un launcher
-    // ouvert puis fermé sans jamais lancer Java laissait sinon la pastille bloquée « on »).
-    if ((hadGame && !inGame(current)) || (hadAny && current.size === 0)) watcherEvents.emit('game-stop');
+    if (stop) watcherEvents.emit('game-stop');
   } finally { scanning = false; }
 }
 

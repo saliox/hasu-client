@@ -68,7 +68,8 @@ export function decodePNG(buf) {
   while (pos + 8 <= buf.length) {
     const len = buf.readUInt32BE(pos); const type = buf.toString('ascii', pos + 4, pos + 8);
     // Longueur de chunk hors limites (PNG corrompu/malveillant) -> on abandonne proprement.
-    if (len < 0 || pos + 12 + len > buf.length) return null;
+    // (len est un uint32 non signé, toujours >= 0.)
+    if (pos + 12 + len > buf.length) return null;
     const data = buf.subarray(pos + 8, pos + 8 + len);
     if (type === 'IHDR') {
       if (len < 13) return null;
@@ -106,15 +107,17 @@ export function decodePNG(buf) {
     }
     p += rowBytes;
   }
-  // Conversion en RGBA.
+  // Type 6 (RGBA) : `out` EST déjà le buffer RGBA -> on l'utilise directement (évite une
+  // allocation + copie octet à octet de toute l'image, le cas le plus courant).
+  if (colorType === 6) return { width, height, rgba: out };
+  // Conversion en RGBA (types 0/2/3/4).
   const rgba = Buffer.alloc(width * height * 4);
   for (let i = 0, n = width * height; i < n; i++) {
     let r, g, bl, al = 255;
     if (colorType === 0) { r = g = bl = out[i]; }
     else if (colorType === 2) { r = out[i * 3]; g = out[i * 3 + 1]; bl = out[i * 3 + 2]; }
     else if (colorType === 3) { const idx = out[i]; if (palette) { r = palette[idx * 3]; g = palette[idx * 3 + 1]; bl = palette[idx * 3 + 2]; } else r = g = bl = 0; if (trns && idx < trns.length) al = trns[idx]; }
-    else if (colorType === 4) { r = g = bl = out[i * 2]; al = out[i * 2 + 1]; }
-    else { r = out[i * 4]; g = out[i * 4 + 1]; bl = out[i * 4 + 2]; al = out[i * 4 + 3]; }
+    else { r = g = bl = out[i * 2]; al = out[i * 2 + 1]; } // type 4 (gris + alpha)
     const o = i * 4; rgba[o] = r; rgba[o + 1] = g; rgba[o + 2] = bl; rgba[o + 3] = al;
   }
   return { width, height, rgba };

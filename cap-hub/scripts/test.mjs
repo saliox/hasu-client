@@ -136,6 +136,9 @@ ok('usernameValid : pseudo correct vs invalide', (() => {
   const badName = store.saveSettings({ username: 'Cool Guy' }).usernameValid === false;
   return okName && badName;
 })());
+// Cache mémoire des settings : lecture après écriture cohérente + isolation (getSettings = copie).
+ok('cache settings : lecture après écriture', (() => { store.saveSettings({ username: 'CacheGuy' }); return store.getSettings().username === 'CacheGuy'; })());
+ok('cache settings : getSettings renvoie une copie (mutation externe sans effet)', (() => { const g = store.getSettings(); g.username = 'HACKED'; return store.getSettings().username !== 'HACKED'; })());
 ok('thème par défaut = nuit', store.getSettings().theme === 'nuit');
 ok('écriture atomique : pas de .tmp résiduel', !fs.existsSync(path.join(ud, 'settings.json.tmp')));
 ok('écriture atomique : sauvegarde .bak après ré-écriture', fs.existsSync(path.join(ud, 'settings.json.bak')));
@@ -253,6 +256,27 @@ fs.writeFileSync(path.join(ud, 'registry-cache', 'capes.json'),
 reg.initRegistry(ud, {});
 ok('getRegistryCape rejette une clé hors format (anti-traversée)', (await reg.getRegistryCape('../../etc')) === null);
 ok('getRegistryCape rejette un chemin de cape non conforme', (await reg.getRegistryCape('gooduser')) === null);
+// La cape doit correspondre EXACTEMENT à la clé (anti-usurpation).
+fs.writeFileSync(path.join(ud, 'registry-cache', 'capes.json'),
+  JSON.stringify({ players: { alice: { cape: 'capes/bob.png' } } }));
+reg.initRegistry(ud, {});
+ok('getRegistryCape refuse une cape dont le nom ≠ la clé', (await reg.getRegistryCape('alice')) === null);
+// Un « players: null » distant ne doit PAS vider le registre (typeof null === object).
+fs.writeFileSync(path.join(ud, 'registry-cache', 'capes.json'),
+  JSON.stringify({ players: { keep: { cape: 'capes/keep.png', updated: '2026-01-01' } } }));
+reg.initRegistry(ud, {});
+global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ players: null }), text: async () => '{"players":null}' });
+await reg.refreshIndex(true);
+global.fetch = origFetch;
+ok('refreshIndex ignore « players: null » (registre non vidé)', reg.listPlayers().some((p) => p.name === 'keep'));
+// configureRegistry rejette une branche avec « .. » (traversée vers un autre dépôt).
+let capturedUrl = '';
+reg.configureRegistry({ repo: 'saliox/hasu-client', branch: 'main' });
+reg.configureRegistry({ branch: 'evil/../../other' });
+global.fetch = async (u) => { capturedUrl = String(u); return { ok: true, status: 200, json: async () => ({ players: {} }), text: async () => '{}' }; };
+await reg.refreshIndex(true);
+global.fetch = origFetch;
+ok('configureRegistry rejette une branche « .. » (garde « main »)', capturedUrl.includes('/main/') && !capturedUrl.includes('..'));
 
 console.log('\n# Compte Minecraft officiel (mcaccount)');
 const mc = await import(S('mcaccount.js'));
@@ -366,6 +390,14 @@ ok('détecte Technic Launcher', watch.classify({ Name: 'TechnicLauncher.exe', Pr
 ok('détecte LabyMod en jeu', /LabyMod/.test(watch.classify({ Name: 'javaw.exe', ProcessId: 14, CommandLine: 'javaw -cp x net.labymod.core.Main --username Bob' })?.client || ''));
 ok('détecte Quilt en jeu', /Minecraft/.test(watch.classify({ Name: 'javaw.exe', ProcessId: 15, CommandLine: 'javaw org.quiltmc.loader.impl.launch.knot.KnotClient' })?.client || ''));
 ok('détecte Forge 1.17+ (bootstraplauncher)', /Minecraft/.test(watch.classify({ Name: 'javaw.exe', ProcessId: 16, CommandLine: 'javaw cpw.mods.bootstraplauncher.BootstrapLauncher' })?.client || ''));
+// Transitions game-start/game-stop (diffScan, pur)
+const M = (...keys) => new Map(keys.map((k) => [k, {}]));
+ok('diffScan : launcher apparaît -> start, pas de stop', (() => { const d = watch.diffScan(M(), M('launcher:x')); return d.starts.length === 1 && d.stop === false; })());
+ok('diffScan : jeu Java apparaît -> start', (() => { const d = watch.diffScan(M('launcher:x'), M('launcher:x', 'java:mc')); return d.starts.includes('java:mc') && d.stop === false; })());
+ok('diffScan : jeu Java se ferme (launcher reste) -> stop', (() => watch.diffScan(M('launcher:x', 'java:mc'), M('launcher:x')).stop === true)());
+ok('diffScan : launcher fermé sans jeu -> stop (anti-pastille bloquée)', (() => watch.diffScan(M('launcher:x'), M()).stop === true)());
+ok('diffScan : rien -> rien = ni start ni stop', (() => { const d = watch.diffScan(M(), M()); return d.starts.length === 0 && d.stop === false; })());
+ok('diffScan : launcher stable -> ni start ni stop', (() => { const d = watch.diffScan(M('launcher:x'), M('launcher:x')); return d.starts.length === 0 && d.stop === false; })());
 
 console.log('\n# Auto-update (URL d’installeur restreinte)');
 const up = await import(S('updater.js'));
