@@ -14,7 +14,7 @@ import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { isPng, firstFrameIfAnimated } from './src/png.js';
 
-import { initCapes, listCapes, importCape, importCapeBuffer, deleteCape, renameCape, resolveCape, readCape, readCapeOriginal, setCapeResolution, setCapeImage, capeDims, duplicateCape } from './src/capes.js';
+import { initCapes, listCapes, importCapeBuffer, deleteCape, renameCape, resolveCape, readCape, readCapeOriginal, setCapeResolution, setCapeImage, capeDims, duplicateCape } from './src/capes.js';
 import { initStore, getSettings, saveSettings, setToken, getToken, setMcSession, getMcSession, clearMcSession } from './src/store.js';
 import * as mc from './src/mcaccount.js';
 import { startProxy, stopProxy, isRunning, getStats, getPort, proxyEvents, redirectHosts } from './src/proxy.js';
@@ -132,6 +132,21 @@ function notify(title, body) {
 }
 
 // ---------- Dépendances injectées dans le proxy ----------
+// Cache de la cape active servie au proxy, invalidé par la date de modif : évite de relire
+// le PNG entier (jusqu'à 12 Mo) du disque à CHAQUE requête OptiFine en jeu.
+let ownCapeCache = null; // { id, mtimeMs, buf }
+function readActiveCape(id) {
+  const file = resolveCape(id); // garde anti-traversée
+  if (!file) return null;
+  try {
+    const mtimeMs = fs.statSync(file).mtimeMs;
+    if (ownCapeCache && ownCapeCache.id === id && ownCapeCache.mtimeMs === mtimeMs) return ownCapeCache.buf;
+    const buf = fs.readFileSync(file);
+    ownCapeCache = { id, mtimeMs, buf };
+    return buf;
+  } catch { return null; }
+}
+
 // getOwn : sert TA cape active si la requête concerne TON pseudo.
 // getRegistryCape : délègue au registre partagé pour les autres joueurs.
 function proxyDeps() {
@@ -139,7 +154,7 @@ function proxyDeps() {
     getOwn: async (nameLower) => {
       const s = getSettings();
       if (!s.username || s.username.toLowerCase() !== nameLower || !s.activeCape) return null;
-      return readCape(s.activeCape);
+      return readActiveCape(s.activeCape);
     },
     getRegistryCape: (nameLower) => getRegistryCape(nameLower),
   };

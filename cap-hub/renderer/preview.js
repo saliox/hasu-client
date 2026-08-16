@@ -6,11 +6,12 @@
 // réelle + tampon de profondeur (pas de tri approximatif), éclairage doux + ombre de contact.
 //
 // API : window.CapePreview.{ mount(canvas), setCape(dataUrl), setSkin(dataUrl, slim),
-//                            clear(), setShowBody(bool), frameCount(w,h) }
+//                            clear(), setShowBody(bool), setWind(n), snapshot(),
+//                            captureSpin(count,w), resetView() }
 
 (function () {
   // ---------- État ----------
-  let canvas = null, gl = null, prog = null, raf = 0, t0 = 0, gen = 0;
+  let canvas = null, gl = null, prog = null, raf = 0, gen = 0;
   let showBody = true;
   // Orbite : rotation auto (tourne-disque) ou contrôlée à la souris (glisser = tourner +
   // incliner, molette = zoomer).
@@ -162,6 +163,7 @@
   const CW = 7, CH = 11;                      // colonnes (largeur) × rangées (hauteur)
   const REST_H = 10 / (CW - 1), REST_V = 16 / (CH - 1); // longueurs au repos (unités MC)
   const cloth = { flat: null, pos: new Float32Array(CW * CH * 3), prev: new Float32Array(CW * CH * 3) };
+  const _tmp3 = [0, 0, 0], _wpt3 = [0, 0, 0]; // scratch réutilisés (recalcul des ancres) — évite 32 allocations/frame
   const capeMesh = new Float32Array((CH - 1) * (CW - 1) * 6 * 8);
 
   const idx = (r, c) => (r * CW + c) * 3;
@@ -190,7 +192,9 @@
   function constrain(i, j, rest, pinnedI, pinnedJ, stiff) {
     const p = cloth.pos;
     let dx = p[j] - p[i], dy = p[j + 1] - p[i + 1], dz = p[j + 2] - p[i + 2];
-    const d = Math.hypot(dx, dy, dz) || 1e-4;
+    // sqrt(dot) au lieu de Math.hypot (bien plus rapide ; ~4000 appels/frame) — coords cape
+    // petites (±30), aucun risque de dépassement, résultat numériquement identique.
+    const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-4;
     const diff = (stiff || 1) * (d - rest) / d;
     if (pinnedI && pinnedJ) return;
     if (pinnedI) { p[j] -= dx * diff; p[j + 1] -= dy * diff; p[j + 2] -= dz * diff; }
@@ -225,7 +229,7 @@
       // Contraintes (plusieurs relaxations).
       for (let k = 0; k < 8; k++) {
         // ancres : rangée du haut collée à sa position monde courante.
-        const tmp = [0, 0, 0], wpt = [0, 0, 0];
+        const tmp = _tmp3, wpt = _wpt3;
         for (let c = 0; c < CW; c++) { restLocal(0, c, flat, tmp); rotYpt(curAngle, tmp[0], tmp[1], tmp[2], wpt); const i = idx(0, c); p[i] = wpt[0]; p[i + 1] = wpt[1]; p[i + 2] = wpt[2]; }
         for (let r = 0; r < CH; r++) for (let c = 0; c < CW; c++) {
           const pin = r === 0;
@@ -424,7 +428,6 @@
 
   function loop(ts) {
     if (!gl || (!capeImg && !skinImg)) { raf = 0; return; }
-    if (!t0) t0 = ts;
     if (!lastSwap) lastSwap = ts; // amorce sur le 1er tick : sinon (lastSwap=0) l'image 0 est sautée d'emblée
     const dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 0; lastTs = ts;
     spinClock += dt;
@@ -558,7 +561,7 @@
     return { w: tw, h: th, delayCs, frames: outFrames };
   }
 
-  function start() { if (!raf && gl) { t0 = 0; lastTs = 0; raf = requestAnimationFrame(loop); } }
+  function start() { if (!raf && gl) { lastTs = 0; raf = requestAnimationFrame(loop); } }
 
   function clear() {
     gen++; if (raf) cancelAnimationFrame(raf); raf = 0;
@@ -595,5 +598,5 @@
   function setShowBody(b) { showBody = !!b; skinDirty = true; }
   function setWind(v) { windScale = Math.max(0, +v || 0); }
 
-  window.CapePreview = { mount, setCape, setSkin, clear, frameCount, setShowBody, setWind, snapshot, captureSpin, resetView };
+  window.CapePreview = { mount, setCape, setSkin, clear, setShowBody, setWind, snapshot, captureSpin, resetView };
 })();

@@ -144,7 +144,7 @@ function sortedFilteredCapes() {
   const byName = (a, b) => a.name.localeCompare(b.name);
   if (capeSort === 'name') list.sort(byName);
   else if (capeSort === 'type') list.sort((a, b) => (a.builtin - b.builtin) || byName(a, b));
-  else if (capeSort === 'cat') list.sort((a, b) => catOf(a).localeCompare(catOf(b)) || byName(a, b));
+  else if (capeSort === 'cat') { const k = new Map(list.map((c) => [c, catOf(c)])); list.sort((a, b) => k.get(a).localeCompare(k.get(b)) || byName(a, b)); } // catOf (regex) calculé une fois/cape
   else if (capeSort === 'res') list.sort((a, b) => ((b.w || 0) * (b.h || 0)) - ((a.w || 0) * (a.h || 0)) || byName(a, b)); // + de pixels d'abord
   else list.sort((a, b) => (capeFavs.has(b.id) - capeFavs.has(a.id)) || byName(a, b)); // favoris d'abord
   return list;
@@ -253,7 +253,13 @@ function startCatEdit(card, c) {
   input.addEventListener('blur', () => commit(true));
 }
 
-$('#cape-search').addEventListener('input', (e) => { capeSearch = e.target.value; renderCapeGrid(); });
+let searchTimer = null;
+$('#cape-search').addEventListener('input', (e) => {
+  capeSearch = e.target.value;
+  // Débounce : une frappe rapide déclenche UN seul rebuild de la grille au lieu d'un par touche.
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(renderCapeGrid, 90);
+});
 $('#cape-search').addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { e.target.value = ''; capeSearch = ''; renderCapeGrid(); e.target.blur(); }
 });
@@ -362,6 +368,13 @@ async function capeDataUrl(id) {
 }
 
 // Vignette « devant de la cape » : au lieu d'afficher la planche 64×32 dépliée (dos, bords…),
+// Disposition d'une cape selon sa largeur : OptiFine (46×N) vs vanilla/HD (64×N).
+// Source unique de la détection de format côté renderer (échelle + base).
+function capeLayout(w) {
+  const optifine = (w % 46 === 0 && w % 64 !== 0);
+  const base = optifine ? 46 : 64;
+  return { optifine, base, s: w / base };
+}
 // on recadre la face avant visible, en gérant HD / animé (1re image) / OptiFine (46 de large).
 const frontThumbCache = new Map();
 function capeFrontThumb(url) {
@@ -372,8 +385,8 @@ function capeFrontThumb(url) {
     img.onload = () => {
       const w = img.naturalWidth, h = img.naturalHeight;
       if (!w || !h) { resolve(url); return; }
-      const s = (w % 46 === 0 && w % 64 !== 0) ? w / 46 : w / 64; // échelle (OptiFine vs vanilla/HD)
-      const fx = s, fy = s, fw = 10 * s, fh = 16 * s;             // région AVANT (1,1,10,16)*s
+      const s = capeLayout(w).s;                        // échelle (OptiFine vs vanilla/HD)
+      const fx = s, fy = s, fw = 10 * s, fh = 16 * s;   // région AVANT (1,1,10,16)*s
       const scale = Math.max(1, Math.round(120 / fw));            // agrandi net (pixels du jeu)
       const cv = document.createElement('canvas');
       cv.width = Math.max(1, Math.round(fw * scale)); cv.height = Math.max(1, Math.round(fh * scale));
@@ -417,7 +430,7 @@ async function initResSelect(sel, c) {
     if (!meta) {
       const d = await window.cap.capes.dims(c.id);
       if (!d || !d.ok || !d.ow || !d.oh) return;
-      const base = (d.ow % 46 === 0 && d.ow % 64 !== 0) ? 46 : 64;
+      const base = capeLayout(d.ow).base;
       const origScale = Math.max(1, Math.round(d.ow / base));
       meta = { ow: d.ow, oh: d.oh, base, baseH: Math.round(d.oh / origScale), origScale, servedScale: Math.max(1, Math.round(d.sw / base)) };
       resMetaCache.set(c.id, meta);
@@ -489,8 +502,7 @@ function capeMeta(url) {
     img.onload = () => {
       const w = img.naturalWidth, h = img.naturalHeight;
       if (!w || !h) { resolve(null); return; }
-      const optifine = (w % 46 === 0 && w % 64 !== 0);
-      const s = optifine ? w / 46 : w / 64;
+      const { optifine, s } = capeLayout(w);
       const frameH = optifine ? 22 * s : 32 * s;
       const frames = (frameH && h % frameH === 0) ? Math.round(h / frameH) : 1;
       const meta = { w, h, s, frameH, frames, optifine };
@@ -513,7 +525,7 @@ async function loadThumb(el, c) {
   let w = c.w, h = c.h, frames = c.frames;
   if (!w || !h) { const m = await capeMeta(url); if (!m) return; w = m.w; h = m.h; frames = m.frames; }
   const fh = Math.round(h / (frames || 1));
-  const optifine = (w % 46 === 0 && w % 64 !== 0);
+  const optifine = capeLayout(w).optifine;
   const badges = [`${w}×${fh}`];
   if (frames > 1) badges.push(`🎞 ${frames}`);
   box.textContent = badges.join('  ·  ');

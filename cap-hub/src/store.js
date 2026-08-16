@@ -10,13 +10,19 @@ let safe = null; // module safeStorage (injecté depuis main pour éviter d'impo
 export function initStore(userDataDir, safeStorage) {
   FILE = path.join(userDataDir, 'settings.json');
   safe = safeStorage;
+  cached = null; // nouveau fichier -> on repart du disque
 }
 
+// Cache en mémoire de l'objet settings. store.js est le SEUL à écrire le fichier (rien
+// d'externe ne l'édite) -> on évite un readFileSync + JSON.parse à chaque appel (ex. le
+// proxy appelle getSettings à CHAQUE requête de cape en jeu). Invalidé à chaque écriture.
+let cached = null;
 function read() {
-  try { return JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch {}
+  if (cached) return cached;
+  try { cached = JSON.parse(fs.readFileSync(FILE, 'utf8')); return cached; } catch {}
   // Repli sur la sauvegarde si le fichier principal est absent/corrompu (crash en pleine
   // écriture) — évite de perdre token + session MC d'un coup.
-  try { return JSON.parse(fs.readFileSync(FILE + '.bak', 'utf8')); } catch { return {}; }
+  try { cached = JSON.parse(fs.readFileSync(FILE + '.bak', 'utf8')); return cached; } catch { cached = {}; return cached; }
 }
 // Écriture ATOMIQUE : tmp -> rename (le rename est atomique sur le même volume), avec
 // une copie .bak de l'ancien contenu. Une coupure en plein write ne tronque donc jamais
@@ -30,8 +36,9 @@ function write(obj) {
     fs.writeFileSync(tmp, JSON.stringify(obj, null, 2));
     try { if (fs.existsSync(FILE)) fs.copyFileSync(FILE, FILE + '.bak'); } catch {}
     fs.renameSync(tmp, FILE);
+    cached = obj;          // le cache reflète l'état persisté
     return true;
-  } catch { return false; }
+  } catch { cached = null; return false; } // échec -> on relira le disque au prochain read()
 }
 
 const encAvailable = () => { try { return safe && safe.isEncryptionAvailable(); } catch { return false; } };

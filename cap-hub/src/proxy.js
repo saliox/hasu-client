@@ -150,20 +150,21 @@ async function handle(req, res) {
     return res.end(JSON.stringify({ app: 'cap-hub', ...stats }));
   }
 
-  const provider = hostIndex().get(hostOf(req));
+  const host = hostOf(req);
+  const provider = hostIndex().get(host);
   if (req.method !== 'GET' || !provider) { res.writeHead(404); return res.end(); }
 
   const parsed = provider.parse(url);
   if (!parsed) { res.writeHead(404); return res.end(); }
-  const name = parsed.key;
+  const lower = parsed.key.toLowerCase();
 
   // 1/2) Notre cape (toi puis registre). Une cape animée (images empilées) n'est pas
   // affichable par OptiFine -> on sert sa 1re image (PNG valide 64x32/HD).
   let capePng = null;
   for (const src of ['own', 'registry']) {
     try {
-      const buf = src === 'own' ? await deps.getOwn(name.toLowerCase()) : await deps.getRegistryCape(name.toLowerCase());
-      if (buf) { capePng = firstFrameCached(`${src}:${name.toLowerCase()}`, buf); break; }
+      const buf = src === 'own' ? await deps.getOwn(lower) : await deps.getRegistryCape(lower);
+      if (buf) { capePng = firstFrameCached(`${src}:${lower}`, buf); break; }
     } catch {}
   }
 
@@ -171,12 +172,12 @@ async function handle(req, res) {
   let upstream = null;
   if (!capePng) {
     const fetcher = deps.upstream || fetchUpstream;
-    upstream = await fetcher(hostOf(req), url);
+    upstream = await fetcher(host, url);
   }
 
   const out = provider.render({ capePng, upstream });
   if (out.status === 200) {
-    if (capePng) { stats.served++; log('ok', `${provider.label} : cape servie -> ${name}`); }
+    if (capePng) { stats.served++; log('ok', `${provider.label} : cape servie -> ${lower}`); }
     else stats.passthrough++;
   } else stats.misses++;
   res.writeHead(out.status, out.headers || {});
