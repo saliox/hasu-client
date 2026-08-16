@@ -582,6 +582,8 @@ function drawCover(ctx, img, dx, dy, dw, dh) {
   ctx.drawImage(img, dx + (dw - w) / 2, dy + (dh - h) / 2, w, h);
 }
 function fitImageToCape(img) {
+  const iw = img.naturalWidth || 64, ih = img.naturalHeight || 32;
+  if (iw * ih > 8192 * 8192) return null; // garde anti-bombe : image démesurée (un fichier de 12 Mo peut décoder en plusieurs Go)
   const cv = document.createElement('canvas'); cv.width = 64; cv.height = 32;
   const c = cv.getContext('2d'); c.imageSmoothingEnabled = true;
   drawCover(c, img, 0, 0, 64, 32);
@@ -1119,16 +1121,26 @@ function edSetTool(t) {
   const cv = edCanvasEl(); if (cv) cv.style.cursor = t === 'pick' ? 'copy' : (t === 'bucket' ? 'cell' : 'crosshair');
 }
 
-// Charge une image (data URL) dans la grille 64×32 (1re image si cape animée, sous-échantillonnée si HD).
-function edLoadDataUrl(dataUrl) {
+// Charge une image (data URL) dans la grille 64×32. cape=true : c'est une cape -> on prend
+// la 1re image (bande 2:1) pixel-exact. cape=false : image quelconque -> on recadre l'IMAGE
+// ENTIÈRE (cover, lissée) au lieu d'en jeter la moitié.
+function edLoadDataUrl(dataUrl, cape = true) {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
+      const iw = img.naturalWidth || ED_W, ih = img.naturalHeight || ED_H;
+      if (iw * ih > 8192 * 8192) { resolve(false); return; } // garde anti-bombe (image démesurée)
       const cv = document.createElement('canvas'); cv.width = ED_W; cv.height = ED_H;
-      const c = cv.getContext('2d'); c.imageSmoothingEnabled = false;
-      const fw = img.naturalWidth || ED_W;
-      const fh = Math.min(img.naturalHeight || ED_H, Math.round((img.naturalWidth || ED_W) / 2)) || ED_H;
-      c.drawImage(img, 0, 0, fw, fh, 0, 0, ED_W, ED_H);
+      const c = cv.getContext('2d');
+      if (cape) {
+        c.imageSmoothingEnabled = false;
+        const fh = Math.min(ih, Math.round(iw / 2)) || ED_H; // 1re image (2:1) en haut à gauche
+        c.drawImage(img, 0, 0, iw, fh, 0, 0, ED_W, ED_H);
+      } else {
+        c.imageSmoothingEnabled = true;
+        const s = Math.max(ED_W / iw, ED_H / ih), dw = iw * s, dh = ih * s; // cover : remplit 64×32, rogne l'excédent
+        c.drawImage(img, (ED_W - dw) / 2, (ED_H - dh) / 2, dw, dh);
+      }
       const d = c.getImageData(0, 0, ED_W, ED_H).data;
       for (let i = 0; i < ED_W * ED_H; i++) {
         const a = d[i * 4 + 3];
@@ -1271,7 +1283,9 @@ function edInit() {
   $('#ed-import').addEventListener('click', () => guard('#ed-import', async () => {
     const r = await window.cap.capes.pickImage();
     if (!r.ok) { if (!r.canceled) toast(r.error || 'Image invalide', 'err'); return; }
-    edSnapshot(); await edLoadDataUrl(r.dataUrl); edSourceId = null; edUpdateSaveButtons(); edRender(); edSchedulePreview();
+    edSnapshot();
+    if (!await edLoadDataUrl(r.dataUrl, false)) { edUndo.pop(); edUpdateButtons(); return toast('Image illisible ou trop grande.', 'err'); } // grille inchangée -> on retire le snapshot
+    edSourceId = null; edUpdateSaveButtons(); edRender(); edSchedulePreview();
     toast('Image chargée dans l’éditeur ✔', 'ok');
   }));
   $('#ed-save').addEventListener('click', () => guard('#ed-save', async () => {

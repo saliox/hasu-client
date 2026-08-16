@@ -603,7 +603,18 @@ async function ensureMcSession() {
   mcRefreshPromise = (async () => {
     try {
       const renewed = await mc.refreshSession(clientId, session.msRefreshToken);
-      if (!renewed || !renewed.accessToken) return session; // refresh réellement raté -> garde l'ancienne
+      if (!renewed) return session;
+      if (!renewed.accessToken) {
+        // Le token Microsoft a été rafraîchi (rotaté -> l'ancien est invalidé) mais la chaîne
+        // Xbox/Minecraft a échoué (panne transitoire). On PERSISTE le nouveau refresh token
+        // pour ne pas bricker la session ; le prochain appel réessaiera la chaîne MC.
+        if (renewed.msRefreshToken && renewed.msRefreshToken !== session.msRefreshToken) {
+          const kept = { ...session, msRefreshToken: renewed.msRefreshToken };
+          setMcSession(kept);
+          return kept;
+        }
+        return session;
+      }
       // Nouveaux jetons OK mais profil temporairement indispo (404 transitoire) : on GARDE
       // les jetons rafraîchis (dont le refresh token rotaté) et on réutilise l'ancien profil.
       const merged = renewed.profile ? renewed : { ...renewed, profile: session.profile };

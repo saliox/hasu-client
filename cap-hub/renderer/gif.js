@@ -12,7 +12,7 @@
     const hist = new Uint32Array(4096);
     for (const f of frames) {
       for (let i = 0; i < w * h; i++) {
-        const a = f[i * 4 + 3];
+        const a = i * 4 + 3 < f.length ? f[i * 4 + 3] : 0; // frame courte -> hors zone = transparent (pas noir opaque)
         if (a < 128) continue; // transparent -> ignoré dans la palette
         const r = f[i * 4] >> 4, g = f[i * 4 + 1] >> 4, b = f[i * 4 + 2] >> 4;
         hist[(r << 8) | (g << 4) | b]++;
@@ -46,7 +46,7 @@
   function indexFrame(f, w, h, map) {
     const out = new Uint8Array(w * h);
     for (let i = 0; i < w * h; i++) {
-      if (f[i * 4 + 3] < 128) { out[i] = 0; continue; }
+      if (i * 4 + 3 >= f.length || f[i * 4 + 3] < 128) { out[i] = 0; continue; } // hors zone/transparent -> index 0
       const r = f[i * 4] >> 4, g = f[i * 4 + 1] >> 4, b = f[i * 4 + 2] >> 4;
       out[i] = map[(r << 8) | (g << 4) | b];
     }

@@ -328,6 +328,17 @@ global.fetch = async (url, opts = {}) => {
 };
 const kept = await mc.refreshSession('client-id', 'ancien-refresh');
 ok('refreshSession conserve l’ancien refresh token si absent de la réponse', kept.msRefreshToken === 'ancien-refresh');
+// Refresh MS OK (token rotaté) mais chaîne Xbox/MC en échec : on DOIT renvoyer le NOUVEAU
+// refresh token (accessToken null) pour ne pas perdre la capacité de refresh (session « bricked »).
+global.fetch = async (url, opts = {}) => {
+  const u = String(url);
+  if (u.endsWith('/token')) return { ok: true, status: 200, json: async () => ({ access_token: 'ms2', refresh_token: 'ROTATED' }), text: async () => '' };
+  if (u.includes('xboxlive.com')) return { ok: false, status: 503, json: async () => ({}), text: async () => '' }; // panne transitoire
+  return mcFetch()(url, opts);
+};
+const partial = await mc.refreshSession('client-id', 'vieux-token');
+ok('refreshSession préserve le refresh token rotaté même si la chaîne MC échoue', partial.msRefreshToken === 'ROTATED' && partial.accessToken === null);
+global.fetch = mcFetch();
 const dc = await mc.requestDeviceCode('client-id');
 ok('requestDeviceCode renvoie user_code', dc.user_code === 'ABCD-EFGH');
 let threw = false; global.fetch = mcFetch({ profile401: true });
@@ -435,6 +446,11 @@ await up.checkForUpdates('0.0.1');
 const badRes = await up.applyUpdate(() => {});
 global.fetch = realFetch2;
 ok('applyUpdate : SHA-256 invalide -> refus', badRes.ok === false && /SHA-256/.test(badRes.error || ''));
+// Manifeste anormalement volumineux -> refusé (borne mémoire).
+global.fetch = async () => ({ ok: true, status: 200, headers: { get: (h) => (h === 'content-length' ? String(200 * 1024) : null) }, text: async () => JSON.stringify(manifest) });
+const bigManifest = await up.checkForUpdates('0.0.1');
+global.fetch = realFetch2;
+ok('checkForUpdates refuse un manifeste trop volumineux', bigManifest.ok === false);
 
 fs.rmSync(ud, { recursive: true, force: true });
 

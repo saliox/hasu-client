@@ -31,29 +31,33 @@
   const SSAA = 3; // suréchantillonnage (rendu à 3× puis réduit = bords bien lisses)
 
   // ---------- Petite bibliothèque mat4 (colonne-major, comme WebGL) ----------
-  function perspective(fovy, aspect, near, far) {
+  // Matrices : écrivent dans un buffer fourni (réutilisé chaque frame) -> zéro allocation
+  // dans la boucle de rendu. Buffers Float32Array (uniformMatrix4fv sans conversion).
+  const _proj = new Float32Array(16), _view = new Float32Array(16), _model = new Float32Array(16);
+  const _eye = [0, 0, 0], _ctr = [0, 0, 0], _UP = [0, 1, 0];
+  function perspective(out, fovy, aspect, near, far) {
     const f = 1 / Math.tan(fovy / 2), nf = 1 / (near - far);
-    return [f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0];
+    out[0] = f / aspect; out[1] = 0; out[2] = 0; out[3] = 0;
+    out[4] = 0; out[5] = f; out[6] = 0; out[7] = 0;
+    out[8] = 0; out[9] = 0; out[10] = (far + near) * nf; out[11] = -1;
+    out[12] = 0; out[13] = 0; out[14] = 2 * far * near * nf; out[15] = 0;
+    return out;
   }
-  function lookAt(eye, ctr, up) {
+  function lookAt(out, eye, ctr, up) {
     let zx = eye[0] - ctr[0], zy = eye[1] - ctr[1], zz = eye[2] - ctr[2];
     let zl = Math.hypot(zx, zy, zz) || 1; zx /= zl; zy /= zl; zz /= zl;
     let xx = up[1] * zz - up[2] * zy, xy = up[2] * zx - up[0] * zz, xz = up[0] * zy - up[1] * zx;
     let xl = Math.hypot(xx, xy, xz) || 1; xx /= xl; xy /= xl; xz /= xl;
     const yx = zy * xz - zz * xy, yy = zz * xx - zx * xz, yz = zx * xy - zy * xx;
-    return [xx, yx, zx, 0, xy, yy, zy, 0, xz, yz, zz, 0,
-      -(xx * eye[0] + xy * eye[1] + xz * eye[2]),
-      -(yx * eye[0] + yy * eye[1] + yz * eye[2]),
-      -(zx * eye[0] + zy * eye[1] + zz * eye[2]), 1];
+    out[0] = xx; out[1] = yx; out[2] = zx; out[3] = 0;
+    out[4] = xy; out[5] = yy; out[6] = zy; out[7] = 0;
+    out[8] = xz; out[9] = yz; out[10] = zz; out[11] = 0;
+    out[12] = -(xx * eye[0] + xy * eye[1] + xz * eye[2]);
+    out[13] = -(yx * eye[0] + yy * eye[1] + yz * eye[2]);
+    out[14] = -(zx * eye[0] + zy * eye[1] + zz * eye[2]); out[15] = 1;
+    return out;
   }
-  function rotY(a) { const c = Math.cos(a), s = Math.sin(a); return [c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1]; }
-  function mul(a, b) {
-    const o = new Array(16);
-    for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) {
-      o[c * 4 + r] = a[r] * b[c * 4] + a[4 + r] * b[c * 4 + 1] + a[8 + r] * b[c * 4 + 2] + a[12 + r] * b[c * 4 + 3];
-    }
-    return o;
-  }
+  function rotY(out, a) { const c = Math.cos(a), s = Math.sin(a); out[0] = c; out[1] = 0; out[2] = -s; out[3] = 0; out[4] = 0; out[5] = 1; out[6] = 0; out[7] = 0; out[8] = s; out[9] = 0; out[10] = c; out[11] = 0; out[12] = 0; out[13] = 0; out[14] = 0; out[15] = 1; return out; }
 
   // ---------- Shaders ----------
   const VERT = `
@@ -458,10 +462,11 @@
     // Perspective modérée façon skinview3d/NameMC.
     const dist = (showBody ? 58 : 24) / curZoom;
     // Caméra en orbite : azimut = rotation du modèle, élévation = inclinaison.
-    const eye = [0, ctrY + Math.sin(curTilt) * dist, Math.cos(curTilt) * dist];
-    const proj = perspective(42 * Math.PI / 180, aspect, 1, 800);
-    const view = lookAt(eye, [0, ctrY, 0], [0, 1, 0]);
-    const model = rotY(curAngle);
+    _eye[1] = ctrY + Math.sin(curTilt) * dist; _eye[2] = Math.cos(curTilt) * dist; // _eye[0]=0 constant
+    _ctr[1] = ctrY;                                                                 // centre (0, ctrY, 0)
+    const proj = perspective(_proj, 42 * Math.PI / 180, aspect, 1, 800);
+    const view = lookAt(_view, _eye, _ctr, _UP);
+    const model = rotY(_model, curAngle);
     gl.uniformMatrix4fv(uniLoc.proj, false, proj);
     gl.uniformMatrix4fv(uniLoc.view, false, view);
     gl.uniformMatrix4fv(uniLoc.model, false, model);
@@ -469,7 +474,7 @@
 
     // 1) Ombre au sol (ne s'écrit pas dans la profondeur, tourne avec le modèle non).
     if (shadowBuf && showBody) {
-      gl.uniformMatrix4fv(uniLoc.model, false, rotY(0));
+      gl.uniformMatrix4fv(uniLoc.model, false, IDENTITY); // ombre : rotation Y de 0 = identité
       gl.uniform1f(uniLoc.shadow, 1);
       gl.depthMask(false);
       gl.bindTexture(gl.TEXTURE_2D, shadowTex);
