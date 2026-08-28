@@ -23,13 +23,22 @@ import org.spongepowered.asm.mixin.injection.*;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import io.github.solclient.client.mod.impl.weatherchanger.WeatherChangerMod;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.world.World;
 
 @Mixin(World.class)
 public class WorldMixin {
 
+	private final MinecraftClient mc = MinecraftClient.getInstance();
+
+	// World est partagée par le rendu client ET, en solo, le serveur intégré tournant dans
+	// le même JVM (WorldServer). Sans cette garde, l'override "purement visuel" changerait
+	// aussi le gradient de pluie/foudre côté serveur intégré (même pattern de sécurité que
+	// LevelPropertiesMixin pour le Time Changer).
 	@Inject(method = "getRainGradient", at = @At("HEAD"), cancellable = true)
 	public void azur$overrideRain(float delta, CallbackInfoReturnable<Float> callback) {
+		if (mc.world == null || (Object) this != mc.world)
+			return;
 		Float override = WeatherChangerMod.getRainOverride();
 		if (override != null)
 			callback.setReturnValue(override);
@@ -37,6 +46,8 @@ public class WorldMixin {
 
 	@Inject(method = "getThunderGradient", at = @At("HEAD"), cancellable = true)
 	public void azur$overrideThunder(float delta, CallbackInfoReturnable<Float> callback) {
+		if (mc.world == null || (Object) this != mc.world)
+			return;
 		if (WeatherChangerMod.getRainOverride() != null)
 			callback.setReturnValue(0F);
 	}
