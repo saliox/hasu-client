@@ -41,9 +41,20 @@ function createWindow() {
   });
   win.removeMenu();
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  // Tout lien externe s'ouvre dans le navigateur, jamais dans l'app.
-  win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
+  // Tout lien externe s'ouvre dans le navigateur, jamais dans l'app — et UNIQUEMENT en
+  // http/https (on refuse file:, javascript:, protocoles personnalisés… via shell.openExternal).
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    try { const u = new URL(url); if (u.protocol === 'http:' || u.protocol === 'https:') shell.openExternal(url); } catch {}
+    return { action: 'deny' };
+  });
   win.webContents.on('will-navigate', (e) => e.preventDefault());
+  // Sécurité : cette app locale ne réclame aucune permission web sensible (caméra,
+  // micro, géolocalisation, notifications, presse-papiers…) — on refuse tout.
+  try {
+    const ses = win.webContents.session;
+    ses.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
+    ses.setPermissionCheckHandler(() => false);
+  } catch {}
 }
 
 // Dossier du jeu : réglage utilisateur, sinon userData/minecraft (isolé du .minecraft
