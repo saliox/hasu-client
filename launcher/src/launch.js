@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { downloadAll, downloadFile, fetchJson, isFresh } from './download.js';
+import { downloadAll, downloadFile, fetchJsonCached, isFresh } from './download.js';
 import { getVersionJson, resolveLibraries, resolveAssets, buildGameArgs, osName } from './mojang.js';
 import { ensureForge, resolveForgeLibraries, mergeVersionJson, FORGE_MC_VERSION } from './forge.js';
 import { ensureJava } from './java.js';
@@ -19,20 +19,6 @@ export function offlineUuid(name) {
   md5[8] = (md5[8] & 0x3f) | 0x80; // variante RFC 4122
   const hex = md5.toString('hex');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
-// JSON réseau avec cache disque : le réseau d'abord (données fraîches), le cache en
-// secours (mode hors-ligne / panne Mojang).
-async function cachedJson(url, file) {
-  try {
-    const data = await fetchJson(url);
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(data));
-    return data;
-  } catch (e) {
-    try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
-    throw e;
-  }
 }
 
 let child = null;
@@ -102,7 +88,7 @@ export async function prepareAndLaunch(opts, hooks = {}) {
   const idxFile = path.join(assetsDir, 'indexes', idxName + '.json');
   let assetTasks = [];
   if (vjson.assetIndex?.url) {
-    const idx = await cachedJson(vjson.assetIndex.url, idxFile);
+    const idx = await fetchJsonCached(vjson.assetIndex.url, idxFile);
     assetTasks = resolveAssets(idx, assetsDir);
   }
   await downloadAll(assetTasks, { limit: 16, onProgress: progress('assets') });

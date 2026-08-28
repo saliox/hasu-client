@@ -54,6 +54,21 @@ export async function fetchJson(url, opts) {
   return JSON.parse(buf.toString('utf8').replace(/^﻿/, ''));
 }
 
+// JSON réseau avec cache disque : le réseau d'abord (données fraîches), le cache en
+// secours (mode hors-ligne / panne réseau) — un lancement déjà préparé doit rester
+// jouable hors-ligne même quand le manifeste distant est inatteignable.
+export async function fetchJsonCached(url, file) {
+  try {
+    const data = await fetchJson(url);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(data));
+    return data;
+  } catch (e) {
+    try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
+    throw e;
+  }
+}
+
 // Télécharge url -> file si absent/corrompu ; vérifie le SHA-1 si fourni.
 export async function downloadFile(url, file, sha1, opts) {
   if (isFresh(file, sha1)) return { file, skipped: true, bytes: 0 };

@@ -62,6 +62,16 @@ async function readySession() {
   const s = getSettings();
   try {
     const fresh = await ms.refreshSession(s.mcClientId, session.msRefreshToken);
+    if (!fresh.accessToken) {
+      // La chaîne Xbox/XSTS/Minecraft a échoué (panne transitoire) mais le refresh token
+      // Microsoft a été PIVOTÉ par refreshMs : l'ancien est déjà invalide côté Microsoft.
+      // On le persiste quand même pour ne pas bricker la prochaine tentative, et on
+      // retombe sur le profil existant en attendant.
+      if (fresh.msRefreshToken && fresh.msRefreshToken !== session.msRefreshToken) {
+        setMcSession({ ...session, msRefreshToken: fresh.msRefreshToken });
+      }
+      return session.profile ? session : null;
+    }
     setMcSession(fresh);
     return fresh;
   } catch {

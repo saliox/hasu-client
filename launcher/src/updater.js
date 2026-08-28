@@ -34,6 +34,7 @@ export async function checkForUpdates(currentVersion) {
   try {
     const r = await fetch(`${MANIFEST_URL}?t=${Date.now()}`, { signal: AbortSignal.timeout(10000) });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    if (Number(r.headers?.get?.('content-length') || 0) > 64 * 1024) throw new Error('Manifeste anormalement volumineux.');
     const info = JSON.parse((await r.text()).replace(/^﻿/, ''));
     const available = !!info.url && isNewer(info.version, currentVersion);
     lastInfo = available ? info : null;
@@ -66,9 +67,16 @@ async function downloadWithProgress(r, total, onProgress) {
 
 export async function applyUpdate(appQuit, onProgress) {
   if (!lastInfo) return { ok: false, error: 'Aucune mise à jour prête.' };
+  let workDir = null;
   try {
     if (!isAllowedInstallerUrl(lastInfo.url)) throw new Error('URL d’installeur non autorisée — mise à jour refusée.');
-    const dest = path.join(os.tmpdir(), 'HasuLauncher-Setup.exe');
+    // Sécurité : on stage l'installeur et le script de lancement dans un dossier temporaire
+    // à nom ALÉATOIRE (mkdtemp). Un chemin fixe/prévisible dans %TEMP% permettrait à un
+    // autre processus (même utilisateur) de réécrire l'installeur vérifié entre l'écriture
+    // et l'exécution (TOCTOU), contournant la vérification SHA-256. Un nom aléatoire ferme
+    // cette fenêtre.
+    workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hasulauncher-upd-'));
+    const dest = path.join(workDir, 'HasuLauncher-Setup.exe');
     const r = await fetch(lastInfo.url, { signal: AbortSignal.timeout(180000) });
     if (!r.ok) throw new Error(`Téléchargement : HTTP ${r.status}`);
     const total = Number(r.headers.get('content-length') || 0);
@@ -80,19 +88,23 @@ export async function applyUpdate(appQuit, onProgress) {
     }
     fs.writeFileSync(dest, buf);
     if (onProgress) { try { onProgress(100); } catch {} }
-    const script = path.join(os.tmpdir(), 'hasulauncher-update.cmd');
+    const script = path.join(workDir, 'run.cmd');
     const body =
       '@echo off\r\n' +
       'ping 127.0.0.1 -n 2 >nul\r\n' +
       `"${dest}" /S\r\n` +
-      `start "" "${process.execPath}"\r\n`;
+      `start "" "${process.execPath}"\r\n` +
+      '(goto) 2>nul & rmdir /s /q "%~dp0"\r\n'; // auto-supprime le dossier temporaire après lancement
     fs.writeFileSync(script, body);
+    const dir = workDir;
     const child = spawn('cmd.exe', ['/c', script], { detached: true, stdio: 'ignore', windowsHide: true });
-    child.on('error', () => {});
-    child.unref();
-    setTimeout(() => appQuit(), 400);
+    // On ne quitte l'app QUE si le lancement a réussi : sinon (spawn en échec) elle
+    // resterait fermée sans qu'aucun installeur ne tourne. Échec -> on nettoie le dossier.
+    child.on('spawn', () => { child.unref(); setTimeout(() => appQuit(), 400); });
+    child.on('error', () => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} });
     return { ok: true };
   } catch (e) {
+    if (workDir) { try { fs.rmSync(workDir, { recursive: true, force: true }); } catch {} }
     return { ok: false, error: e.message };
   }
 }

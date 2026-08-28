@@ -3,7 +3,7 @@
 // donc rien à installer, et chaque fichier est vérifié par SHA-1.
 import fs from 'node:fs';
 import path from 'node:path';
-import { fetchJson, downloadAll, isFresh } from './download.js';
+import { fetchJsonCached, downloadAll, isFresh } from './download.js';
 
 const RUNTIMES_URL = 'https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json';
 
@@ -20,15 +20,21 @@ export function javaExePath(runtimeDir, component, platform = process.platform) 
 
 // S'assure que le runtime `component` (ex. "jre-legacy") est présent et complet.
 // Renvoie le chemin de l'exécutable java. onProgress relayé au téléchargement.
+//
+// Les manifestes (liste des runtimes + fichiers du runtime) sont mis en cache sur
+// disque comme le JSON de version et l'index d'assets (voir launch.js) : un runtime
+// déjà installé une fois doit rester lançable hors-ligne, pas seulement le jar du jeu.
+// Sans ce cache, ensureJava exigeait le réseau à CHAQUE lancement (même « Jouer en
+// hors-ligne ») avant même de vérifier si le JRE était déjà présent sur le disque.
 export async function ensureJava(runtimeDir, component, { onProgress } = {}) {
   const platform = runtimePlatform();
-  const all = await fetchJson(RUNTIMES_URL);
+  const base = path.join(runtimeDir, component);
+  const all = await fetchJsonCached(RUNTIMES_URL, path.join(runtimeDir, 'all.json'));
   const entries = (all[platform] && all[platform][component]) || [];
   if (!entries.length) {
     throw new Error(`Runtime Java « ${component} » indisponible pour ${platform}.`);
   }
-  const manifest = await fetchJson(entries[0].manifest.url);
-  const base = path.join(runtimeDir, component);
+  const manifest = await fetchJsonCached(entries[0].manifest.url, path.join(base, 'manifest.json'));
   const tasks = [];
   const links = [];
   for (const [rel, info] of Object.entries(manifest.files || {})) {

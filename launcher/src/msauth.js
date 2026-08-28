@@ -107,9 +107,20 @@ async function microsoftToSession(clientId, msTok, prevRefresh) {
 }
 
 // Rafraîchit une session Microsoft expirée (si refresh token dispo).
+// IMPORTANT : Microsoft (offline_access) FAIT TOURNER le refresh token — l'ancien est
+// invalidé dès que refreshMs réussit. Si la chaîne Xbox/XSTS/Minecraft échoue ensuite
+// (panne transitoire), on renvoie quand même le NOUVEAU refresh token (accessToken:null)
+// pour que l'appelant le persiste, sinon une simple coupure « bricke » la session
+// (l'ancien refresh token, déjà invalidé côté Microsoft, ne fonctionnerait plus jamais).
 export async function refreshSession(clientId, msRefreshToken) {
-  const msTok = await refreshMs(clientId, msRefreshToken);
-  return microsoftToSession(clientId, msTok, msRefreshToken);
+  const msTok = await refreshMs(clientId, msRefreshToken); // throw = refresh réellement invalide -> reconnexion
+  const newRefresh = msTok.refresh_token || msRefreshToken;
+  try {
+    const s = await msToMinecraft(msTok.access_token);
+    return { msRefreshToken: newRefresh, ...s };
+  } catch {
+    return { msRefreshToken: newRefresh, accessToken: null };
+  }
 }
 
 export async function getProfile(accessToken) {
