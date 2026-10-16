@@ -43,11 +43,40 @@ jobs:
           done
           echo "changed=$changed" >> "$GITHUB_ENV"
 
+      # Ce workflow se déclenche sur les mêmes fichiers (version.json) que les workflows
+      # de release, qui recommitent aussi sur cette branche : un push concurrent peut
+      # faire échouer un simple `git push` (non-fast-forward). On resynchronise donc sur
+      # le dernier ref et on réessaie (même correctif que les workflows de release).
       - name: Commit normalized files
         if: env.changed == '1'
+        shell: bash
         run: |
+          shopt -s globstar nullglob
           git config user.name  'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m 'chore: strip UTF-8 BOM from update manifests [skip ci]'
-          git push
+          branch='${{ github.ref_name }}'
+          mkdir -p "$RUNNER_TEMP/bom-fix"
+          for f in **/version.json **/version-beta.json; do
+            [ -f "$f" ] || continue
+            mkdir -p "$RUNNER_TEMP/bom-fix/$(dirname "$f")"
+            cp "$f" "$RUNNER_TEMP/bom-fix/$f"
+          done
+          ok=0
+          for i in 1 2 3 4 5; do
+            git fetch origin "$branch"
+            git reset --hard "origin/$branch"
+            for f in **/version.json **/version-beta.json; do
+              [ -f "$RUNNER_TEMP/bom-fix/$f" ] || continue
+              cp "$RUNNER_TEMP/bom-fix/$f" "$f"
+            done
+            git add -A
+            if git diff --cached --quiet; then echo "déjà normalisé."; ok=1; break; fi
+            git commit -m 'chore: strip UTF-8 BOM from update manifests [skip ci]'
+            if git push origin "HEAD:$branch"; then ok=1; break; fi
+            echo "Push rejeté (merge concurrent sur $branch) — nouvelle tentative $i/5…"
+            sleep $((i * 3))
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::Impossible de pousser la normalisation BOM après 5 tentatives (course persistante sur $branch)."
+            exit 1
+          fi
