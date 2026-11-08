@@ -597,7 +597,7 @@ function fitImageToCape(img) {
 }
 // GIF -> cape ANIMÉE : chaque image du GIF devient une image 64×32 empilée verticalement.
 async function gifToCape(dataUrl) {
-  if (!('ImageDecoder' in window)) return fitImageToCape(await loadImage(dataUrl)); // repli : 1re image statique
+  if (!('ImageDecoder' in window)) return { url: await fitImageToCape(await loadImage(dataUrl)), frames: 1, total: 1, static: true }; // repli : 1re image statique
   const bytes = Uint8Array.from(atob(dataUrl.split(',')[1]), (ch) => ch.charCodeAt(0));
   const dec = new ImageDecoder({ data: bytes, type: 'image/gif' });
   await dec.tracks.ready;
@@ -610,13 +610,21 @@ async function gifToCape(dataUrl) {
     drawCover(c, image, 0, i * 32, 64, 32);
     image.close?.();
   }
-  return cv.toDataURL('image/png');
+  return { url: cv.toDataURL('image/png'), frames: count, total, static: false };
+}
+// Message d'info sur la façon dont un GIF a été importé (animé N images, tronqué, ou fixe).
+function gifNote(g) {
+  if (!g || !g.url) return '';
+  if (g.static) return 'GIF importé en image fixe (décodeur animé indisponible sur cette version).';
+  if (g.total > g.frames) return `GIF de ${g.total} images : importé en cape animée de ${g.frames} images (limite atteinte).`;
+  if (g.frames > 1) return `Cape animée de ${g.frames} images créée depuis le GIF.`;
+  return '';
 }
 async function buildCapeFromFile(f) {
-  if (f.ext === 'gif') return await gifToCape(f.dataUrl);
+  if (f.ext === 'gif') { const g = await gifToCape(f.dataUrl); return { url: g.url, note: gifNote(g) }; }
   const img = await loadImage(f.dataUrl);
-  if (f.ext === 'png' && isCapeShape(img.naturalWidth, img.naturalHeight)) return f.dataUrl; // vraie cape (HD/4K/animée) telle quelle
-  return fitImageToCape(img); // sinon on recadre en 64×32
+  if (f.ext === 'png' && isCapeShape(img.naturalWidth, img.naturalHeight)) return { url: f.dataUrl, note: '' }; // vraie cape (HD/4K/animée) telle quelle
+  return { url: fitImageToCape(img), note: '' }; // sinon on recadre en 64×32
 }
 
 // Crée une cape par fichier fourni. files : [{ name, ext, dataUrl, tooBig }]
@@ -624,15 +632,22 @@ async function importCapeFiles(files) {
   if (!files.length) return;
   toast(`Traitement de ${files.length} fichier(s)…`);
   let ok = 0, fail = 0;
+  const notes = [];
   for (const f of files) {
     if (f.tooBig) { fail++; continue; }
     try {
-      const url = await buildCapeFromFile(f);
-      const res = url && await window.cap.capes.create(f.name, url);
-      if (res && res.ok) ok++; else fail++;
+      const built = await buildCapeFromFile(f);
+      const res = built.url && await window.cap.capes.create(f.name, built.url);
+      if (res && res.ok) { ok++; if (built.note) notes.push(built.note); } else fail++;
     } catch { fail++; }
   }
   toast(`${ok} cape(s) importée(s) ✔${fail ? ` (${fail} rejetée(s))` : ''}`, ok ? 'ok' : 'err');
+  // Détail GIF : pour un seul fichier on affiche la note exacte ; pour plusieurs, on signale
+  // seulement s'il y a eu une troncature ou un repli en image fixe (information utile).
+  if (notes.length) {
+    if (files.length === 1) setTimeout(() => toast(notes[0], 'ok'), 1400);
+    else { const warn = notes.find((n) => /limite atteinte|image fixe/.test(n)); if (warn) setTimeout(() => toast(warn, 'ok'), 1400); }
+  }
   if (ok) loadCapes();
 }
 
@@ -891,7 +906,33 @@ const ED_REGIONS = [
   { x: 1, y: 0, w: 10, h: 1 },     // dessus
   { x: 11, y: 0, w: 10, h: 1 },    // dessous
 ];
-let edGrid = new Array(ED_W * ED_H).fill(null); // null = pixel transparent
+// Calques : « Base » (fond) et « Déco » (par-dessus). Chaque calque a sa propre grille ;
+// l'édition se fait sur le calque ACTIF (edGrid pointe dessus, donc tout le code des outils
+// reste inchangé), l'affichage et l'export COMPOSITENT les calques (Déco au-dessus de Base).
+const ED_LAYER_NAMES = ['Base', 'Déco'];
+let edLayers = ED_LAYER_NAMES.map(() => new Array(ED_W * ED_H).fill(null));
+let edLayerVis = ED_LAYER_NAMES.map(() => true);
+let edActiveLayer = 0;
+let edGrid = edLayers[edActiveLayer]; // null = pixel transparent ; référence vive vers le calque actif
+// Couleur visible au pixel i : calque le plus haut (visible) qui a un pixel non transparent.
+function edComposite(i) {
+  for (let l = edLayers.length - 1; l >= 0; l--) { if (edLayerVis[l]) { const col = edLayers[l][i]; if (col) return col; } }
+  return null;
+}
+function edIsEmpty() { return edLayers.every((g) => g.every((c) => !c)); }
+// Reflète le calque actif + la visibilité dans la barre d'outils.
+function edSyncLayerUI() {
+  $$('.ed-layer-pick').forEach((b) => b.classList.toggle('active', +b.dataset.layer === edActiveLayer));
+  $$('.ed-layer-eye').forEach((b) => b.classList.toggle('active', !!edLayerVis[+b.dataset.eye]));
+}
+function edSetActiveLayer(l) {
+  if (l < 0 || l >= edLayers.length) return;
+  edActiveLayer = l; edGrid = edLayers[l]; edSyncLayerUI();
+}
+function edToggleLayerVis(l) {
+  if (l < 0 || l >= edLayers.length) return;
+  edLayerVis[l] = !edLayerVis[l]; edSyncLayerUI(); edRender(); edSchedulePreview();
+}
 let edZoom = 14, edFitZoom = 14, edPanX = 0, edPanY = 0;
 let edPainting = false, edPanning = false, edPanFrom = null;
 let edTool = 'brush'; // 'brush' | 'line' | 'rect' | 'bucket' | 'erase' | 'pick'
@@ -1020,7 +1061,7 @@ function edRender() {
     const sx = ox + x * z, sy = oy + y * z;
     c.fillStyle = ((x + y) & 1) ? '#2b3040' : '#232836';
     c.fillRect(sx, sy, z, z);
-    const col = edGrid[y * ED_W + x];
+    const col = edComposite(y * ED_W + x); // affichage = composite des calques
     if (col) { c.fillStyle = col; c.fillRect(sx, sy, z, z); }
   }
   // Grille (si assez zoomé).
@@ -1095,7 +1136,7 @@ function edSchedulePreview() {
 }
 function edExportUrl() {
   const cv = $('#ed-export'), c = cv.getContext('2d'); c.clearRect(0, 0, ED_W, ED_H);
-  for (let y = 0; y < ED_H; y++) for (let x = 0; x < ED_W; x++) { const col = edGrid[y * ED_W + x]; if (col) { c.fillStyle = col; c.fillRect(x, y, 1, 1); } }
+  for (let y = 0; y < ED_H; y++) for (let x = 0; x < ED_W; x++) { const col = edComposite(y * ED_W + x); if (col) { c.fillStyle = col; c.fillRect(x, y, 1, 1); } }
   return cv.toDataURL('image/png');
 }
 
@@ -1111,16 +1152,20 @@ function edPaint(e) {
 }
 function edPickAt(e) {
   const p = edCoord(e); if (!p.inside) return;
-  const col = edGrid[p.y * ED_W + p.x];
+  const col = edComposite(p.y * ED_W + p.x); // pipette : couleur visible (composite)
   if (col) { $('#ed-color').value = col; edRenderSwatches(); }
   edSetTool('brush');
 }
 
-// Historique (annuler / rétablir) — une entrée par TRAIT.
-function edSnapshot() { edUndo.push(edGrid.slice()); if (edUndo.length > 80) edUndo.shift(); edRedo.length = 0; edUpdateButtons(); }
+// Historique (annuler / rétablir) — une entrée par TRAIT. On capture TOUS les calques (+ le
+// calque actif), pas seulement la grille courante, pour que l'annulation soit cohérente quand
+// on passe d'un calque à l'autre.
+function edSnapshotState() { return { layers: edLayers.map((g) => g.slice()), active: edActiveLayer }; }
+function edRestoreState(s) { edLayers = s.layers.map((g) => g.slice()); edActiveLayer = s.active; edGrid = edLayers[edActiveLayer]; edSyncLayerUI(); }
+function edSnapshot() { edUndo.push(edSnapshotState()); if (edUndo.length > 80) edUndo.shift(); edRedo.length = 0; edUpdateButtons(); }
 function edUpdateButtons() { const u = $('#ed-undo'), r = $('#ed-redo'); if (u) u.disabled = !edUndo.length; if (r) r.disabled = !edRedo.length; }
-function edDoUndo() { if (!edUndo.length) return; edRedo.push(edGrid.slice()); edGrid = edUndo.pop(); edRender(); edSchedulePreview(); edUpdateButtons(); }
-function edDoRedo() { if (!edRedo.length) return; edUndo.push(edGrid.slice()); edGrid = edRedo.pop(); edRender(); edSchedulePreview(); edUpdateButtons(); }
+function edDoUndo() { if (!edUndo.length) return; edRedo.push(edSnapshotState()); edRestoreState(edUndo.pop()); edRender(); edSchedulePreview(); edUpdateButtons(); }
+function edDoRedo() { if (!edRedo.length) return; edUndo.push(edSnapshotState()); edRestoreState(edRedo.pop()); edRender(); edSchedulePreview(); edUpdateButtons(); }
 
 const ED_TOOLS = ['brush', 'line', 'rect', 'bucket', 'erase', 'pick'];
 function edSetTool(t) {
@@ -1183,6 +1228,9 @@ function edUpdateSaveButtons() {
 async function edLoadSource() {
   const v = $('#ed-source').value;
   edSnapshot();
+  // Charger une source repart d'un état propre : on écrit dans la Base et on vide la Déco.
+  edSetActiveLayer(0);
+  edLayers[1].fill(null);
   if (v === '__blank') { edGrid.fill(null); ED_REGIONS.forEach((r) => edFillRegion(r, $('#ed-color').value)); edSourceId = null; }
   else {
     const url = await capeDataUrl(v);
@@ -1284,6 +1332,10 @@ function edInit() {
   $('#ed-fill-front').addEventListener('click', () => { edSnapshot(); edFillRegion(ED_FRONT, $('#ed-color').value); edRender(); edSchedulePreview(); });
   $('#ed-fill-all').addEventListener('click', () => { edSnapshot(); ED_REGIONS.forEach((r) => edFillRegion(r, $('#ed-color').value)); edRender(); edSchedulePreview(); });
   $('#ed-clear').addEventListener('click', () => { edSnapshot(); edGrid.fill(null); edRender(); edSchedulePreview(); });
+  // Calques : sélection du calque actif + bascule de visibilité.
+  $$('.ed-layer-pick').forEach((b) => b.addEventListener('click', () => edSetActiveLayer(+b.dataset.layer)));
+  $$('.ed-layer-eye').forEach((b) => b.addEventListener('click', () => edToggleLayerVis(+b.dataset.eye)));
+  edSyncLayerUI();
   $('#ed-zoom-in').addEventListener('click', () => { edZoom = Math.min(64, edZoom * 1.25); edRender(); });
   $('#ed-zoom-out').addEventListener('click', () => { edZoom = Math.max(3, edZoom / 1.25); edRender(); });
   $('#ed-zoom-reset').addEventListener('click', () => { edResizeCanvas(); edFit(); edRender(); });
@@ -1297,7 +1349,7 @@ function edInit() {
     toast('Image chargée dans l’éditeur ✔', 'ok');
   }));
   $('#ed-save').addEventListener('click', () => guard('#ed-save', async () => {
-    if (edGrid.every((c) => !c)) return toast('La cape est vide — dessine quelque chose d’abord.', 'err');
+    if (edIsEmpty()) return toast('La cape est vide — dessine quelque chose d’abord.', 'err');
     const name = $('#ed-name').value.trim() || 'Ma cape';
     const r = await window.cap.capes.create(name, edExportUrl());
     if (!r.ok) return toast(r.error || 'Enregistrement impossible', 'err');
@@ -1308,7 +1360,7 @@ function edInit() {
   }));
   $('#ed-update').addEventListener('click', () => guard('#ed-update', async () => {
     if (!edSourceId) return;
-    if (edGrid.every((c) => !c)) return toast('La cape est vide.', 'err');
+    if (edIsEmpty()) return toast("La cape est vide.", "err");
     const r = await window.cap.capes.setImage(edSourceId, edExportUrl());
     if (!r.ok) return toast(r.error || 'Mise à jour impossible', 'err');
     $('#ed-msg').textContent = `Cape « ${edSourceName} » mise à jour ✔`;
