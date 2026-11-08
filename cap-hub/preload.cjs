@@ -50,6 +50,7 @@ contextBridge.exposeInMainWorld('cap', {
     refresh: () => invoke('registry:refresh'),
     players: () => invoke('registry:players'),
     cape: (name) => invoke('registry:cape', name), // -> data URL de la cape d'un joueur
+    import: (name) => invoke('registry:import', name), // importe la cape d'un joueur dans ma bibliothèque
   },
 
   games: {

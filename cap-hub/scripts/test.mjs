@@ -130,6 +130,10 @@ const store = await import(S('store.js'));
 store.initStore(ud, { isEncryptionAvailable: () => false });
 let ss = store.saveSettings({ favorites: ['a.png', 'a.png', 'b.png'] }).settings;
 ok('favoris dédupliqués + persistés', ss.favorites.length === 2 && store.getSettings().favorites.includes('b.png'));
+ok('joueurs masqués dédupliqués + persistés', (() => {
+  const r = store.saveSettings({ hiddenPlayers: ['notch', 'notch', 'dieu'] }).settings;
+  return r.hiddenPlayers.length === 2 && store.getSettings().hiddenPlayers.includes('dieu');
+})());
 ss = store.saveSettings({ categories: { 'x.png': 'Cool', 'y.png': '  ' } }).settings;
 ok('catégories nettoyées (vide ignoré)', ss.categories['x.png'] === 'Cool' && !('y.png' in ss.categories));
 ok('catégories bornées à 500 clés', (() => {
