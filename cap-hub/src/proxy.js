@@ -59,14 +59,15 @@ async function resolveRealIp(host) {
 }
 
 // ---------- Relais vers le vrai serveur OptiFine ----------
-const passCache = new Map(); // host+path -> { status, body, t }
-const PASS_TTL = 10 * 60 * 1000;
+const passCache = new Map(); // host+path -> { status, body, exp }
+const PASS_TTL = 10 * 60 * 1000;      // réponses 200 (cape d'un autre joueur) : cache long
+const NEG_TTL = 60 * 1000;            // réponses non-200 réelles (404 « pas de cape ») : cache court
 const PASS_MAX = 500;                 // borne le nombre d'entrées (anti-fuite mémoire)
 const MAX_BODY = 3 * 1024 * 1024;
 
 function cacheGet(key) {
   const hit = passCache.get(key);
-  if (hit && Date.now() - hit.t < PASS_TTL) return hit;
+  if (hit && Date.now() < hit.exp) return hit;
   if (hit) passCache.delete(key);     // purge l'entrée expirée
   return null;
 }
@@ -122,8 +123,14 @@ function fetchUpstream(host, urlPath) {
             });
             res.on('end', () => {
               if (tooBig) return;
-              const entry = { status: res.statusCode || 0, body: Buffer.concat(chunks), t: Date.now() };
-              if (entry.status === 200) cacheSet(ckey, entry); // on ne cache QUE les 200 (pas les 5xx transitoires)
+              const status = res.statusCode || 0;
+              const entry = { status, body: Buffer.concat(chunks) };
+              // 200 (cape d'un autre joueur) -> cache long. Non-200 RÉEL (404 « pas de cape »)
+              // -> cache court : évite qu'un process local génère une requête amont pour CHAQUE
+              // pseudo inexistant (spam vers s.optifine.net). On ne cache PAS status 0 (nos propres
+              // échecs transitoires), pour ne pas bloquer une nouvelle tentative après coupure.
+              if (status === 200) cacheSet(ckey, { ...entry, exp: Date.now() + PASS_TTL });
+              else if (status > 0) cacheSet(ckey, { ...entry, exp: Date.now() + NEG_TTL });
               finish(entry);
             });
             res.on('error', () => finish({ status: 0, body: null }));

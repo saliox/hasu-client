@@ -263,6 +263,7 @@
 
   // Construit le maillage texturé déformé (positions monde, UV cape avant, normales calculées).
   function clothMesh() {
+    if (!capeW || !capeH) return; // garde : des dimensions nulles donneraient s=0 -> texH=Infinity (UV dégénérées)
     const base = (capeW % 46 === 0 && capeW % 64 !== 0) ? 46 : 64;
     const s = capeW / base, texW = base, texH = capeH / s, ov = curFrame * 32;
     const p = cloth.pos, m = capeMesh;
@@ -354,6 +355,7 @@
     prog = gl.createProgram(); gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { console.error(gl.getProgramInfoLog(prog)); return false; }
     gl.useProgram(prog);
+    gl.deleteShader(vs); gl.deleteShader(fs); // marqués pour suppression : libérés quand le programme est supprimé
     attribLoc = { pos: gl.getAttribLocation(prog, 'aPos'), uv: gl.getAttribLocation(prog, 'aUV'), norm: gl.getAttribLocation(prog, 'aNorm') };
     uniLoc = {
       proj: gl.getUniformLocation(prog, 'uProj'), view: gl.getUniformLocation(prog, 'uView'),
@@ -366,8 +368,31 @@
     return true;
   }
 
+  // Libère TOUS les objets GL du contexte courant (programme, shaders via le flag ci-dessus,
+  // buffers, textures) et arrête la boucle d'animation. Appelé avant de (re)monter un canvas :
+  // sans ça, chaque aller-retour entre onglets orphelinait ~6-8 objets GL par canvas revisité
+  // (contexte toujours vivant), jusqu'à la perte de contexte GPU.
+  function disposeGL() {
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    if (gl) {
+      try {
+        if (prog) gl.deleteProgram(prog);
+        if (skinBuf) gl.deleteBuffer(skinBuf);
+        if (capeBuf) gl.deleteBuffer(capeBuf);
+        if (shadowBuf) gl.deleteBuffer(shadowBuf);
+        if (skinTex) gl.deleteTexture(skinTex);
+        if (capeTex) gl.deleteTexture(capeTex);
+        if (defaultTex) gl.deleteTexture(defaultTex);
+        if (shadowTex) gl.deleteTexture(shadowTex);
+      } catch {}
+    }
+    prog = null; skinBuf = null; capeBuf = null; shadowBuf = null;
+    skinTex = null; capeTex = null; defaultTex = null; shadowTex = null;
+  }
+
   function mount(el) {
     if (canvas === el && gl) return;
+    disposeGL(); // libère les objets GL du contexte précédent (anti-fuite au changement d'onglet)
     canvas = el;
     // Suréchantillonnage : on garde la taille d'affichage (attributs d'origine) et on rend à 2×.
     if (!canvas.dataset.baseW) { canvas.dataset.baseW = canvas.width; canvas.dataset.baseH = canvas.height; }
@@ -375,7 +400,7 @@
     canvas.style.width = bw + 'px'; canvas.style.height = bh + 'px';
     canvas.style.imageRendering = 'auto'; // le downscale du navigateur lisse les bords
     canvas.width = bw * SSAA; canvas.height = bh * SSAA;
-    gl = null; prog = null; skinBuf = null; capeBuf = null; skinTex = null; capeTex = null; defaultTex = null;
+    gl = null; // le nouveau canvas obtient son propre contexte via initGL()
     if (!initGL()) return;
     attachOrbit(canvas);
     skinDirty = true; cloth.flat = null;

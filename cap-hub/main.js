@@ -42,6 +42,16 @@ function send(channel, data) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, data);
 }
 
+// Ouvre une URL dans le navigateur UNIQUEMENT si elle est http/https (jamais file:, javascript:,
+// protocole personnalisé…). Centralise le contrôle de schéma pour tous les openExternal.
+function openExternalSafe(url) {
+  try {
+    const u = new URL(String(url));
+    if (u.protocol === 'http:' || u.protocol === 'https:') { shell.openExternal(url); return true; }
+  } catch {}
+  return false;
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1080, height: 740, minWidth: 900, minHeight: 620,
@@ -57,7 +67,7 @@ function createWindow() {
   // Tout lien externe s'ouvre dans le navigateur, jamais dans l'app — et UNIQUEMENT en
   // http/https (on refuse file:, javascript:, protocoles personnalisés… via shell.openExternal).
   win.webContents.setWindowOpenHandler(({ url }) => {
-    try { const u = new URL(url); if (u.protocol === 'http:' || u.protocol === 'https:') shell.openExternal(url); } catch {}
+    if (openExternalSafe(url)) { /* ouvert dans le navigateur */ }
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (e) => e.preventDefault());
@@ -133,17 +143,20 @@ function notify(title, body) {
 }
 
 // ---------- Dépendances injectées dans le proxy ----------
-// Cache de la cape active servie au proxy, invalidé par la date de modif : évite de relire
-// le PNG entier (jusqu'à 12 Mo) du disque à CHAQUE requête OptiFine en jeu.
-let ownCapeCache = null; // { id, mtimeMs, buf }
+// Cache de la cape active servie au proxy, invalidé par la date de modif ET la taille : évite
+// de relire le PNG entier (jusqu'à 12 Mo) du disque à CHAQUE requête OptiFine en jeu. On ajoute
+// la taille à la clé car sur certains FS (FAT/exFAT ~2 s, partages réseau, horodatage paresseux
+// de Windows) deux écritures rapprochées gardent le même mtime : la taille, elle, change.
+let ownCapeCache = null; // { id, mtimeMs, size, buf }
 function readActiveCape(id) {
   const file = resolveCape(id); // garde anti-traversée
   if (!file) return null;
   try {
-    const mtimeMs = fs.statSync(file).mtimeMs;
-    if (ownCapeCache && ownCapeCache.id === id && ownCapeCache.mtimeMs === mtimeMs) return ownCapeCache.buf;
+    const st = fs.statSync(file);
+    const mtimeMs = st.mtimeMs, size = st.size;
+    if (ownCapeCache && ownCapeCache.id === id && ownCapeCache.mtimeMs === mtimeMs && ownCapeCache.size === size) return ownCapeCache.buf;
     const buf = fs.readFileSync(file);
-    ownCapeCache = { id, mtimeMs, buf };
+    ownCapeCache = { id, mtimeMs, size, buf };
     return buf;
   } catch { return null; }
 }
@@ -213,6 +226,21 @@ app.whenReady().then(async () => {
   setTimeout(() => doUpdateCheck(true).catch(() => {}), 5000);
 
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+}).catch((e) => {
+  // Le démarrage ne doit jamais faire disparaître l'app sans un mot : on logue et on prévient.
+  try { console.error('Échec au démarrage :', e); } catch {}
+  try { notify('Cap Hub', 'Erreur au démarrage : ' + (e && e.message || e)); } catch {}
+});
+
+// Filet global : une app de barre système reste ouverte en permanence. Sans ces handlers, une
+// rejection/exception isolée (Node >=15) tuerait le process silencieusement, sans fenêtre pour
+// le signaler. On logue (et on notifie) au lieu de mourir.
+process.on('unhandledRejection', (reason) => {
+  try { console.error('unhandledRejection:', reason); } catch {}
+});
+process.on('uncaughtException', (err) => {
+  try { console.error('uncaughtException:', err); } catch {}
+  try { notify('Cap Hub', 'Erreur interne non fatale : ' + (err && err.message || err)); } catch {}
 });
 
 // Avec la barre système, fermer la fenêtre ne quitte pas l'app (elle reste dans le tray).
@@ -270,12 +298,21 @@ function wireWatcher() {
 }
 
 // Active proxy + redirection hosts en une fois (le « 1 clic »).
-async function enableEverything() {
-  const p = await startProxy(proxyDeps());
-  if (!p.ok) return { ok: false, error: 'Proxy : ' + p.error };
-  const h = await applyRedirect(redirectHosts());
-  if (!h.ok) return { ok: false, error: 'Redirection : ' + h.error };
-  return { ok: true };
+// Single-flight : plusieurs déclencheurs peuvent se chevaucher (clic tray « Appliquer » +
+// acceptation de la boîte auto-lancement, ou double appel IPC). Deux écritures PowerShell
+// élevées en course sur le fichier hosts peuvent dupliquer ou perdre le bloc Cap Hub : on
+// sérialise sur une promesse unique partagée.
+let enablePromise = null;
+function enableEverything() {
+  if (enablePromise) return enablePromise;
+  enablePromise = (async () => {
+    const p = await startProxy(proxyDeps());
+    if (!p.ok) return { ok: false, error: 'Proxy : ' + p.error };
+    const h = await applyRedirect(redirectHosts());
+    if (!h.ok) return { ok: false, error: 'Redirection : ' + h.error };
+    return { ok: true };
+  })().finally(() => { enablePromise = null; });
+  return enablePromise;
 }
 
 async function proxyStatus() {
@@ -296,10 +333,11 @@ ipcMain.handle('app:version', () => app.getVersion());
 
 ipcMain.handle('settings:get', () => ({ ok: true, settings: getSettings(), encryption: safeStorage.isEncryptionAvailable() }));
 ipcMain.handle('settings:save', (_e, patch) => {
-  const s = saveSettings(patch || {});
+  const r = saveSettings(patch || {});
+  const s = r.settings;
   configureRegistry({ repo: s.repo, branch: s.branch });
   if (patch && typeof patch.launchAtStartup === 'boolean') applyLoginItem(s.launchAtStartup);
-  return { ok: true, settings: s };
+  return { ok: r.ok, settings: s, error: r.error };
 });
 ipcMain.handle('settings:setToken', (_e, token) => setToken(token));
 
@@ -318,7 +356,7 @@ ipcMain.handle('capes:setCategory', (_e, id, cat) => {
   const c = String(cat || '').slice(0, 30).trim();
   if (c) cats[key] = c; else delete cats[key];
   const saved = saveSettings({ categories: cats });
-  return { ok: true, categories: saved.categories };
+  return { ok: saved.ok, categories: saved.settings.categories, error: saved.error };
 });
 // Ouvre une image quelconque et la renvoie en data URL (le renderer la recadre en cape).
 ipcMain.handle('capes:pickImage', async () => {
@@ -364,7 +402,12 @@ ipcMain.handle('capes:remove', (_e, id) => {
     if (s.activeCape === id) patch.activeCape = '';
     if (s.favorites.includes(id)) patch.favorites = s.favorites.filter((x) => x !== id);
     if (s.categories[id]) { const cats = { ...s.categories }; delete cats[id]; patch.categories = cats; } // pas de clé orpheline
-    if (Object.keys(patch).length) saveSettings(patch);
+    if (Object.keys(patch).length) {
+      const w = saveSettings(patch);
+      // Le fichier cape est déjà supprimé ; si le nettoyage des réglages échoue, activeCape
+      // pointerait vers un fichier disparu. On le signale sans faire échouer la suppression.
+      if (!w.ok) return { ...res, warn: 'Cape supprimée, mais réglages non enregistrés : ' + w.error };
+    }
   }
   return res;
 });
@@ -377,7 +420,10 @@ ipcMain.handle('capes:rename', (_e, id, name) => {
     if (s.activeCape === id) patch.activeCape = res.id;
     if (s.favorites.includes(id)) patch.favorites = s.favorites.map((x) => (x === id ? res.id : x));
     if (s.categories[id]) { const cats = { ...s.categories }; cats[res.id] = cats[id]; delete cats[id]; patch.categories = cats; }
-    if (Object.keys(patch).length) saveSettings(patch);
+    if (Object.keys(patch).length) {
+      const w = saveSettings(patch);
+      if (!w.ok) return { ...res, warn: 'Cape renommée, mais réglages non enregistrés : ' + w.error };
+    }
   }
   return res;
 });
@@ -385,7 +431,12 @@ ipcMain.handle('capes:rename', (_e, id, name) => {
 // dataUrl->buffer partagée par tous les handlers (création, édition, résolution, rendu…).
 function decodeImageDataUrl(dataUrl, opts = {}) {
   const { mime = 'png', maxBytes = 12 * 1024 * 1024, invalid = 'Image invalide.', heavy = 'Image trop lourde (max 12 Mo).' } = opts;
-  const m = new RegExp('^data:image/' + mime + ';base64,([A-Za-z0-9+/=]+)$').exec(String(dataUrl || ''));
+  const str = String(dataUrl || '');
+  // Rejet AVANT décodage : la base64 pèse ~4/3 des octets, donc au-delà de maxBytes*1.4 + marge
+  // l'image dépasse de toute façon la limite. Évite d'allouer un Buffer de plusieurs centaines
+  // de Mo pour un data URL géant avant de le refuser.
+  if (str.length > maxBytes * 1.4 + 100) return { ok: false, error: heavy };
+  const m = new RegExp('^data:image/' + mime + ';base64,([A-Za-z0-9+/=]+)$').exec(str);
   if (!m) return { ok: false, error: invalid };
   let buf;
   try { buf = Buffer.from(m[1], 'base64'); } catch { return { ok: false, error: 'Décodage impossible.' }; }
@@ -411,13 +462,16 @@ ipcMain.handle('capes:favorite', (_e, id, on) => {
   const s = getSettings();
   const set = new Set(s.favorites);
   if (on) set.add(id); else set.delete(id);
-  saveSettings({ favorites: [...set] });
-  return { ok: true, favorites: [...set] };
+  const w = saveSettings({ favorites: [...set] });
+  return { ok: w.ok, favorites: w.settings.favorites, error: w.error };
 });
 ipcMain.handle('capes:setActive', (_e, id) => {
   if (id && !resolveCape(id)) return { ok: false, error: 'Cape introuvable.' };
-  saveSettings({ activeCape: id || '' });
-  return { ok: true, active: id || '' };
+  const w = saveSettings({ activeCape: id || '' });
+  // Échec de persistance : ne PAS prétendre que la cape est active (sinon l'UI affiche la
+  // nouvelle alors que le proxy sert toujours l'ancienne — divergence silencieuse).
+  if (!w.ok) return { ok: false, error: w.error };
+  return { ok: true, active: w.settings.activeCape };
 });
 ipcMain.handle('capes:preview', (_e, id) => {
   const buf = readCape(id);
@@ -627,8 +681,21 @@ function mcView(session) {
 // Renvoie une session Minecraft avec un accessToken valide : rafraîchit via le refresh
 // token Microsoft si expiré (et si dispo). Persiste la session rafraîchie.
 let mcRefreshPromise = null; // dé-duplique les refresh concurrents (le refresh token MS est à usage unique)
+// Repli mémoire : si la persistance de la session MC échoue (disque plein / verrou AV), le
+// refresh token Microsoft rotaté n'existe plus que dans ce process — l'ancien, sur le disque,
+// est déjà invalidé côté Microsoft. On garde donc la session rafraîchie en mémoire pour la
+// durée de vie de l'app (elle reste utilisable) et on retentera la persistance au prochain
+// changement. Sans ça, la session serait brickée au prochain lancement.
+let mcMemSession = null;
+function currentMcSession() { return mcMemSession || getMcSession(); }
+function persistMc(session) {
+  const r = setMcSession(session);
+  if (r && r.ok) { mcMemSession = null; return true; }
+  mcMemSession = session; // échec disque -> on conserve la session rafraîchie en mémoire
+  return false;
+}
 async function ensureMcSession() {
-  const session = getMcSession();
+  const session = currentMcSession();
   if (!session) return null;
   const fresh = session.expiresAt && Date.now() < session.expiresAt - 30000;
   if (fresh) return session;
@@ -648,7 +715,7 @@ async function ensureMcSession() {
         // pour ne pas bricker la session ; le prochain appel réessaiera la chaîne MC.
         if (renewed.msRefreshToken && renewed.msRefreshToken !== session.msRefreshToken) {
           const kept = { ...session, msRefreshToken: renewed.msRefreshToken };
-          setMcSession(kept);
+          persistMc(kept); // repli mémoire si l'écriture échoue : le token rotaté n'est pas perdu
           return kept;
         }
         return session;
@@ -656,7 +723,7 @@ async function ensureMcSession() {
       // Nouveaux jetons OK mais profil temporairement indispo (404 transitoire) : on GARDE
       // les jetons rafraîchis (dont le refresh token rotaté) et on réutilise l'ancien profil.
       const merged = renewed.profile ? renewed : { ...renewed, profile: session.profile };
-      setMcSession(merged);
+      persistMc(merged);
       return merged;
     } catch {
       return session; // échec de refresh : l'appel échouera en 401 -> l'UI proposera de se reconnecter
@@ -676,7 +743,7 @@ async function withMcProfile(fn, { emptyError, failError } = {}) {
     const profile = await fn(session);
     if (!profile) return { ok: false, error: emptyError || failError || 'Action impossible.' };
     const updated = { ...session, profile };
-    setMcSession(updated);
+    persistMc(updated); // repli mémoire si l'écriture échoue : l'action a réussi, on ne la perd pas
     return { ok: true, ...mcView(updated) };
   } catch (e) {
     return { ok: false, error: e.message || failError || 'Action impossible.' };
@@ -700,6 +767,7 @@ ipcMain.handle('mc:loginToken', async (_e, token) => {
     const session = await mc.loginWithToken(t);
     const saved = setMcSession(session);
     if (!saved.ok) return { ok: false, error: saved.error };
+    mcMemSession = null; // nouvelle session persistée : on efface tout repli mémoire périmé
     return { ok: true, ...mcView(session) };
   } catch (e) {
     return { ok: false, error: e.message || 'Connexion impossible.' };
@@ -717,10 +785,11 @@ ipcMain.handle('mc:loginMicrosoft', async () => {
     const dc = await mc.requestDeviceCode(clientId);
     if (state.cancelled) return { ok: false, error: 'Connexion annulée.' }; // annulé pendant la requête -> ne pas ré-afficher le code
     send('mc-code', { userCode: dc.user_code, verificationUri: dc.verification_uri, expiresIn: dc.expires_in });
-    try { shell.openExternal(dc.verification_uri); } catch {}
+    try { openExternalSafe(dc.verification_uri); } catch {}
     const session = await mc.pollDeviceCode(clientId, dc.device_code, dc.interval, dc.expires_in, () => state.cancelled);
     const saved = setMcSession(session);
     if (!saved.ok) return { ok: false, error: saved.error };
+    mcMemSession = null; // nouvelle session persistée : on efface tout repli mémoire périmé
     return { ok: true, ...mcView(session) };
   } catch (e) {
     return { ok: false, error: e.message || 'Connexion Microsoft impossible.' };
@@ -731,7 +800,7 @@ ipcMain.handle('mc:loginMicrosoft', async () => {
 
 ipcMain.handle('mc:cancelLogin', () => { if (mcLoginState) mcLoginState.cancelled = true; return { ok: true }; });
 
-ipcMain.handle('mc:logout', () => { clearMcSession(); return { ok: true, connected: false }; });
+ipcMain.handle('mc:logout', () => { mcMemSession = null; clearMcSession(); return { ok: true, connected: false }; });
 
 // Rafraîchit le profil (relit les capes officielles depuis l'API).
 ipcMain.handle('mc:refresh', () =>
@@ -748,7 +817,7 @@ ipcMain.handle('mc:setCape', (_e, capeId) => {
 // connecté, puis fetchCapeTexture filtre l'hôte (anti-SSRF) et exige un vrai PNG.
 ipcMain.handle('mc:capeTexture', async (_e, capeId) => {
   try {
-    const session = getMcSession();
+    const session = currentMcSession();
     if (!session || !session.profile) return { ok: false };
     const cape = (session.profile.capes || []).find((c) => c.id === capeId);
     if (!cape || !cape.url) return { ok: false };
@@ -761,7 +830,7 @@ ipcMain.handle('mc:capeTexture', async (_e, capeId) => {
 // dans le créateur et l'aperçu) : récupère la texture et l'enregistre comme cape custom.
 ipcMain.handle('mc:importCape', async (_e, capeId) => {
   try {
-    const session = getMcSession();
+    const session = currentMcSession();
     if (!session || !session.profile) return { ok: false, error: 'Non connecté.' };
     const cape = (session.profile.capes || []).find((c) => c.id === capeId);
     if (!cape || !cape.url) return { ok: false, error: 'Cape introuvable.' };
@@ -776,7 +845,7 @@ ipcMain.handle('mc:importCape', async (_e, capeId) => {
 // main (hors CSP), filtré anti-SSRF comme les capes. slim = modèle fin (Alex).
 ipcMain.handle('mc:skin', async () => {
   try {
-    const session = getMcSession();
+    const session = currentMcSession();
     if (!session || !session.profile) return { ok: false };
     const skins = session.profile.skins || [];
     const active = skins.find((s) => s.state === 'ACTIVE') || skins[0];
