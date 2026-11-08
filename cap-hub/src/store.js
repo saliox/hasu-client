@@ -98,8 +98,12 @@ export function saveSettings(patch) {
     }
     s.categories = clean;
   }
-  write(s);
-  return getSettings();
+  // On vérifie la persistance comme setToken/setMcSession : sinon on annoncerait
+  // « enregistré » alors que rien n'est sur le disque (disque plein, verrou AV) — et, pire,
+  // write() a mis le cache à null, donc le prochain getSettings() relit l'ANCIEN état disque :
+  // le proxy servirait l'ancienne cape active pendant que l'UI affiche la nouvelle.
+  const ok = write(s);
+  return { ok, settings: getSettings(), error: ok ? undefined : 'Écriture impossible (disque plein ou fichier verrouillé ?).' };
 }
 
 // Enregistre (ou efface si vide) le token GitHub, chiffré si possible.

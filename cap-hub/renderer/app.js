@@ -206,6 +206,7 @@ function renderCapeGrid() {
 async function toggleFav(id, on) {
   const r = await window.cap.capes.favorite(id, on);
   if (r.ok) { capeFavs = new Set(r.favorites); renderCapeGrid(); }
+  else toast(r.error || 'Favori non enregistré.', 'err');
 }
 
 // Renommage inline : remplace le nom par un champ, Entrée valide, Échap annule.
@@ -377,6 +378,11 @@ function capeLayout(w) {
 }
 // on recadre la face avant visible, en gérant HD / animé (1re image) / OptiFine (46 de large).
 const frontThumbCache = new Map();
+// Valeur sûre pour une propriété CSS url(...) : on cite et on retire les caractères qui
+// pourraient sortir de url("...") — ", \, ), et retours ligne. Les miniatures passent
+// normalement par toDataURL() (base64 propre), mais capeFrontThumb retombe sur l'URL brute
+// (registre/Mojang) en cas d'échec de décodage : défense en profondeur contre l'injection CSS.
+function cssUrl(s) { return `url("${String(s || '').replace(/["\\\n\r)]/g, '')}")`; }
 function capeFrontThumb(url) {
   if (!url) return Promise.resolve(url);
   if (frontThumbCache.has(url)) return Promise.resolve(frontThumbCache.get(url));
@@ -517,7 +523,7 @@ function capeMeta(url) {
 async function loadThumb(el, c) {
   const url = await capeDataUrl(c.id);
   if (!url) return;
-  el.style.backgroundImage = `url(${await capeFrontThumb(url)})`;
+  el.style.backgroundImage = cssUrl(await capeFrontThumb(url));
   const box = el.querySelector('.thumb-meta');
   if (!box) return;
   // Dimensions/frames viennent de capes.list (lues dans l'en-tête PNG côté backend) : pas
@@ -545,7 +551,7 @@ async function removeCape(id, name) {
   // Suppression définitive (pas d'annulation) : on confirme pour éviter un clic malheureux.
   if (!confirm(`Supprimer la cape « ${name} » ? Cette action est définitive.`)) return;
   const r = await window.cap.capes.remove(id);
-  if (r.ok) { toast(`Cape « ${name} » supprimée.`, 'ok'); loadCapes(); }
+  if (r.ok) { toast(r.warn || `Cape « ${name} » supprimée.`, r.warn ? 'err' : 'ok'); loadCapes(); }
   else toast(r.error || 'Erreur', 'err');
 }
 
@@ -897,8 +903,10 @@ function edUpdatePos(p) { const el = $('#ed-pos'); if (el) el.textContent = (p &
 const ED_PRESETS = ['#e23636', '#e07b39', '#f2c14e', '#3fa34d', '#2b8fd6', '#7c5cff', '#c94fd6', '#ffffff', '#9aa0aa', '#3a3f57', '#5a3a22', '#111318'];
 
 // Pose une couleur en (x,y) en appliquant la taille du pinceau ET les miroirs actifs.
-function edStamp(x, y, col) {
-  const n = edBrush, o = Math.floor((n - 1) / 2);
+// thin=true force une épaisseur de 1 cellule (ligne/rectangle : le commit doit coller
+// pile à l'aperçu, qui dessine 1 px par coordonnée, sinon le trait validé est plus épais).
+function edStamp(x, y, col, thin) {
+  const n = thin ? 1 : edBrush, o = Math.floor((n - 1) / 2);
   const mh = $('#ed-mirror').checked, mv = $('#ed-mirrorv').checked;
   const put = (xx, yy) => { if (xx >= 0 && yy >= 0 && xx < ED_W && yy < ED_H) edGrid[yy * ED_W + xx] = col; };
   for (let dy = 0; dy < n; dy++) for (let dx = 0; dx < n; dx++) {
@@ -1234,7 +1242,7 @@ function edInit() {
   const endStroke = () => {
     if (edPainting && edStart && edPreview) { // valider ligne / rectangle
       const col = edCurCol();
-      for (const [x, y] of edPreview) edStamp(x, y, col);
+      for (const [x, y] of edPreview) edStamp(x, y, col, true); // thin : 1 px, identique à l'aperçu
       edAddRecent(col); edRender(); edSchedulePreview();
     } else if (edPainting) edAddRecent(edCurCol());
     edPainting = false; edPanning = false; edPanFrom = null; edStart = null; edPreview = null; edLast = null;
@@ -1351,7 +1359,7 @@ async function mcTexture(capeId) {
 }
 async function mcLoadThumb(el, capeId) {
   const url = await mcTexture(capeId);
-  if (url) { el.style.backgroundImage = `url(${await capeFrontThumb(url)})`; el.textContent = ''; el.classList.remove('mc-none'); }
+  if (url) { el.style.backgroundImage = cssUrl(await capeFrontThumb(url)); el.textContent = ''; el.classList.remove('mc-none'); }
 }
 // Aperçu 3D de la cape officielle active (réutilise le moteur CapePreview).
 async function mcRenderPreview(v) {
@@ -1566,7 +1574,7 @@ async function playerCape(name) {
 }
 async function loadPlayerThumb(el, name) {
   const url = await playerCape(name);
-  if (url) el.style.backgroundImage = `url(${await capeFrontThumb(url)})`;
+  if (url) el.style.backgroundImage = cssUrl(await capeFrontThumb(url));
 }
 async function showPlayerCape(name) {
   if (!window.CapePreview) return;

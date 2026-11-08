@@ -46,6 +46,11 @@ ok('rejette une surface démesurée (aligné sur decodePNG)', (() => {
   return validateCape(png).ok === false;
 })());
 ok('capeFrames 64x64=2, 128x64=1', capeFrames(64, 64) === 2 && capeFrames(128, 64) === 1);
+// F3 : validateCape rejette les PNG indécodables (sinon stockés puis servis bruts/cassés à
+// OptiFine). On part d'un PNG valide et on patche l'octet IHDR concerné (24=bitDepth, 28=interlace).
+ok('rejette un PNG 16 bits (non décodable)', (() => { const p = Buffer.from(mkPng(64, 32)); p[24] = 16; return validateCape(p).ok === false; })());
+ok('rejette un PNG entrelacé (non décodable)', (() => { const p = Buffer.from(mkPng(64, 32)); p[28] = 1; return validateCape(p).ok === false; })());
+ok('accepte toujours un PNG 8 bits non entrelacé', (() => { const p = Buffer.from(mkPng(64, 32)); return validateCape(p).ok === true; })());
 ok('firstFrameIfAnimated 64x64 -> 64x32', (() => { const ff = firstFrameIfAnimated(mkPng(64, 64)); const s = readPngSize(ff); return s.width === 64 && s.height === 32; })());
 ok('firstFrameIfAnimated laisse une cape fixe intacte', (() => { const p = mkPng(64, 32); return firstFrameIfAnimated(p) === p; })());
 ok('decodePNG round-trip couleur', (() => { const p = encodePNG(2, 1, Buffer.from([10, 20, 30, 255, 40, 50, 60, 255])); const d = decodePNG(p); return d && d.rgba[0] === 10 && d.rgba[6] === 60; })());
@@ -123,18 +128,23 @@ ok('setCapeImage efface la sauvegarde .orig', (() => {
 console.log('\n# Réglages (favoris / catégories)');
 const store = await import(S('store.js'));
 store.initStore(ud, { isEncryptionAvailable: () => false });
-let ss = store.saveSettings({ favorites: ['a.png', 'a.png', 'b.png'] });
+let ss = store.saveSettings({ favorites: ['a.png', 'a.png', 'b.png'] }).settings;
 ok('favoris dédupliqués + persistés', ss.favorites.length === 2 && store.getSettings().favorites.includes('b.png'));
-ss = store.saveSettings({ categories: { 'x.png': 'Cool', 'y.png': '  ' } });
+ss = store.saveSettings({ categories: { 'x.png': 'Cool', 'y.png': '  ' } }).settings;
 ok('catégories nettoyées (vide ignoré)', ss.categories['x.png'] === 'Cool' && !('y.png' in ss.categories));
 ok('catégories bornées à 500 clés', (() => {
   const big = {}; for (let i = 0; i < 800; i++) big['c' + i + '.png'] = 'X';
-  return Object.keys(store.saveSettings({ categories: big }).categories).length === 500;
+  return Object.keys(store.saveSettings({ categories: big }).settings.categories).length === 500;
 })());
 ok('usernameValid : pseudo correct vs invalide', (() => {
-  const okName = store.saveSettings({ username: 'Notch_1' }).usernameValid === true;
-  const badName = store.saveSettings({ username: 'Cool Guy' }).usernameValid === false;
+  const okName = store.saveSettings({ username: 'Notch_1' }).settings.usernameValid === true;
+  const badName = store.saveSettings({ username: 'Cool Guy' }).settings.usernameValid === false;
   return okName && badName;
+})());
+// saveSettings renvoie { ok, settings } : succès => ok true (contrat vérifié par les appelants IPC).
+ok('saveSettings renvoie { ok:true, settings } en cas de succès', (() => {
+  const r = store.saveSettings({ username: 'Okk' });
+  return r.ok === true && r.settings && r.settings.username === 'Okk';
 })());
 // Cache mémoire des settings : lecture après écriture cohérente + isolation (getSettings = copie).
 ok('cache settings : lecture après écriture', (() => { store.saveSettings({ username: 'CacheGuy' }); return store.getSettings().username === 'CacheGuy'; })());
@@ -143,12 +153,12 @@ ok('thème par défaut = nuit', store.getSettings().theme === 'nuit');
 ok('écriture atomique : pas de .tmp résiduel', !fs.existsSync(path.join(ud, 'settings.json.tmp')));
 ok('écriture atomique : sauvegarde .bak après ré-écriture', fs.existsSync(path.join(ud, 'settings.json.bak')));
 ok('closeToTray défaut oui / launchAtStartup défaut non', store.getSettings().closeToTray === true && store.getSettings().launchAtStartup === false);
-const trayCfg = store.saveSettings({ closeToTray: false, launchAtStartup: true });
+const trayCfg = store.saveSettings({ closeToTray: false, launchAtStartup: true }).settings;
 ok('closeToTray / launchAtStartup persistés', trayCfg.closeToTray === false && trayCfg.launchAtStartup === true);
 ok('préférences aperçu : défauts (perso + vent doux)', store.getSettings().previewBody === true && store.getSettings().previewWind === 1);
-const prefCfg = store.saveSettings({ previewBody: false, previewWind: 2 });
+const prefCfg = store.saveSettings({ previewBody: false, previewWind: 2 }).settings;
 ok('préférences aperçu persistées (cape seule + vent fort)', prefCfg.previewBody === false && prefCfg.previewWind === 2);
-ok('previewWind hors bornes ignoré', store.saveSettings({ previewWind: 9 }).previewWind === 2);
+ok('previewWind hors bornes ignoré', store.saveSettings({ previewWind: 9 }).settings.previewWind === 2);
 
 console.log('\n# Fournisseur OptiFine (seul canal)');
 ok('un seul fournisseur : optifine', providers.PROVIDERS.length === 1 && providers.PROVIDERS[0].id === 'optifine');
@@ -381,7 +391,7 @@ ok('setMcSession chiffre + persiste', setRes.ok && setRes.encrypted);
 const back = store.getMcSession();
 ok('getMcSession round-trip', back && back.accessToken === 'a' && back.profile.name === 'Steve');
 ok('hasMcSession exposé dans les réglages', store.getSettings().hasMcSession === true);
-ok('mcClientId persiste', store.saveSettings({ mcClientId: 'guid-123' }).mcClientId === 'guid-123');
+ok('mcClientId persiste', store.saveSettings({ mcClientId: "guid-123" }).settings.mcClientId === "guid-123");
 store.clearMcSession();
 ok('clearMcSession efface la session', store.getMcSession() === null && store.getSettings().hasMcSession === false);
 store.initStore(ud, { isEncryptionAvailable: () => false });
