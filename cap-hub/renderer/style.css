@@ -430,3 +430,25 @@ code { background: var(--bg-3); padding: 1px 6px; border-radius: 6px; font-size:
 .form select:focus { outline: none; border-color: var(--accent); }
 
 .hidden { display: none; }
+
+/* ---------- Bandeau d'auto-diagnostic (démarrage / changement d'état) ---------- */
+.diag-banner {
+  display: flex; align-items: center; gap: 10px;
+  margin: 10px 16px 0; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg-2); color: var(--txt); font-size: 13px;
+}
+.diag-banner.hidden { display: none; }
+.diag-banner.ko { border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); background: color-mix(in srgb, var(--warn) 14%, var(--bg-2)); }
+.diag-banner.ok { border-color: color-mix(in srgb, var(--ok) 55%, var(--line)); background: color-mix(in srgb, var(--ok) 12%, var(--bg-2)); }
+.diag-banner .dbi { font-size: 16px; line-height: 1; }
+.diag-banner .dbt { flex: 1 1 auto; line-height: 1.35; }
+.diag-banner .dbb {
+  flex: 0 0 auto; border: 1px solid var(--accent); color: #fff; background: var(--accent);
+  border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.diag-banner .dbb:hover { filter: brightness(1.08); }
+.diag-banner .dbb.ghost { background: transparent; color: var(--accent); }
+.diag-banner .dbb.hidden { display: none; }
+.diag-banner .dbx { flex: 0 0 auto; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 14px; padding: 2px 6px; }
+.diag-banner .dbx:hover { color: var(--txt); }

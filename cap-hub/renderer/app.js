@@ -1701,7 +1701,7 @@ function pushLog(e) {
 }
 
 window.cap.on('log', pushLog);
-window.cap.on('proxy-changed', () => refreshStatus());
+window.cap.on('proxy-changed', () => { refreshStatus(); runDiag(); });
 // Clients à système de capes FERMÉ : ils n'affichent pas les capes Cap Hub (canal OptiFine
 // non exploitable — cosmétiques propres / capes servies côté serveur). On le signale.
 const CLOSED_CAPE_CLIENTS = /lunar|badlion|feather/i;
@@ -1714,11 +1714,14 @@ function updateClientNote(client) {
   } else { note.classList.add('hidden'); note.textContent = ''; }
 }
 window.cap.on('game-start', (info) => {
+  gameRunning = true;
   setPill('#pill-game', true, 'Minecraft');
   $('#games-now').textContent = `${info.client}${info.username ? ' — ' + info.username : ''}`;
   updateClientNote(info.client);
+  runDiag(); // le jeu démarre : si le canal n'est pas prêt, on le signale tout de suite
 });
 window.cap.on('game-stop', () => {
+  gameRunning = false;
   setPill('#pill-game', false, 'Minecraft');
   $('#games-now').textContent = 'Aucun jeu détecté.';
   updateClientNote(null);
@@ -1743,6 +1746,55 @@ function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// ---------- Auto-diagnostic : bandeau au démarrage + à chaque changement d'état ----------
+// Lance l'auto-test complet (proxy, DNS effectif, cape servie) et affiche un bandeau clair :
+// vert « prêt » ou rouge avec le 1er point bloquant + un bouton « Appliquer Cap Hub » (pour
+// activer AVANT de lancer le jeu) et un accès au diagnostic détaillé.
+let gameRunning = false;
+let diagHidden = false;
+const diagBanner = $('#diag-banner');
+function hideDiagBanner() { if (diagBanner) diagBanner.classList.add('hidden'); }
+function showDiagBanner(kind, text, { apply = false, details = false } = {}) {
+  if (!diagBanner) return;
+  diagBanner.className = 'diag-banner ' + kind;
+  $('#diag-banner-icon').textContent = kind === 'ok' ? '✅' : '⚠️';
+  $('#diag-banner-text').textContent = text;
+  $('#diag-banner-apply').classList.toggle('hidden', !apply);
+  $('#diag-banner-details').classList.toggle('hidden', !details);
+}
+async function runDiag({ announce = false } = {}) {
+  let r; try { r = await window.cap.proxy.selfTest(); } catch { return; }
+  if (!r || !r.ok) return;
+  if (r.allOk) {
+    // Tout est bon : bandeau vert éphémère si on vient d'agir, sinon on masque.
+    if (announce) { diagHidden = false; showDiagBanner('ok', 'Cap Hub est prêt ✔ — ferme complètement Minecraft puis relance-le pour voir tes capes.'); setTimeout(() => { if (diagBanner && diagBanner.classList.contains('ok')) hideDiagBanner(); }, 7000); }
+    else hideDiagBanner();
+    return;
+  }
+  if (diagHidden && !announce) return; // l'utilisateur a masqué : on ne le harcèle pas
+  diagHidden = false;
+  const bad = r.steps.find((s) => !s.ok) || {};
+  const prefix = gameRunning ? 'Tes capes ne s’affichent pas : ' : 'Capes pas encore prêtes : ';
+  const tail = gameRunning ? '' : ' Applique Cap Hub AVANT de lancer Minecraft.';
+  let body = `${prefix}${bad.label || ''}${bad.detail ? ' — ' + bad.detail : ''}`;
+  if (!/[.!?]$/.test(body)) body += '.';           // évite un double point si le détail finit déjà par « . »
+  showDiagBanner('ko', body + tail, { apply: true, details: true });
+}
+if (diagBanner) {
+  $('#diag-banner-close').addEventListener('click', () => { diagHidden = true; hideDiagBanner(); });
+  $('#diag-banner-apply').addEventListener('click', () => guard('#diag-banner-apply', async () => {
+    const r = await window.cap.proxy.enableAll();
+    if (!r.ok) { toast(r.error || 'Échec', 'err'); showDiagBanner('ko', 'Échec : ' + (r.error || 'inconnu'), { apply: false, details: true }); return; }
+    toast('Cap Hub appliqué ✔', 'ok');
+    refreshStatus();
+    await runDiag({ announce: true });
+  }));
+  $('#diag-banner-details').addEventListener('click', () => {
+    const tab = tabEls.find((t) => t.dataset.tab === 'status'); if (tab) activateTab(tab);
+    hideDiagBanner();
+  });
+}
+
 // ---------- Démarrage ----------
 (async function init() {
   $('#ver').textContent = 'v' + (await window.cap.version());
@@ -1753,8 +1805,12 @@ function esc(s) {
   window.cap.mc.status().then((r) => { if (r && r.connected) loadMcSkin(); }).catch(() => {});
   const g = await window.cap.games.current();
   if (g.games && g.games.length) {
+    gameRunning = true;
     setPill('#pill-game', true, 'Minecraft');
     $('#games-now').textContent = g.games.map((x) => x.client).join(', ');
     updateClientNote((g.games.find((x) => CLOSED_CAPE_CLIENTS.test(x.client)) || {}).client || null);
   }
+  // Auto-diagnostic au démarrage : vérifie toute la chaîne et affiche le bandeau si un maillon
+  // bloque (ou invite à appliquer Cap Hub avant de lancer le jeu).
+  runDiag();
 })();

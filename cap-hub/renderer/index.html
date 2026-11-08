@@ -33,6 +33,15 @@
     <button class="tab" data-tab="settings" role="tab" aria-selected="false">⚙️ Réglages</button>
   </nav>
 
+  <!-- Bandeau d'auto-diagnostic (rempli au démarrage et à chaque changement d'état du canal). -->
+  <div id="diag-banner" class="diag-banner hidden" role="status" aria-live="polite">
+    <span id="diag-banner-icon" class="dbi" aria-hidden="true"></span>
+    <span id="diag-banner-text" class="dbt"></span>
+    <button id="diag-banner-apply" class="dbb hidden">Appliquer Cap&nbsp;Hub</button>
+    <button id="diag-banner-details" class="dbb ghost hidden">Diagnostic</button>
+    <button id="diag-banner-close" class="dbx" title="Masquer" aria-label="Masquer">✕</button>
+  </div>
+
   <main>
     <!-- MES CAPES -->
     <section id="tab-capes" class="panel active" role="tabpanel" tabindex="0">
