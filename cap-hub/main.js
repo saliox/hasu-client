@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
 import dns from 'node:dns';
+import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { isPng, firstFrameIfAnimated } from './src/png.js';
 
@@ -92,25 +93,59 @@ function createWindow() {
 }
 
 // Icône de barre système : Cap Hub reste un assistant discret en arrière-plan.
+// Le menu est RECONSTRUIT à chaque changement d'état (proxy/redirection) pour afficher en
+// permanence le statut du canal, la cape active, et une bascule « Appliquer / Désactiver »
+// en 1 clic sans ouvrir la fenêtre.
+function activeCapeName() {
+  try {
+    const id = getSettings().activeCape;
+    if (!id) return null;
+    const c = listCapes().find((x) => x.id === id);
+    return c ? c.name : null;
+  } catch { return null; }
+}
+
+function rebuildTrayMenu() {
+  if (!tray) return;
+  const running = isRunning(), applied = isApplied();
+  const ready = running && applied;
+  const capeName = activeCapeName();
+  tray.setToolTip(ready ? `Cap Hub — actif${capeName ? ' · ' + capeName : ''}` : 'Cap Hub — inactif');
+  const menu = Menu.buildFromTemplate([
+    { label: 'Ouvrir Cap Hub', click: () => showWindow() },
+    { type: 'separator' },
+    { label: ready ? '● Canal OptiFine actif' : '○ Canal OptiFine inactif', enabled: false },
+    { label: capeName ? `Cape : ${capeName}` : 'Aucune cape active', enabled: false },
+    { type: 'separator' },
+    ready
+      ? {
+          label: 'Désactiver Cap Hub', click: async () => {
+            try {
+              const r = await removeRedirect();
+              await broadcastProxyChanged();
+              notify('Cap Hub', r.ok ? 'Cap Hub désactivé — les capes OptiFine normales reprennent.' : 'Échec : ' + r.error);
+            } catch (e) { notify('Cap Hub', 'Échec : ' + (e.message || 'erreur')); }
+          },
+        }
+      : {
+          label: 'Appliquer Cap Hub', click: async () => {
+            try {
+              const r = await enableEverything();
+              await broadcastProxyChanged();
+              notify('Cap Hub', r.ok ? 'Cap Hub appliqué ✔ — ferme puis relance Minecraft pour voir les capes.' : 'Échec : ' + r.error);
+            } catch (e) { notify('Cap Hub', 'Échec : ' + (e.message || 'erreur')); }
+          },
+        },
+    { type: 'separator' },
+    { label: 'Quitter Cap Hub', click: () => { isQuitting = true; app.quit(); } },
+  ]);
+  tray.setContextMenu(menu);
+}
+
 function createTray() {
   try {
     tray = new Tray(path.join(__dirname, 'build', 'icon.png'));
-    tray.setToolTip('Cap Hub');
-    const menu = Menu.buildFromTemplate([
-      { label: 'Ouvrir Cap Hub', click: () => showWindow() },
-      {
-        label: 'Appliquer Cap Hub', click: async () => {
-          try {
-            const r = await enableEverything();
-            send('proxy-changed', await proxyStatus());
-            notify('Cap Hub', r.ok ? 'Cap Hub appliqué ✔ — relance/rejoins un monde.' : 'Échec : ' + r.error);
-          } catch (e) { notify('Cap Hub', 'Échec : ' + (e.message || 'erreur')); }
-        },
-      },
-      { type: 'separator' },
-      { label: 'Quitter Cap Hub', click: () => { isQuitting = true; app.quit(); } },
-    ]);
-    tray.setContextMenu(menu);
+    rebuildTrayMenu();
     tray.on('double-click', () => showWindow());
   } catch {
     // Init partielle -> un tray non fonctionnel mais NON null piégerait l'app (fenêtre
@@ -207,12 +242,12 @@ app.whenReady().then(async () => {
       // qu'avant, et on prévient l'utilisateur.
       if (redirectPresent) {
         try { await removeRedirect(); } catch {}
-        notify('Cap Hub', 'Proxy impossible (' + r.error + '). Redirection retirée pour ne pas bloquer les capes OptiFine.');
+        notify('Cap Hub', 'Proxy impossible (' + await enrichProxyError(r.error) + '). Redirection retirée pour ne pas bloquer les capes OptiFine.');
       } else {
-        notify('Cap Hub', 'Proxy non démarré : ' + r.error);
+        notify('Cap Hub', 'Proxy non démarré : ' + await enrichProxyError(r.error));
       }
     }
-    send('proxy-changed', await proxyStatus());
+    await broadcastProxyChanged();
   }
 
   // Rafraîchit le registre en tâche de fond.
@@ -284,7 +319,7 @@ function wireWatcher() {
     });
     if (response === 0) {
       const r = await enableEverything();
-      send('proxy-changed', await proxyStatus());
+      await broadcastProxyChanged();
       notify('Cap Hub', r.ok
         ? 'Cap Hub appliqué ✔ — ferme complètement Minecraft puis relance-le pour voir les capes (OptiFine met les capes en cache au démarrage).'
         : 'Échec : ' + r.error);
@@ -307,7 +342,7 @@ function enableEverything() {
   if (enablePromise) return enablePromise;
   enablePromise = (async () => {
     const p = await startProxy(proxyDeps());
-    if (!p.ok) return { ok: false, error: 'Proxy : ' + p.error };
+    if (!p.ok) return { ok: false, error: 'Proxy : ' + await enrichProxyError(p.error) };
     const h = await applyRedirect(redirectHosts());
     if (!h.ok) return { ok: false, error: 'Redirection : ' + h.error };
     return { ok: true };
@@ -317,6 +352,55 @@ function enableEverything() {
 
 async function proxyStatus() {
   return { ...getStats(), hostsApplied: isApplied(), hostsList: appliedHosts() };
+}
+
+// Diagnostic « port 80 occupé » : identifie le logiciel qui écoute déjà sur le port 80
+// (cause fréquente d'échec du proxy : IIS/« World Wide Web Publishing », Skype ancien, Xampp,
+// autre proxy…). Renvoie { name, pid, hint } ou null. Windows uniquement.
+const PORT80_HINTS = {
+  w3svc: 'Service IIS (World Wide Web Publishing). Arrête-le : services.msc → « World Wide Web Publishing Service » → Arrêter.',
+  'inetinfo': 'IIS. Désactive-le temporairement (services.msc).',
+  httpd: 'Apache/XAMPP. Arrête Apache ou change son port d’écoute.',
+  nginx: 'Nginx. Arrête-le ou change son port d’écoute.',
+  skype: 'Skype (ancienne version). Options → Avancé → Connexion → décoche « Utiliser les ports 80 et 443 ».',
+  vmware: 'VMware Workstation. Change le port de son serveur partagé.',
+};
+function diagnosePort80() {
+  if (process.platform !== 'win32') return Promise.resolve(null);
+  // Get-NetTCPConnection (Win8+/Server2012+) ; on prend le 1er écouteur sur le port 80.
+  const ps = "$ErrorActionPreference='SilentlyContinue';"
+    + "$c = Get-NetTCPConnection -LocalPort 80 -State Listen | Select-Object -First 1;"
+    + "if ($c) { $p = Get-Process -Id $c.OwningProcess; Write-Output ($p.Id.ToString() + '|' + $p.ProcessName) }";
+  return new Promise((resolve) => {
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps],
+      { windowsHide: true, timeout: 8000 }, (err, stdout) => {
+        const line = String(stdout || '').trim();
+        if (err || !line.includes('|')) return resolve(null);
+        const [pid, name] = line.split('|');
+        const key = String(name || '').toLowerCase();
+        const hintKey = Object.keys(PORT80_HINTS).find((k) => key.includes(k));
+        resolve({ pid: Number(pid) || null, name: name || 'inconnu', hint: hintKey ? PORT80_HINTS[hintKey] : '' });
+      });
+  });
+}
+
+// Enrichit un message d'échec de démarrage du proxy : si c'est un conflit sur le port 80,
+// on nomme le coupable (et la marche à suivre) au lieu d'un générique « port déjà utilisé ».
+async function enrichProxyError(err) {
+  const msg = String(err || '');
+  if (!/port 80|EADDRINUSE|déjà utilis/i.test(msg)) return msg;
+  const who = await diagnosePort80();
+  if (!who) return msg;
+  const culprit = who.pid ? `${who.name} (PID ${who.pid})` : who.name;
+  return `Port 80 occupé par : ${culprit}.${who.hint ? ' ' + who.hint : ''}`;
+}
+
+// Diffuse l'état du canal à l'UI ET resynchronise le menu du tray (statut + bascule).
+async function broadcastProxyChanged() {
+  const st = await proxyStatus();
+  send('proxy-changed', st);
+  rebuildTrayMenu();
+  return st;
 }
 
 // ---------- Mise à jour ----------
@@ -471,6 +555,8 @@ ipcMain.handle('capes:setActive', (_e, id) => {
   // Échec de persistance : ne PAS prétendre que la cape est active (sinon l'UI affiche la
   // nouvelle alors que le proxy sert toujours l'ancienne — divergence silencieuse).
   if (!w.ok) return { ok: false, error: w.error };
+  ownCapeCache = null;   // la cape active change : invalide le cache servi au proxy
+  rebuildTrayMenu();     // met à jour la ligne « Cape : … » du tray
   return { ok: true, active: w.settings.activeCape };
 });
 ipcMain.handle('capes:preview', (_e, id) => {
@@ -548,28 +634,28 @@ ipcMain.handle('capes:publish', async () => {
 ipcMain.handle('proxy:status', async () => ({ ok: true, running: isRunning(), ...(await proxyStatus()) }));
 ipcMain.handle('proxy:start', async () => {
   const r = await startProxy(proxyDeps());
-  send('proxy-changed', await proxyStatus());
+  await broadcastProxyChanged();
   return r;
 });
 ipcMain.handle('proxy:stop', async () => {
   const r = await stopProxy();
-  send('proxy-changed', await proxyStatus());
+  await broadcastProxyChanged();
   return r;
 });
 ipcMain.handle('proxy:applyRedirect', async () => {
   const r = await applyRedirect(redirectHosts());
-  send('proxy-changed', await proxyStatus());
+  await broadcastProxyChanged();
   return r;
 });
 ipcMain.handle('proxy:removeRedirect', async () => {
   const r = await removeRedirect();
-  send('proxy-changed', await proxyStatus());
+  await broadcastProxyChanged();
   return r;
 });
 // « Appliquer Cap Hub » complet (proxy + redirection) en un appel.
 ipcMain.handle('proxy:enableAll', async () => {
   const r = await enableEverything();
-  send('proxy-changed', await proxyStatus());
+  await broadcastProxyChanged();
   return r;
 });
 
@@ -597,7 +683,16 @@ ipcMain.handle('proxy:selfTest', async () => {
   const steps = [];
   const add = (ok, label, detail) => steps.push({ ok, label, detail: detail || '' });
 
-  add(isRunning(), 'Proxy de capes démarré', isRunning() ? '' : 'Démarre-le (onglet État) ou clique « Appliquer Cap Hub ».');
+  // Si le proxy n'écoute pas, le port 80 est peut-être pris par un autre logiciel : on nomme
+  // le coupable directement dans le diagnostic (cause fréquente, difficile à deviner autrement).
+  let proxyDetail = '';
+  if (!isRunning()) {
+    const who = await diagnosePort80();
+    proxyDetail = who
+      ? `Port 80 occupé par ${who.name}${who.pid ? ' (PID ' + who.pid + ')' : ''}.${who.hint ? ' ' + who.hint : ''}`
+      : 'Démarre-le (onglet État) ou clique « Appliquer Cap Hub ».';
+  }
+  add(isRunning(), 'Proxy de capes démarré', proxyDetail);
   add(isApplied(), 'Redirection s.optifine.net active', isApplied() ? '' : 'Clique « Appliquer Cap Hub » (fenêtre admin).');
 
   // Vérifie que le SYSTÈME résout réellement s.optifine.net vers 127.0.0.1. Le bloc peut
