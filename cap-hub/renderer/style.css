@@ -452,3 +452,12 @@ code { background: var(--bg-3); padding: 1px 6px; border-radius: 6px; font-size:
 .diag-banner .dbb.hidden { display: none; }
 .diag-banner .dbx { flex: 0 0 auto; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 14px; padding: 2px 6px; }
 .diag-banner .dbx:hover { color: var(--txt); }
+
+/* ---------- Calques de l'éditeur ---------- */
+.ed-layers { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.ed-layers-lbl { font-size: 12px; color: var(--muted); font-weight: 600; }
+.ed-layer { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg-2); }
+.ed-layer-pick { border: 0; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; padding: 5px 10px; cursor: pointer; }
+.ed-layer-pick.active { background: var(--accent); color: #fff; }
+.ed-layer-eye { border: 0; border-left: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 12px; padding: 5px 7px; cursor: pointer; opacity: 0.35; }
+.ed-layer-eye.active { opacity: 1; }

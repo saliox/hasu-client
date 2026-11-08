@@ -241,6 +241,17 @@
             <label class="check" title="Symétrie gauche/droite (M)"><input id="ed-mirror" type="checkbox" /> Miroir ⇔</label>
             <label class="check" title="Symétrie haut/bas"><input id="ed-mirrorv" type="checkbox" /> Miroir ⇕</label>
           </div>
+          <div class="ed-layers" role="group" aria-label="Calques">
+            <span class="ed-layers-lbl">Calques</span>
+            <div class="ed-layer" data-layer="0">
+              <button class="ed-layer-pick active" data-layer="0" title="Éditer le calque Base">Base</button>
+              <button class="ed-layer-eye active" data-eye="0" title="Afficher / masquer le calque" aria-label="Visibilité Base">👁</button>
+            </div>
+            <div class="ed-layer" data-layer="1">
+              <button class="ed-layer-pick" data-layer="1" title="Éditer le calque Déco (par-dessus la base)">Déco</button>
+              <button class="ed-layer-eye active" data-eye="1" title="Afficher / masquer le calque" aria-label="Visibilité Déco">👁</button>
+            </div>
+          </div>
           <div class="px-tools ed-colors">
             <label>Couleur <input id="ed-color" type="color" value="#7c5cff" /></label>
             <button id="ed-lighter" class="ed-tool" title="Éclaircir la couleur" aria-label="Éclaircir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/></svg></button>
@@ -250,7 +261,7 @@
           <div class="px-tools">
             <button id="ed-fill-front" class="btn small" title="Remplir la zone AVANT avec la couleur">Remplir l'avant</button>
             <button id="ed-fill-all" class="btn small" title="Remplir toute la cape avec la couleur">Tout remplir</button>
-            <button id="ed-clear" class="btn small" title="Tout effacer (transparent)">Vider</button>
+            <button id="ed-clear" class="btn small" title="Effacer le calque actif (transparent)">Vider</button>
             <button id="ed-import-front" class="btn small" title="Placer une image dans la seule zone AVANT (logo, motif…)">🖼️ Image → avant</button>
           </div>
           <div class="px-tools ed-zoom">
