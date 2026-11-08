@@ -58,6 +58,9 @@ export function getSettings() {
     hasToken: !!s.tokenEnc,
     theme: typeof s.theme === 'string' ? s.theme : 'nuit',
     favorites: Array.isArray(s.favorites) ? s.favorites.filter((x) => typeof x === 'string') : [],
+    // Joueurs masqués LOCALEMENT (signalement côté client) : leur cape n'apparaît pas dans
+    // ta galerie. Purement local — n'affecte pas le registre ni les autres utilisateurs.
+    hiddenPlayers: Array.isArray(s.hiddenPlayers) ? s.hiddenPlayers.filter((x) => typeof x === 'string') : [],
     // Catégorie (dossier) par cape : { id -> nom }. Surcharge la catégorie auto.
     categories: (s.categories && typeof s.categories === 'object') ? s.categories : {},
     // ID d'application Azure (public client) pour la connexion Microsoft — le même que
@@ -86,6 +89,9 @@ export function saveSettings(patch) {
   if ([0, 1, 2].includes(patch.previewWind)) s.previewWind = patch.previewWind;
   if (Array.isArray(patch.favorites)) {
     s.favorites = [...new Set(patch.favorites.filter((x) => typeof x === 'string'))].slice(0, 500);
+  }
+  if (Array.isArray(patch.hiddenPlayers)) {
+    s.hiddenPlayers = [...new Set(patch.hiddenPlayers.filter((x) => typeof x === 'string'))].slice(0, 2000);
   }
   if (patch.categories && typeof patch.categories === 'object' && !Array.isArray(patch.categories)) {
     const clean = {};

@@ -1588,31 +1588,71 @@ window.cap.on('mc-code', (d) => {
 });
 
 // ---------- Joueurs ----------
+let playersCache = [];       // dernière liste reçue du registre
+let playerSearch = '';
+let playerShowHidden = false;
+let hiddenPlayers = new Set();
+
 async function loadPlayers() {
   const list = $('#players-list');
   list.innerHTML = '<p class="muted">Chargement…</p>';
   const r = await window.cap.registry.players();
-  const players = (r.players || []).sort((a, b) => a.name.localeCompare(b.name));
+  playersCache = (r.players || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  // Charge la liste des joueurs masqués localement.
+  try { const s = await window.cap.settings.get(); hiddenPlayers = new Set((s.settings.hiddenPlayers || []).map((x) => x.toLowerCase())); } catch {}
+  renderPlayers();
+}
+
+function renderPlayers() {
+  const list = $('#players-list');
   list.innerHTML = '';
+  const q = playerSearch.trim().toLowerCase();
+  let players = playersCache.filter((p) => !q || p.name.toLowerCase().includes(q));
+  const hiddenCount = players.filter((p) => hiddenPlayers.has(p.name.toLowerCase())).length;
+  if (!playerShowHidden) players = players.filter((p) => !hiddenPlayers.has(p.name.toLowerCase()));
   if (!players.length) {
-    list.innerHTML = '<p class="muted">Personne pour l’instant. Publie ta cape pour être le premier !</p>';
+    list.innerHTML = playersCache.length
+      ? `<p class="muted">Aucun joueur ne correspond${hiddenCount ? ` (${hiddenCount} masqué(s) — coche « Masqués » pour les revoir)` : ''}.</p>`
+      : '<p class="muted">Personne pour l’instant. Publie ta cape pour être le premier !</p>';
     return;
   }
   for (const p of players) {
+    const hidden = hiddenPlayers.has(p.name.toLowerCase());
     const el = document.createElement('div');
     el.className = 'player';
-    el.setAttribute('role', 'button');
-    el.setAttribute('tabindex', '0');
-    el.title = 'Voir la cape en 3D';
     el.innerHTML = `
-      <div class="av"></div>
-      <div><div class="pn">${esc(p.name)}</div>
-      <div class="pd">${p.updated ? 'maj ' + esc(p.updated) : ''}</div></div>`;
-    el.addEventListener('click', () => showPlayerCape(p.name));
-    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showPlayerCape(p.name); } });
+      <div class="av" role="button" tabindex="0" title="Voir la cape en 3D"></div>
+      <div class="pinfo" role="button" tabindex="0" title="Voir la cape en 3D"><div class="pn">${esc(p.name)}${hidden ? ' 🚫' : ''}</div>
+      <div class="pd">${p.updated ? 'maj ' + esc(p.updated) : ''}</div></div>
+      <div class="player-acts">
+        <button class="pbtn imp" title="Importer cette cape dans ma bibliothèque">⬇️</button>
+        <button class="pbtn hide" title="${hidden ? 'Réafficher ce joueur' : 'Masquer (signaler) ce joueur localement'}">${hidden ? '↩️' : '🚫'}</button>
+      </div>`;
+    const preview = () => showPlayerCape(p.name);
+    el.querySelector('.av').addEventListener('click', preview);
+    el.querySelector('.pinfo').addEventListener('click', preview);
+    el.querySelectorAll('[role="button"]').forEach((b) => b.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); preview(); } }));
+    el.querySelector('.imp').addEventListener('click', (e) => { e.stopPropagation(); importPlayerCape(p.name); });
+    el.querySelector('.hide').addEventListener('click', (e) => { e.stopPropagation(); togglePlayerHidden(p.name); });
     list.appendChild(el);
     loadPlayerThumb(el.querySelector('.av'), p.name);
   }
+}
+
+async function importPlayerCape(name) {
+  toast(`Import de la cape de ${name}…`);
+  const r = await window.cap.registry.import(name);
+  if (r && r.ok) { toast(`Cape de ${name} ajoutée à ta bibliothèque ✔`, 'ok'); loadCapes(); }
+  else toast((r && r.error) || 'Import impossible.', 'err');
+}
+
+async function togglePlayerHidden(name) {
+  const key = name.toLowerCase();
+  if (hiddenPlayers.has(key)) hiddenPlayers.delete(key); else hiddenPlayers.add(key);
+  const w = await window.cap.settings.save({ hiddenPlayers: [...hiddenPlayers] });
+  if (!w.ok) { toast(w.error || 'Enregistrement impossible.', 'err'); return; }
+  toast(hiddenPlayers.has(key) ? `${name} masqué (local).` : `${name} réaffiché.`, 'ok');
+  renderPlayers();
 }
 
 // Cache des capes du registre (data URL). Vidé au rafraîchissement (une cape peut changer).
@@ -1650,6 +1690,35 @@ $('#btn-publish').addEventListener('click', () => guard('#btn-publish', async ()
   toast(r.ok ? 'Ta cape est publiée dans le registre ✔' : r.error, r.ok ? 'ok' : 'err');
   if (r.ok) loadPlayers();
 }));
+
+// Recherche dans la galerie (filtrage local, sans rappel réseau).
+let playerSearchTimer = 0;
+$('#player-search').addEventListener('input', (e) => {
+  playerSearch = e.target.value;
+  clearTimeout(playerSearchTimer);
+  playerSearchTimer = setTimeout(renderPlayers, 90);
+});
+$('#player-show-hidden').addEventListener('change', (e) => { playerShowHidden = e.target.checked; renderPlayers(); });
+
+// Importer la cape d'un joueur depuis un pseudo ou un lien « caphub:<pseudo> ».
+$('#btn-player-import').addEventListener('click', () => guard('#btn-player-import', async () => {
+  const raw = $('#player-import-name').value.trim();
+  if (!raw) return toast('Entre un pseudo ou un lien de partage.', 'err');
+  await importPlayerCape(raw.replace(/^caphub:/i, ''));
+  $('#player-import-name').value = '';
+}));
+$('#player-import-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btn-player-import').click(); });
+
+// Copier MON lien de partage : les amis le collent dans « Importer la cape » pour ajouter
+// la mienne. Format texte simple « caphub:<pseudo> » (pas de protocole système à installer).
+$('#btn-share-me').addEventListener('click', async () => {
+  const s = (await window.cap.settings.get()).settings;
+  if (!s.username) return toast('Renseigne d’abord ton pseudo (Réglages).', 'err');
+  if (!s.usernameValid) return toast('Ton pseudo contient des caractères non valides.', 'err');
+  const share = `caphub:${s.username}`;
+  try { await navigator.clipboard.writeText(share); toast(`Lien copié : ${share} — tes amis le collent dans « Importer la cape ».`, 'ok'); }
+  catch { toast(`Ton lien de partage : ${share}`, 'ok'); }
+});
 
 // ---------- État : boutons ----------
 $('#btn-proxy-toggle').addEventListener('click', () => guard('#btn-proxy-toggle', async () => {

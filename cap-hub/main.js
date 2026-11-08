@@ -672,6 +672,17 @@ ipcMain.handle('registry:cape', async (_e, name) => {
     return { ok: true, dataUrl: 'data:image/png;base64,' + buf.toString('base64') };
   } catch { return { ok: false }; }
 });
+// Importe la cape d'un joueur du registre dans MA bibliothèque locale (pour l'utiliser,
+// l'éditer, l'appliquer). On récupère le PNG côté main et on le valide via importCapeBuffer.
+ipcMain.handle('registry:import', async (_e, name) => {
+  const clean = String(name || '').trim().replace(/^caphub:/i, '').toLowerCase();
+  if (!/^[a-z0-9_]{1,16}$/.test(clean)) return { ok: false, error: 'Pseudo invalide (lettres, chiffres, _, 1–16).' };
+  try {
+    const buf = await getRegistryCape(clean);
+    if (!buf) return { ok: false, error: 'Aucune cape publiée pour « ' + clean +' ».' };
+    return importCapeBuffer(buf, 'Cape de ' + clean);
+  } catch (e) { return { ok: false, error: e.message || 'Import impossible.' }; }
+});
 
 ipcMain.handle('games:current', () => ({ ok: true, games: currentGames() }));
 

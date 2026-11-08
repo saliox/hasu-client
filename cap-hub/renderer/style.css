@@ -461,3 +461,20 @@ code { background: var(--bg-3); padding: 1px 6px; border-radius: 6px; font-size:
 .ed-layer-pick.active { background: var(--accent); color: #fff; }
 .ed-layer-eye { border: 0; border-left: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 12px; padding: 5px 7px; cursor: pointer; opacity: 0.35; }
 .ed-layer-eye.active { opacity: 1; }
+
+/* ---------- Galerie Joueurs : barre d'outils + actions par joueur ---------- */
+.players-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 4px; }
+.players-toolbar input[type="search"], .players-toolbar input[type="text"] {
+  background: var(--bg-2); border: 1px solid var(--line); color: var(--txt);
+  border-radius: 8px; padding: 7px 10px; font-size: 13px; min-width: 160px;
+}
+.players-toolbar #player-search { flex: 1 1 200px; }
+.players-sep { flex: 1 1 8px; }
+.player { position: relative; }
+.player .player-acts { display: flex; gap: 4px; margin-left: auto; }
+.player .pbtn {
+  border: 1px solid var(--line); background: var(--bg-3); color: var(--muted);
+  border-radius: 7px; padding: 4px 8px; font-size: 12px; cursor: pointer; line-height: 1;
+}
+.player .pbtn:hover { color: var(--txt); border-color: var(--accent); }
+.player .pbtn.hide:hover { color: #fff; background: var(--accent-2); border-color: var(--accent-2); }

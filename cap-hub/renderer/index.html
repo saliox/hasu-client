@@ -376,6 +376,14 @@
           <button id="btn-publish" class="btn primary">☁️ Publier ma cape</button>
         </div>
       </div>
+      <div class="players-toolbar">
+        <input id="player-search" type="search" placeholder="🔎 Rechercher un joueur…" autocomplete="off" />
+        <span class="players-sep"></span>
+        <input id="player-import-name" type="text" placeholder="Pseudo ou lien caphub:…" autocomplete="off" />
+        <button id="btn-player-import" class="btn small">⬇️ Importer la cape</button>
+        <button id="btn-share-me" class="btn small" title="Copie un lien que tes amis collent pour ajouter ta cape">🔗 Mon lien de partage</button>
+        <label class="check" title="Réaffiche les joueurs que tu as masqués"><input id="player-show-hidden" type="checkbox" /> Masqués</label>
+      </div>
       <div class="preview-row">
         <div class="preview-box">
           <canvas id="player-preview" width="260" height="320"></canvas>
