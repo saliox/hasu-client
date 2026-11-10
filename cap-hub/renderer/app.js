@@ -600,17 +600,21 @@ async function gifToCape(dataUrl) {
   if (!('ImageDecoder' in window)) return { url: await fitImageToCape(await loadImage(dataUrl)), frames: 1, total: 1, static: true }; // repli : 1re image statique
   const bytes = Uint8Array.from(atob(dataUrl.split(',')[1]), (ch) => ch.charCodeAt(0));
   const dec = new ImageDecoder({ data: bytes, type: 'image/gif' });
-  await dec.tracks.ready;
-  const total = dec.tracks.selectedTrack?.frameCount || 1;
-  const count = Math.min(total, 24); // borne la hauteur / le poids
-  const cv = document.createElement('canvas'); cv.width = 64; cv.height = 32 * count;
-  const c = cv.getContext('2d');
-  for (let i = 0; i < count; i++) {
-    const { image } = await dec.decode({ frameIndex: i });
-    drawCover(c, image, 0, i * 32, 64, 32);
-    image.close?.();
+  try {
+    await dec.tracks.ready;
+    const total = dec.tracks.selectedTrack?.frameCount || 1;
+    const count = Math.min(total, 24); // borne la hauteur / le poids
+    const cv = document.createElement('canvas'); cv.width = 64; cv.height = 32 * count;
+    const c = cv.getContext('2d');
+    for (let i = 0; i < count; i++) {
+      const { image } = await dec.decode({ frameIndex: i });
+      drawCover(c, image, 0, i * 32, 64, 32);
+      image.close?.();
+    }
+    return { url: cv.toDataURL('image/png'), frames: count, total, static: false };
+  } finally {
+    dec.close?.(); // libère le décodeur (sinon fuite mémoire à chaque import GIF)
   }
-  return { url: cv.toDataURL('image/png'), frames: count, total, static: false };
 }
 // Message d'info sur la façon dont un GIF a été importé (animé N images, tronqué, ou fixe).
 function gifNote(g) {
@@ -621,7 +625,10 @@ function gifNote(g) {
   return '';
 }
 async function buildCapeFromFile(f) {
-  if (f.ext === 'gif') { const g = await gifToCape(f.dataUrl); return { url: g.url, note: gifNote(g) }; }
+  // Détection GIF par extension OU par type MIME du data URL : un GIF déposé sans nom « .gif »
+  // (filtre de drop par MIME) serait sinon traité comme PNG -> importé en image fixe.
+  const isGif = f.ext === 'gif' || /^data:image\/gif[;,]/i.test(f.dataUrl || '');
+  if (isGif) { const g = await gifToCape(f.dataUrl); return { url: g.url, note: gifNote(g) }; }
   const img = await loadImage(f.dataUrl);
   if (f.ext === 'png' && isCapeShape(img.naturalWidth, img.naturalHeight)) return { url: f.dataUrl, note: '' }; // vraie cape (HD/4K/animée) telle quelle
   return { url: fitImageToCape(img), note: '' }; // sinon on recadre en 64×32
@@ -914,9 +921,12 @@ let edLayers = ED_LAYER_NAMES.map(() => new Array(ED_W * ED_H).fill(null));
 let edLayerVis = ED_LAYER_NAMES.map(() => true);
 let edActiveLayer = 0;
 let edGrid = edLayers[edActiveLayer]; // null = pixel transparent ; référence vive vers le calque actif
-// Couleur visible au pixel i : calque le plus haut (visible) qui a un pixel non transparent.
-function edComposite(i) {
-  for (let l = edLayers.length - 1; l >= 0; l--) { if (edLayerVis[l]) { const col = edLayers[l][i]; if (col) return col; } }
+// Couleur au pixel i : calque le plus haut qui a un pixel non transparent.
+// respectVis=true (canvas d'édition) tient compte de l'œil masqué ; respectVis=false
+// (aperçu 3D + export/sauvegarde) aplatit TOUS les calques — masquer un calque est une aide
+// d'édition, ça ne doit jamais retirer des pixels de la cape enregistrée.
+function edComposite(i, respectVis = true) {
+  for (let l = edLayers.length - 1; l >= 0; l--) { if (!respectVis || edLayerVis[l]) { const col = edLayers[l][i]; if (col) return col; } }
   return null;
 }
 function edIsEmpty() { return edLayers.every((g) => g.every((c) => !c)); }
@@ -1136,7 +1146,9 @@ function edSchedulePreview() {
 }
 function edExportUrl() {
   const cv = $('#ed-export'), c = cv.getContext('2d'); c.clearRect(0, 0, ED_W, ED_H);
-  for (let y = 0; y < ED_H; y++) for (let x = 0; x < ED_W; x++) { const col = edComposite(y * ED_W + x); if (col) { c.fillStyle = col; c.fillRect(x, y, 1, 1); } }
+  // Export = aplatissement de TOUS les calques (on ignore l'œil masqué : la sauvegarde ne doit
+  // jamais perdre un calque qu'on a juste caché pour travailler).
+  for (let y = 0; y < ED_H; y++) for (let x = 0; x < ED_W; x++) { const col = edComposite(y * ED_W + x, false); if (col) { c.fillStyle = col; c.fillRect(x, y, 1, 1); } }
   return cv.toDataURL('image/png');
 }
 
@@ -1227,14 +1239,19 @@ function edUpdateSaveButtons() {
 }
 async function edLoadSource() {
   const v = $('#ed-source').value;
+  // On récupère d'ABORD la source (async, peut échouer) AVANT toute mutation destructrice :
+  // sinon un échec de chargement effacerait la Déco et viderait l'undo (perte irréversible).
+  let url = null;
+  if (v !== '__blank') {
+    url = await capeDataUrl(v);
+    if (!url) { toast('Cape indisponible.', 'err'); return; } // rien n'a été modifié
+  }
   edSnapshot();
   // Charger une source repart d'un état propre : on écrit dans la Base et on vide la Déco.
   edSetActiveLayer(0);
   edLayers[1].fill(null);
   if (v === '__blank') { edGrid.fill(null); ED_REGIONS.forEach((r) => edFillRegion(r, $('#ed-color').value)); edSourceId = null; }
   else {
-    const url = await capeDataUrl(v);
-    if (!url) { toast('Cape indisponible.', 'err'); edUndo.pop(); edUpdateButtons(); return; }
     await edLoadDataUrl(url);
     edSourceId = v; // on édite cette cape -> « Mettre à jour » devient possible (si importée)
   }
@@ -1542,7 +1559,8 @@ $('#mc-refresh').addEventListener('click', async () => {
 });
 
 $('#mc-logout').addEventListener('click', async () => {
-  await window.cap.mc.logout();
+  const r = await window.cap.mc.logout();
+  if (r && !r.ok) { toast(r.error || 'Déconnexion non enregistrée — réessaie.', 'err'); return; }
   mcTexCache.clear();
   if (window.CapePreview) { window.CapePreview.setSkin(null); window.CapePreview.clear(); }
   renderMc({ connected: false });
@@ -1597,7 +1615,12 @@ async function loadPlayers() {
   const list = $('#players-list');
   list.innerHTML = '<p class="muted">Chargement…</p>';
   const r = await window.cap.registry.players();
-  playersCache = (r.players || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  // Les entrées viennent de GitHub (autres joueurs) : on écarte toute entrée sans `name`
+  // chaîne non vide, sinon un registre malformé ferait planter localeCompare/toLowerCase et
+  // bloquerait tout l'onglet sur « Chargement… ».
+  playersCache = (r.players || [])
+    .filter((p) => p && typeof p.name === 'string' && p.name)
+    .sort((a, b) => a.name.localeCompare(b.name));
   // Charge la liste des joueurs masqués localement.
   try { const s = await window.cap.settings.get(); hiddenPlayers = new Set((s.settings.hiddenPlayers || []).map((x) => x.toLowerCase())); } catch {}
   renderPlayers();
@@ -1648,10 +1671,15 @@ async function importPlayerCape(name) {
 
 async function togglePlayerHidden(name) {
   const key = name.toLowerCase();
-  if (hiddenPlayers.has(key)) hiddenPlayers.delete(key); else hiddenPlayers.add(key);
-  const w = await window.cap.settings.save({ hiddenPlayers: [...hiddenPlayers] });
+  // On calcule l'état CIBLE sans toucher au Set en place, on persiste, et on ne commit en
+  // mémoire QU'APRÈS succès : sinon un échec d'enregistrement laisserait l'UI désynchronisée
+  // du disque (le joueur « masqué » reparaît au redémarrage).
+  const next = new Set(hiddenPlayers);
+  next.has(key) ? next.delete(key) : next.add(key);
+  const w = await window.cap.settings.save({ hiddenPlayers: [...next] });
   if (!w.ok) { toast(w.error || 'Enregistrement impossible.', 'err'); return; }
-  toast(hiddenPlayers.has(key) ? `${name} masqué (local).` : `${name} réaffiché.`, 'ok');
+  hiddenPlayers = next;
+  toast(next.has(key) ? `${name} masqué (local).` : `${name} réaffiché.`, 'ok');
   renderPlayers();
 }
 
@@ -1872,40 +1900,54 @@ function esc(s) {
 // vert « prêt » ou rouge avec le 1er point bloquant + un bouton « Appliquer Cap Hub » (pour
 // activer AVANT de lancer le jeu) et un accès au diagnostic détaillé.
 let gameRunning = false;
-let diagHidden = false;
+let diagDismissedMsg = '';   // dernier message rouge que l'utilisateur a masqué (on ne re-masque QUE l'identique)
+let lastDiagBody = '';       // dernier message rouge affiché (pour savoir ce qui serait masqué)
+let diagRunToken = 0;        // jeton anti-concurrence : seul le dernier runDiag met à jour le bandeau
 const diagBanner = $('#diag-banner');
+const diagEls = {
+  icon: $('#diag-banner-icon'), text: $('#diag-banner-text'),
+  apply: $('#diag-banner-apply'), details: $('#diag-banner-details'),
+};
 function hideDiagBanner() { if (diagBanner) diagBanner.classList.add('hidden'); }
 function showDiagBanner(kind, text, { apply = false, details = false } = {}) {
   if (!diagBanner) return;
   diagBanner.className = 'diag-banner ' + kind;
-  $('#diag-banner-icon').textContent = kind === 'ok' ? '✅' : '⚠️';
-  $('#diag-banner-text').textContent = text;
-  $('#diag-banner-apply').classList.toggle('hidden', !apply);
-  $('#diag-banner-details').classList.toggle('hidden', !details);
+  if (diagEls.icon) diagEls.icon.textContent = kind === 'ok' ? '✅' : '⚠️';
+  if (diagEls.text) diagEls.text.textContent = text;
+  if (diagEls.apply) diagEls.apply.classList.toggle('hidden', !apply);
+  if (diagEls.details) diagEls.details.classList.toggle('hidden', !details);
 }
 async function runDiag({ announce = false } = {}) {
+  const token = ++diagRunToken;
   let r; try { r = await window.cap.proxy.selfTest(); } catch { return; }
+  if (token !== diagRunToken) return; // un runDiag plus récent a pris la main : on abandonne
   if (!r || !r.ok) return;
   if (r.allOk) {
     // Tout est bon : bandeau vert éphémère si on vient d'agir, sinon on masque.
-    if (announce) { diagHidden = false; showDiagBanner('ok', 'Cap Hub est prêt ✔ — ferme complètement Minecraft puis relance-le pour voir tes capes.'); setTimeout(() => { if (diagBanner && diagBanner.classList.contains('ok')) hideDiagBanner(); }, 7000); }
+    diagDismissedMsg = ''; // l'état est redevenu bon : un futur problème pourra se réafficher
+    if (announce) { showDiagBanner('ok', 'Cap Hub est prêt ✔ — ferme complètement Minecraft puis relance-le pour voir tes capes.'); setTimeout(() => { if (diagBanner && diagBanner.classList.contains('ok')) hideDiagBanner(); }, 7000); }
     else hideDiagBanner();
     return;
   }
-  if (diagHidden && !announce) return; // l'utilisateur a masqué : on ne le harcèle pas
-  diagHidden = false;
   const bad = r.steps.find((s) => !s.ok) || {};
   const prefix = gameRunning ? 'Tes capes ne s’affichent pas : ' : 'Capes pas encore prêtes : ';
   const tail = gameRunning ? '' : ' Applique Cap Hub AVANT de lancer Minecraft.';
   let body = `${prefix}${bad.label || ''}${bad.detail ? ' — ' + bad.detail : ''}`;
   if (!/[.!?]$/.test(body)) body += '.';           // évite un double point si le détail finit déjà par « . »
-  showDiagBanner('ko', body + tail, { apply: true, details: true });
+  body += tail;
+  // On ne « harcèle » pas : si l'utilisateur a masqué CE message exact, on le laisse masqué.
+  // Mais tout changement (passage en jeu, autre point bloquant) produit un message différent
+  // et se réaffiche — notamment l'alerte urgente au lancement du jeu.
+  if (!announce && diagDismissedMsg === body) return;
+  diagDismissedMsg = '';
+  lastDiagBody = body;
+  showDiagBanner('ko', body, { apply: true, details: true });
 }
 if (diagBanner) {
-  $('#diag-banner-close').addEventListener('click', () => { diagHidden = true; hideDiagBanner(); });
+  $('#diag-banner-close').addEventListener('click', () => { diagDismissedMsg = lastDiagBody; hideDiagBanner(); });
   $('#diag-banner-apply').addEventListener('click', () => guard('#diag-banner-apply', async () => {
     const r = await window.cap.proxy.enableAll();
-    if (!r.ok) { toast(r.error || 'Échec', 'err'); showDiagBanner('ko', 'Échec : ' + (r.error || 'inconnu'), { apply: false, details: true }); return; }
+    if (!r.ok) { toast(r.error || 'Échec', 'err'); showDiagBanner('ko', 'Échec : ' + (r.error || 'inconnu') + ' — réessaie.', { apply: true, details: true }); return; }
     toast('Cap Hub appliqué ✔', 'ok');
     refreshStatus();
     await runDiag({ announce: true });
