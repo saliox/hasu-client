@@ -793,6 +793,11 @@ let mcRefreshPromise = null; // dé-duplique les refresh concurrents (le refresh
 // durée de vie de l'app (elle reste utilisable) et on retentera la persistance au prochain
 // changement. Sans ça, la session serait brickée au prochain lancement.
 let mcMemSession = null;
+// Époque de session : incrémentée à chaque déconnexion / nouvelle connexion. Un refresh en vol
+// (échange de token Microsoft, plusieurs secondes) capture l'époque à son démarrage et ne
+// persiste QUE si elle n'a pas changé — sinon un refresh qui se termine après un logout (ou une
+// reconnexion) ré-écrirait la session « déconnectée » sur le disque (résurrection).
+let mcEpoch = 0;
 function currentMcSession() { return mcMemSession || getMcSession(); }
 function persistMc(session) {
   const r = setMcSession(session);
@@ -811,17 +816,18 @@ async function ensureMcSession() {
   // Un seul refresh à la fois : plusieurs IPC concurrents (mc:status/refresh/setCape…) ne
   // doivent pas redemander en parallèle avec le même refresh token (rotation MS -> échec).
   if (mcRefreshPromise) return mcRefreshPromise;
+  const epoch = mcEpoch; // capturé au démarrage du refresh
   mcRefreshPromise = (async () => {
     try {
       const renewed = await mc.refreshSession(clientId, session.msRefreshToken);
       if (!renewed) return session;
+      // Une déconnexion/reconnexion a eu lieu pendant le refresh : on NE persiste PAS (sinon on
+      // ressusciterait une session effacée ou on écraserait une nouvelle connexion).
+      const stillValid = () => mcEpoch === epoch;
       if (!renewed.accessToken) {
-        // Le token Microsoft a été rafraîchi (rotaté -> l'ancien est invalidé) mais la chaîne
-        // Xbox/Minecraft a échoué (panne transitoire). On PERSISTE le nouveau refresh token
-        // pour ne pas bricker la session ; le prochain appel réessaiera la chaîne MC.
         if (renewed.msRefreshToken && renewed.msRefreshToken !== session.msRefreshToken) {
           const kept = { ...session, msRefreshToken: renewed.msRefreshToken };
-          persistMc(kept); // repli mémoire si l'écriture échoue : le token rotaté n'est pas perdu
+          if (stillValid()) persistMc(kept); // repli mémoire si l'écriture échoue : le token rotaté n'est pas perdu
           return kept;
         }
         return session;
@@ -829,7 +835,7 @@ async function ensureMcSession() {
       // Nouveaux jetons OK mais profil temporairement indispo (404 transitoire) : on GARDE
       // les jetons rafraîchis (dont le refresh token rotaté) et on réutilise l'ancien profil.
       const merged = renewed.profile ? renewed : { ...renewed, profile: session.profile };
-      persistMc(merged);
+      if (stillValid()) persistMc(merged);
       return merged;
     } catch {
       return session; // échec de refresh : l'appel échouera en 401 -> l'UI proposera de se reconnecter
@@ -873,7 +879,7 @@ ipcMain.handle('mc:loginToken', async (_e, token) => {
     const session = await mc.loginWithToken(t);
     const saved = setMcSession(session);
     if (!saved.ok) return { ok: false, error: saved.error };
-    mcMemSession = null; // nouvelle session persistée : on efface tout repli mémoire périmé
+    mcEpoch++; mcMemSession = null; // nouvelle session : invalide tout refresh en vol + efface le repli mémoire périmé
     return { ok: true, ...mcView(session) };
   } catch (e) {
     return { ok: false, error: e.message || 'Connexion impossible.' };
@@ -895,7 +901,7 @@ ipcMain.handle('mc:loginMicrosoft', async () => {
     const session = await mc.pollDeviceCode(clientId, dc.device_code, dc.interval, dc.expires_in, () => state.cancelled);
     const saved = setMcSession(session);
     if (!saved.ok) return { ok: false, error: saved.error };
-    mcMemSession = null; // nouvelle session persistée : on efface tout repli mémoire périmé
+    mcEpoch++; mcMemSession = null; // nouvelle session : invalide tout refresh en vol + efface le repli mémoire périmé
     return { ok: true, ...mcView(session) };
   } catch (e) {
     return { ok: false, error: e.message || 'Connexion Microsoft impossible.' };
@@ -906,7 +912,14 @@ ipcMain.handle('mc:loginMicrosoft', async () => {
 
 ipcMain.handle('mc:cancelLogin', () => { if (mcLoginState) mcLoginState.cancelled = true; return { ok: true }; });
 
-ipcMain.handle('mc:logout', () => { mcMemSession = null; clearMcSession(); return { ok: true, connected: false }; });
+ipcMain.handle('mc:logout', () => {
+  mcEpoch++;            // invalide tout refresh en vol (pas de résurrection)
+  mcMemSession = null;
+  const r = clearMcSession();
+  // On honore l'échec d'effacement : sinon on annoncerait « déconnecté » alors que les jetons
+  // (refresh token Microsoft inclus) restent sur le disque et la session revient au lancement.
+  return r && r.ok ? { ok: true, connected: false } : { ok: false, connected: false, error: (r && r.error) || 'Déconnexion non enregistrée.' };
+});
 
 // Rafraîchit le profil (relit les capes officielles depuis l'API).
 ipcMain.handle('mc:refresh', () =>
