@@ -390,8 +390,29 @@
     skinTex = null; capeTex = null; defaultTex = null; shadowTex = null;
   }
 
+  // Perte de contexte WebGL (reset GPU/pilote, veille/réveil, navigateur qui recycle un des
+  // ~5 contextes) : sans gestion, `gl` reste « vrai » mais mort -> aperçu figé/noir à jamais.
+  // On arrête la boucle à la perte et on reconstruit tout à la restauration.
+  function attachContextHandlers(el) {
+    if (el.dataset.glhandlers) return;
+    el.dataset.glhandlers = '1';
+    el.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault(); // indispensable : sans ça l'événement 'restored' n'est jamais émis
+      if (raf) cancelAnimationFrame(raf); raf = 0;
+    }, false);
+    el.addEventListener('webglcontextrestored', () => {
+      if (canvas !== el) return; // le contexte restauré n'est utile que si ce canvas est l'actif
+      gl = null; prog = null; skinBuf = null; capeBuf = null; shadowBuf = null;
+      skinTex = null; capeTex = null; defaultTex = null; shadowTex = null;
+      if (!initGL()) return;
+      skinDirty = true; cloth.flat = null;
+      if (skinImg || capeImg) start();
+    }, false);
+  }
+
   function mount(el) {
-    if (canvas === el && gl) return;
+    // Un contexte perdu reste « vrai » : on le reconstruit au lieu de court-circuiter.
+    if (canvas === el && gl && !gl.isContextLost()) return;
     disposeGL(); // libère les objets GL du contexte précédent (anti-fuite au changement d'onglet)
     canvas = el;
     // Suréchantillonnage : on garde la taille d'affichage (attributs d'origine) et on rend à 2×.
@@ -401,6 +422,7 @@
     canvas.style.imageRendering = 'auto'; // le downscale du navigateur lisse les bords
     canvas.width = bw * SSAA; canvas.height = bh * SSAA;
     gl = null; // le nouveau canvas obtient son propre contexte via initGL()
+    attachContextHandlers(canvas);
     if (!initGL()) return;
     attachOrbit(canvas);
     skinDirty = true; cloth.flat = null;
@@ -612,7 +634,7 @@
       frames = frameCount(capeW, capeH); curFrame = 0; lastSwap = 0; cloth.flat = null; // ré-init du tissu
       start();
     };
-    image.onerror = () => { if (myGen === gen) capeImg = null; };
+    image.onerror = () => { if (myGen === gen) { capeImg = null; if (skinImg) start(); } }; // cape cassée : on garde le perso animé au lieu de figer l'aperçu
     image.src = dataUrl;
   }
 
@@ -626,7 +648,9 @@
   }
 
   function setShowBody(b) { showBody = !!b; skinDirty = true; }
-  function setWind(v) { windScale = Math.max(0, +v || 0); }
+  // Borne haute : une valeur démesurée (API publique) ferait exploser les accélérations Verlet
+  // -> positions Infinity -> NaN propagé -> cape invisible. L'UI n'envoie que 0 / 1 / 2.5.
+  function setWind(v) { windScale = Math.min(3, Math.max(0, +v || 0)); }
 
   window.CapePreview = { mount, setCape, setSkin, clear, setShowBody, setWind, snapshot, captureSpin, resetView };
 })();

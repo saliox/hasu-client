@@ -35,9 +35,25 @@ export async function checkForUpdates(currentVersion) {
   try {
     const r = await fetch(`${MANIFEST_URL}?t=${Date.now()}`, { signal: AbortSignal.timeout(10000) });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    if (Number(r.headers?.get?.('content-length') || 0) > 64 * 1024) throw new Error('Manifeste anormalement volumineux.');
+    const MAX_MANIFEST = 64 * 1024;
+    if (Number(r.headers?.get?.('content-length') || 0) > MAX_MANIFEST) throw new Error('Manifeste anormalement volumineux.');
+    // Lecture BORNÉE en flux : le content-length seul est contournable (chunked). On abandonne
+    // dès le dépassement au lieu de tout bufferiser.
+    let text;
+    if (r.body && typeof r.body.getReader === 'function') {
+      const reader = r.body.getReader(); const chunks = []; let n = 0;
+      for (;;) { const { done, value } = await reader.read(); if (done) break; n += value.length; if (n > MAX_MANIFEST) { try { await reader.cancel(); } catch {} throw new Error('Manifeste anormalement volumineux.'); } chunks.push(Buffer.from(value)); }
+      text = Buffer.concat(chunks).toString('utf8');
+    } else if (typeof r.arrayBuffer === 'function') {
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (buf.length > MAX_MANIFEST) throw new Error('Manifeste anormalement volumineux.');
+      text = buf.toString('utf8');
+    } else {
+      text = await r.text();
+      if (text.length > MAX_MANIFEST) throw new Error('Manifeste anormalement volumineux.');
+    }
     // strip BOM éventuel (déjà vu sur version.json de ce dépôt)
-    const info = JSON.parse((await r.text()).replace(/^﻿/, ''));
+    const info = JSON.parse(text.replace(/^﻿/, ''));
     const available = !!info.url && isNewer(info.version, currentVersion);
     lastInfo = available ? info : null;
     return { ok: true, available, current: currentVersion, version: info.version, notes: info.notes || '' };

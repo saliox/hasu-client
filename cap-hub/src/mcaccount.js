@@ -66,8 +66,10 @@ export async function fetchCapeTexture(url) {
 // Interroge Microsoft jusqu'à validation, puis chaîne jusqu'à Minecraft. isCancelled()
 // permet d'interrompre. Renvoie une session { msRefreshToken, accessToken, expiresAt, profile }.
 export async function pollDeviceCode(clientId, deviceCode, interval, expiresIn, isCancelled) {
-  const deadline = Date.now() + (expiresIn || 900) * 1000;
-  let iv = interval || 5;
+  // Valeurs issues de la réponse HTTP : on borne pour éviter une boucle serrée (interval négatif
+  // -> setTimeout immédiat -> spam du endpoint) et une attente absurde (expiresIn démesuré).
+  const deadline = Date.now() + Math.min(1800, Math.max(60, Number(expiresIn) || 900)) * 1000;
+  let iv = Math.min(60, Math.max(1, Number(interval) || 5));
   while (Date.now() < deadline) {
     if (isCancelled && isCancelled()) throw new Error('Connexion annulée.');
     await sleep(iv * 1000);

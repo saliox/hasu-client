@@ -12,6 +12,28 @@ import { isPng } from './png.js';
 
 const NAME_RE = /^[a-z0-9_]{1,16}$/;                 // pseudo Minecraft valide
 const MAX_CAPE = 12 * 1024 * 1024;
+const MAX_INDEX = 4 * 1024 * 1024;                   // borne du capes.json (anti-DoS mémoire)
+
+// Lit un corps de réponse en le BORNANT à `max` octets. Ne fait pas confiance au seul
+// content-length (absent en chunked) : on lit en flux et on abandonne dès le dépassement,
+// au lieu de tout bufferiser puis vérifier (un hôte de registre configurable est non fiable).
+async function readBodyCapped(r, max) {
+  if (Number(r.headers?.get?.('content-length') || 0) > max) throw new Error('réponse trop volumineuse');
+  if (r.body && typeof r.body.getReader === 'function') {
+    const reader = r.body.getReader(); const chunks = []; let n = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      n += value.length;
+      if (n > max) { try { await reader.cancel(); } catch {} throw new Error('réponse trop volumineuse'); }
+      chunks.push(Buffer.from(value));
+    }
+    return Buffer.concat(chunks);
+  }
+  const buf = typeof r.arrayBuffer === 'function' ? Buffer.from(await r.arrayBuffer()) : Buffer.from(await r.text());
+  if (buf.length > max) throw new Error('réponse trop volumineuse');
+  return buf;
+}
 
 const DEFAULT_REPO = 'saliox/hasu-client';
 const DEFAULT_BRANCH = 'main';
@@ -46,7 +68,7 @@ export async function refreshIndex(force = false) {
   try {
     const r = await fetch(`${rawBase()}/capes.json?t=${Date.now()}`, { signal: AbortSignal.timeout(10000) });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const j = await r.json();
+    const j = JSON.parse((await readBodyCapped(r, MAX_INDEX)).toString('utf8').replace(/^﻿/, ''));
     // typeof null === 'object' : on exige un vrai objet non-nul et non-tableau, sinon un
     // « players: null » distant écraserait le cache disque valide et viderait le registre.
     if (j && j.players && typeof j.players === 'object' && !Array.isArray(j.players)) {
@@ -63,7 +85,12 @@ export async function refreshIndex(force = false) {
 const playerCount = () => Object.keys(index.players || {}).length;
 
 export function listPlayers() {
-  return Object.entries(index.players || {}).map(([name, v]) => ({ name, updated: v.updated || null }));
+  // Les valeurs d'entrée viennent d'un JSON distant (écriture communautaire) : une entrée
+  // `null` ou non-objet ferait planter `v.updated` et, via l'IPC non catché, casserait l'onglet
+  // Joueurs pour TOUT le monde (et c'est mis en cache disque). On filtre donc les entrées valides.
+  return Object.entries(index.players || {})
+    .filter(([, v]) => v && typeof v === 'object')
+    .map(([name, v]) => ({ name, updated: typeof v.updated === 'string' ? v.updated : null }));
 }
 
 // Cape d'un joueur du registre, avec cache disque (1 h) et cache des absences.
@@ -86,10 +113,8 @@ export async function getRegistryCape(nameLower) {
   try {
     const r = await fetch(`${rawBase()}/${entry.cape}`, { signal: AbortSignal.timeout(8000) });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const len = Number(r.headers.get('content-length') || 0);
-    if (len > MAX_CAPE) throw new Error('cape trop lourde');
-    const buf = Buffer.from(await r.arrayBuffer());
-    if (buf.length > MAX_CAPE || !isPng(buf)) throw new Error('cape invalide'); // ni PNG, ni bornée
+    const buf = await readBodyCapped(r, MAX_CAPE); // lecture bornée en flux (content-length non fiable)
+    if (!isPng(buf)) throw new Error('cape invalide'); // pas un PNG
     fs.writeFileSync(cached, buf);
     return buf;
   } catch {

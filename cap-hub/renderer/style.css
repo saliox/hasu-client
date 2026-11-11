@@ -478,3 +478,6 @@ code { background: var(--bg-3); padding: 1px 6px; border-radius: 6px; font-size:
 }
 .player .pbtn:hover { color: var(--txt); border-color: var(--accent); }
 .player .pbtn.hide:hover { color: #fff; background: var(--accent-2); border-color: var(--accent-2); }
+
+.proxy-stats { margin: 8px 0 0; font-size: 12px; }
+.proxy-stats.hidden { display: none; }

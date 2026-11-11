@@ -31,7 +31,7 @@ function chunk(type, data) {
   return Buffer.concat([len, t, data, crc]);
 }
 
-export function encodePNG(w, h, rgba) {
+export function encodePNG(w, h, rgba, level = 9) {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(w, 0);
   ihdr.writeUInt32BE(h, 4);
@@ -43,7 +43,7 @@ export function encodePNG(w, h, rgba) {
     raw[y * (w * 4 + 1)] = 0;
     rgba.copy(raw, y * (w * 4 + 1) + 1, y * w * 4, (y + 1) * w * 4);
   }
-  const idat = zlib.deflateSync(raw, { level: 9 });
+  const idat = zlib.deflateSync(raw, { level });
   return Buffer.concat([PNG_SIG, chunk('IHDR', ihdr), chunk('IDAT', idat), chunk('IEND', Buffer.alloc(0))]);
 }
 
@@ -144,7 +144,10 @@ export function firstFrameIfAnimated(buf) {
     if (!dec) return buf;
     const frameH = size.height / frames;
     const cropped = dec.rgba.subarray(0, size.width * frameH * 4);
-    return encodePNG(size.width, frameH, cropped);
+    // Niveau 6 (et non 9) : cette 1re image est TRANSITOIRE (servie à OptiFine, jamais stockée).
+    // Le ré-encodage est sur le chemin chaud du proxy, sur l'event-loop du main — niveau 6
+    // coupe fortement la latence pour une taille quasi identique, sans perte de qualité.
+    return encodePNG(size.width, frameH, cropped, 6);
   } catch { return buf; }
 }
 
