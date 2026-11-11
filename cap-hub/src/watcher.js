@@ -58,9 +58,10 @@ const PS_CMD =
 
 function listProcesses() {
   return new Promise((resolve) => {
-    execFile('powershell.exe', ['-NoProfile', '-Command', PS_CMD],
+    const c = execFile('powershell.exe', ['-NoProfile', '-Command', PS_CMD],
       { windowsHide: true, timeout: 15000, maxBuffer: 8 * 1024 * 1024 },
       (err, stdout) => {
+        if (psChild === c) psChild = null;
         // Échec/timeout de la requête -> état INCONNU (null), à distinguer d'un « aucun
         // processus » (liste vide) : sinon un hoquet WMI simulerait la fermeture du jeu.
         if (err) return resolve(null);
@@ -70,6 +71,7 @@ function listProcesses() {
           resolve(Array.isArray(j) ? j : [j]);
         } catch { resolve(null); } // sortie illisible -> inconnu, on ne change pas l'état
       });
+    psChild = c;
   });
 }
 
@@ -93,6 +95,8 @@ export function classify(p) {
 let timer = null;
 let known = new Map(); // key -> { client, username, pid }
 let scanning = false;
+let watcherGen = 0;    // incrémenté à chaque stopWatcher : invalide un scan déjà en vol
+let psChild = null;    // processus PowerShell en cours (pour le tuer à l'arrêt)
 
 // Transitions entre l'état connu et l'état courant (PUR -> testable) : nouvelles clés à
 // signaler (game-start) et faut-il émettre game-stop. game-stop si le jeu Java s'arrête OU
@@ -109,8 +113,13 @@ export function diffScan(known, current) {
 async function scan() {
   if (scanning) return;
   scanning = true;
+  const gen = watcherGen;
   try {
     const procs = await listProcesses();
+    // stopWatcher appelé pendant l'attente PowerShell : on abandonne SANS émettre ni
+    // repeupler `known`, sinon on émettrait des game-start fantômes pendant l'arrêt (qui
+    // peuvent rouvrir la fenêtre / afficher une boîte de dialogue au moment de quitter).
+    if (gen !== watcherGen) return;
     if (procs === null) return; // requête échouée : on garde l'état précédent (pas de faux game-stop/start)
     const current = new Map();
     for (const p of procs) {
@@ -136,8 +145,11 @@ export function startWatcher(intervalMs = 4000) {
 }
 
 export function stopWatcher() {
+  watcherGen++;          // invalide tout scan déjà en vol (voir scan())
   if (timer) clearInterval(timer);
   timer = null;
+  try { psChild?.kill(); } catch {}  // tue la requête PowerShell en cours au lieu de la laisser traîner
+  psChild = null;
   known = new Map();
 }
 

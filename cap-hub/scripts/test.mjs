@@ -51,6 +51,7 @@ ok('capeFrames 64x64=2, 128x64=1', capeFrames(64, 64) === 2 && capeFrames(128, 6
 ok('rejette un PNG 16 bits (non décodable)', (() => { const p = Buffer.from(mkPng(64, 32)); p[24] = 16; return validateCape(p).ok === false; })());
 ok('rejette un PNG entrelacé (non décodable)', (() => { const p = Buffer.from(mkPng(64, 32)); p[28] = 1; return validateCape(p).ok === false; })());
 ok('accepte toujours un PNG 8 bits non entrelacé', (() => { const p = Buffer.from(mkPng(64, 32)); return validateCape(p).ok === true; })());
+ok('rejette un PNG à en-tête tronqué (< 29 octets)', (() => { const p = Buffer.from(mkPng(64, 32)).subarray(0, 27); return validateCape(p).ok === false; })());
 ok('firstFrameIfAnimated 64x64 -> 64x32', (() => { const ff = firstFrameIfAnimated(mkPng(64, 64)); const s = readPngSize(ff); return s.width === 64 && s.height === 32; })());
 ok('firstFrameIfAnimated laisse une cape fixe intacte', (() => { const p = mkPng(64, 32); return firstFrameIfAnimated(p) === p; })());
 ok('decodePNG round-trip couleur', (() => { const p = encodePNG(2, 1, Buffer.from([10, 20, 30, 255, 40, 50, 60, 255])); const d = decodePNG(p); return d && d.rgba[0] === 10 && d.rgba[6] === 60; })());
@@ -283,6 +284,22 @@ global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ player
 await reg.refreshIndex(true);
 global.fetch = origFetch;
 ok('refreshIndex ignore « players: null » (registre non vidé)', reg.listPlayers().some((p) => p.name === 'keep'));
+// listPlayers tolère des entrées corrompues (null / non-objet / updated non-string) venues
+// d'un registre communautaire, sans throw (sinon l'onglet Joueurs casse pour tout le monde).
+global.fetch = async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ players: { bad: null, s: 'nope', good: { cape: 'capes/good.png', updated: '2026-02-02' }, weird: { cape: 'capes/weird.png', updated: 42 } } }) });
+await reg.refreshIndex(true);
+global.fetch = origFetch;
+ok('listPlayers survit aux entrées corrompues du registre', (() => {
+  const l = reg.listPlayers();
+  const good = l.find((p) => p.name === 'good');
+  const weird = l.find((p) => p.name === 'weird');
+  return good && good.updated === '2026-02-02' && weird && weird.updated === null && !l.some((p) => p.name === 'bad' || p.name === 's');
+})());
+// refreshIndex borne la taille de l'index (anti-DoS mémoire).
+global.fetch = async () => ({ ok: true, status: 200, headers: { get: (h) => (h === 'content-length' ? String(5 * 1024 * 1024) : null) }, text: async () => '{"players":{}}' });
+const bigRes = await reg.refreshIndex(true);
+global.fetch = origFetch;
+ok('refreshIndex refuse un index trop volumineux', bigRes.ok === false && reg.listPlayers().some((p) => p.name === 'good'));
 // configureRegistry rejette une branche avec « .. » (traversée vers un autre dépôt).
 let capturedUrl = '';
 reg.configureRegistry({ repo: 'saliox/hasu-client', branch: 'main' });

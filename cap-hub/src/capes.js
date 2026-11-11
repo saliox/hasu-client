@@ -34,12 +34,13 @@ export function validateCape(buf) {
   // stockée, puis échoue au décodage à l'exécution -> servie BRUTE à OptiFine (cape cassée,
   // sans aucune erreur). On refuse donc dès l'import avec un message clair. IHDR : bitDepth
   // à l'octet 24, colorType à 25, interlace à 28 (après la signature 8 o + len 4 o + « IHDR » 4 o).
-  if (buf.length >= 29) {
-    const bitDepth = buf[24], colorType = buf[25], interlace = buf[28];
-    if (bitDepth !== 8) return { ok: false, error: `PNG en ${bitDepth} bits non géré — réenregistre la cape en 8 bits par canal.` };
-    if (interlace !== 0) return { ok: false, error: 'PNG entrelacé non géré — réenregistre la cape sans entrelacement.' };
-    if (![0, 2, 3, 4, 6].includes(colorType)) return { ok: false, error: 'Type de couleur PNG non géré.' };
-  }
+  // IHDR complet requis (13 octets de données) : un PNG de 25–28 octets passerait isPng
+  // (qui exige seulement > 24) mais sauterait le contrôle ci-dessous. On le rejette.
+  if (buf.length < 29) return { ok: false, error: 'PNG incomplet (en-tête tronqué).' };
+  const bitDepth = buf[24], colorType = buf[25], interlace = buf[28];
+  if (bitDepth !== 8) return { ok: false, error: `PNG en ${bitDepth} bits non géré — réenregistre la cape en 8 bits par canal.` };
+  if (interlace !== 0) return { ok: false, error: 'PNG entrelacé non géré — réenregistre la cape sans entrelacement.' };
+  if (![0, 2, 3, 4, 6].includes(colorType)) return { ok: false, error: 'Type de couleur PNG non géré.' };
   // Plafond de surface aligné sur le décodeur (png.decodePNG) : sinon une cape « valide »
   // trop grande (ex. 4096×131072) serait refusée au décodage et servie brute à OptiFine.
   if (w * h > 8192 * 4096) return { ok: false, error: 'Cape trop grande (surface excessive).' };

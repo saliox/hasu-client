@@ -52,7 +52,7 @@ async function resolveRealIp(host) {
       if (!r.ok) continue;
       const j = await r.json();
       const a = (j.Answer || []).find((x) => x.type === 1 && isPublicIpv4(x.data));
-      if (a) { ipCache.set(host, { ip: a.data, t: Date.now() }); return a.data; }
+      if (a) { if (ipCache.size > 64) ipCache.delete(ipCache.keys().next().value); ipCache.set(host, { ip: a.data, t: Date.now() }); return a.data; }
     } catch {}
   }
   throw new Error('IP réelle introuvable pour ' + host);
@@ -197,12 +197,27 @@ export function getPort() { return server ? (server.address()?.port ?? null) : n
 
 // OptiFine interroge s.optifine.net en HTTP sur le port 80 : on écoute uniquement sur
 // 127.0.0.1:80. opts.port (défaut 80) sert aux tests (0 = éphémère).
-export function startProxy(dependencies, opts = {}) {
+// start/stop sont SÉRIALISÉS sur une chaîne unique : plusieurs déclencheurs (IPC proxy:start/
+// stop, bascule tray, auto-apply au lancement, démarrage) peuvent se chevaucher. Sans
+// sérialisation, un start pendant un stop en cours renverrait « déjà démarré » pour un serveur
+// en train de se fermer, ou relierait le port avant sa libération (EADDRINUSE auto-infligé).
+let lifecycleChain = Promise.resolve();
+function serialize(fn) { const run = lifecycleChain.then(fn, fn); lifecycleChain = run.then(() => {}, () => {}); return run; }
+
+export function startProxy(dependencies, opts = {}) { return serialize(() => _startProxy(dependencies, opts)); }
+export function stopProxy() { return serialize(() => _stopProxy()); }
+
+function _startProxy(dependencies, opts = {}) {
   deps = dependencies;
   const port = opts.port ?? 80;
   return new Promise((resolve) => {
-    if (server) return resolve({ ok: true, already: true, port: server.address()?.port });
+    if (server) return resolve({ ok: true, already: true, port: server.address()?.port ?? null });
     const s = http.createServer((req, res) => { handle(req, res).catch(() => { try { res.writeHead(500); res.end(); } catch {} }); });
+    // On suit les sockets ouvertes pour pouvoir les détruire à l'arrêt si close() traîne
+    // (keep-alive OptiFine) : garantit la libération du port 80 avant un éventuel redémarrage.
+    const sockets = new Set();
+    s.on('connection', (sock) => { sockets.add(sock); sock.on('close', () => sockets.delete(sock)); });
+    s._caphubSockets = sockets;
     const onBindError = (e) => {
       server = null;
       resolve({ ok: false, error: e.code === 'EADDRINUSE' ? 'Port 80 déjà utilisé (IIS ? Skype ? autre proxy ?).' : e.message });
@@ -221,15 +236,21 @@ export function startProxy(dependencies, opts = {}) {
   });
 }
 
-export function stopProxy() {
+function _stopProxy() {
   return new Promise((resolve) => {
     if (!server) return resolve({ ok: true, already: true });
     const s = server;
-    // Ferme aussi les connexions keep-alive (OptiFine) sinon close() peut ne jamais
-    // rappeler et le serveur resterait à retenir des sockets.
+    let done = false;
+    const finish = (r) => { if (!done) { done = true; if (server === s) server = null; resolve(r); } };
+    // Ferme aussi les connexions keep-alive (OptiFine) sinon close() peut ne jamais rappeler.
     try { s.closeAllConnections?.(); } catch {}
-    s.close(() => { if (server === s) server = null; log('ok', 'proxy arrêté'); resolve({ ok: true }); });
-    setTimeout(() => { if (server === s) server = null; resolve({ ok: true }); }, 1500).unref();
+    s.close(() => { log('ok', 'proxy arrêté'); finish({ ok: true }); });
+    // Filet : si close() traîne (runtime sans closeAllConnections), on DÉTRUIT les sockets
+    // suivies -> close() rappelle alors et le port est réellement libéré, au lieu de déclarer
+    // « arrêté » avec le socket encore lié (ce qui provoquait un EADDRINUSE au redémarrage).
+    setTimeout(() => { if (!done) { try { for (const sock of (s._caphubSockets || [])) sock.destroy(); } catch {} } }, 1200).unref();
+    // Dernier filet (très rare) : on finit par résoudre pour ne pas bloquer l'appelant.
+    setTimeout(() => finish({ ok: true }), 4000).unref();
   });
 }
 

@@ -31,11 +31,15 @@ function activateTab(tab) {
   const t = tab.dataset.tab;
   if (t === 'players') loadPlayers();
   if (t === 'official') loadMc();
+  // Stats proxy : rafraîchissement léger tant que l'onglet État est ouvert (sinon figées).
+  if (statusPoll) { clearInterval(statusPoll); statusPoll = 0; }
+  if (t === 'status') { refreshStatus(); statusPoll = setInterval(refreshStatus, 3000); }
   if (t === 'capes') { previewState.canvas = null; renderPreview(capeActive, (capeCache.find((c) => c.id === capeActive) || {}).name || ''); }
   else if (t === 'creator') { previewState.canvas = null; updateCreator(); }
   else if (t === 'editor') { previewState.canvas = null; edActivate(); }
   else if (window.CapePreview) { window.CapePreview.clear(); previewState.canvas = null; } // pas d'aperçu -> stoppe l'animation (CPU)
 }
+let statusPoll = 0;
 tabEls.forEach((tab, i) => {
   tab.addEventListener('click', () => activateTab(tab));
   // Navigation clavier attendue d'un onglet ARIA : flèches, Origine/Fin.
@@ -64,7 +68,7 @@ function setPill(id, on, label, warn) {
 }
 
 async function refreshStatus() {
-  const s = await window.cap.proxy.status();
+  const s = (await window.cap.proxy.status()) || {};
   setPill('#pill-proxy', s.running, 'Proxy');
   setPill('#pill-hosts', s.hostsApplied, 'Redirection');
   $('#st-proxy').className = 'pill ' + (s.running ? 'on' : 'off');
@@ -73,6 +77,14 @@ async function refreshStatus() {
   $('#st-hosts').className = 'pill ' + (s.hostsApplied ? 'on' : 'off');
   $('#st-hosts').textContent = s.hostsApplied ? 'active' : 'inactive';
   $('#btn-hosts-toggle').textContent = s.hostsApplied ? 'Retirer' : 'Activer';
+  // Statistiques de service (données déjà fournies par getStats) : visibilité « est-ce que Cap
+  // Hub sert vraiment des capes en jeu ? ». served = tes capes/registre, relay = vrai OptiFine.
+  const ps = $('#proxy-stats');
+  if (ps) {
+    const has = s.running && (s.served || s.passthrough || s.misses);
+    ps.classList.toggle('hidden', !has);
+    if (has) ps.textContent = `Servies : ${s.served || 0} · Relayées (OptiFine) : ${s.passthrough || 0} · Sans cape : ${s.misses || 0}`;
+  }
 }
 
 // ---------- Capes (bibliothèque multi-capes) ----------
@@ -92,7 +104,7 @@ async function loadCapes() {
   capeImgCache.clear();
   resMetaCache.clear();      // taille des capes : re-lue au prochain rendu (une cape a pu changer)
   previewState.canvas = null;
-  const r = await window.cap.capes.list();
+  const r = (await window.cap.capes.list()) || {};
   capeCache = r.capes || [];
   capeActive = r.active || '';
   capeFavs = new Set(r.favorites || []);
@@ -378,6 +390,10 @@ function capeLayout(w) {
 }
 // on recadre la face avant visible, en gérant HD / animé (1re image) / OptiFine (46 de large).
 const frontThumbCache = new Map();
+// Insère dans un Map borné (éviction FIFO du plus ancien) : empêche une croissance mémoire
+// illimitée des caches de vignettes/métadonnées (clé + valeur = data URLs volumineux) sur une
+// session longue qui parcourt/rafraîchit beaucoup de capes de joueurs.
+function capSet(map, key, val, max) { map.delete(key); map.set(key, val); if (map.size > max) map.delete(map.keys().next().value); }
 // Valeur sûre pour une propriété CSS url(...) : on cite et on retire les caractères qui
 // pourraient sortir de url("...") — ", \, ), et retours ligne. Les miniatures passent
 // normalement par toDataURL() (base64 propre), mais capeFrontThumb retombe sur l'URL brute
@@ -399,7 +415,7 @@ function capeFrontThumb(url) {
       const c = cv.getContext('2d'); c.imageSmoothingEnabled = false;
       c.drawImage(img, fx, fy, fw, fh, 0, 0, cv.width, cv.height);
       const out = cv.toDataURL('image/png');
-      frontThumbCache.set(url, out);
+      capSet(frontThumbCache, url, out, 300);
       resolve(out);
     };
     img.onerror = () => resolve(url); // repli : planche complète
@@ -512,7 +528,7 @@ function capeMeta(url) {
       const frameH = optifine ? 22 * s : 32 * s;
       const frames = (frameH && h % frameH === 0) ? Math.round(h / frameH) : 1;
       const meta = { w, h, s, frameH, frames, optifine };
-      capeMetaCache.set(url, meta);
+      capSet(capeMetaCache, url, meta, 300);
       resolve(meta);
     };
     img.onerror = () => resolve(null);
@@ -630,6 +646,9 @@ async function buildCapeFromFile(f) {
   const isGif = f.ext === 'gif' || /^data:image\/gif[;,]/i.test(f.dataUrl || '');
   if (isGif) { const g = await gifToCape(f.dataUrl); return { url: g.url, note: gifNote(g) }; }
   const img = await loadImage(f.dataUrl);
+  // Garde anti-bombe de décodage : un PNG au « bon format » mais démesuré (ex. 4096×131072)
+  // passe isCapeShape et serait stocké puis re-décodé (vignette + texture WebGL) -> OOM renderer.
+  if ((img.naturalWidth || 0) * (img.naturalHeight || 0) > 8192 * 8192) return { url: null, note: '' };
   if (f.ext === 'png' && isCapeShape(img.naturalWidth, img.naturalHeight)) return { url: f.dataUrl, note: '' }; // vraie cape (HD/4K/animée) telle quelle
   return { url: fitImageToCape(img), note: '' }; // sinon on recadre en 64×32
 }
@@ -1023,6 +1042,7 @@ function edLoadImageIntoFront(dataUrl) {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
+      if ((img.naturalWidth || 0) * (img.naturalHeight || 0) > 8192 * 8192) { resolve(false); return; } // garde anti-bombe de décodage
       const cv = document.createElement('canvas'); cv.width = ED_FRONT.w; cv.height = ED_FRONT.h;
       const c = cv.getContext('2d'); c.imageSmoothingEnabled = false;
       const iw = img.naturalWidth || 1, ih = img.naturalHeight || 1;
@@ -1340,7 +1360,9 @@ function edInit() {
   $('#ed-import-front').addEventListener('click', () => guard('#ed-import-front', async () => {
     const r = await window.cap.capes.pickImage();
     if (!r.ok) { if (!r.canceled) toast(r.error || 'Image invalide', 'err'); return; }
-    edSnapshot(); await edLoadImageIntoFront(r.dataUrl); edRender(); edSchedulePreview();
+    edSnapshot();
+    if (!await edLoadImageIntoFront(r.dataUrl)) { edUndo.pop(); edUpdateButtons(); return toast('Image illisible ou trop grande.', 'err'); }
+    edRender(); edSchedulePreview();
     toast('Image placée dans la zone avant ✔', 'ok');
   }));
   $('#ed-grid').addEventListener('click', () => { edShowGrid = !edShowGrid; $('#ed-grid').classList.toggle('active', edShowGrid); edRender(); });
@@ -1614,7 +1636,9 @@ let hiddenPlayers = new Set();
 async function loadPlayers() {
   const list = $('#players-list');
   list.innerHTML = '<p class="muted">Chargement…</p>';
-  const r = await window.cap.registry.players();
+  let r;
+  try { r = (await window.cap.registry.players()) || {}; }
+  catch { list.innerHTML = '<p class="muted">Registre indisponible — réessaie (bouton Rafraîchir).</p>'; return; }
   // Les entrées viennent de GitHub (autres joueurs) : on écarte toute entrée sans `name`
   // chaîne non vide, sinon un registre malformé ferait planter localeCompare/toLowerCase et
   // bloquerait tout l'onglet sur « Chargement… ».
@@ -1622,7 +1646,7 @@ async function loadPlayers() {
     .filter((p) => p && typeof p.name === 'string' && p.name)
     .sort((a, b) => a.name.localeCompare(b.name));
   // Charge la liste des joueurs masqués localement.
-  try { const s = await window.cap.settings.get(); hiddenPlayers = new Set((s.settings.hiddenPlayers || []).map((x) => x.toLowerCase())); } catch {}
+  try { const s = await window.cap.settings.get(); hiddenPlayers = new Set(((s && s.settings && s.settings.hiddenPlayers) || []).map((x) => x.toLowerCase())); } catch {}
   renderPlayers();
 }
 
@@ -1689,7 +1713,7 @@ async function playerCape(name) {
   if (playerCapeCache.has(name)) return playerCapeCache.get(name);
   const r = await window.cap.registry.cape(name);
   const url = (r && r.ok) ? r.dataUrl : null;
-  if (url) playerCapeCache.set(name, url); // ne mémorise pas un échec transitoire
+  if (url) capSet(playerCapeCache, name, url, 400); // ne mémorise pas un échec transitoire
   return url;
 }
 async function loadPlayerThumb(el, name) {
@@ -1794,8 +1818,8 @@ $('#in-theme').addEventListener('change', async (e) => {
 
 // ---------- Réglages ----------
 async function loadSettings() {
-  const r = await window.cap.settings.get();
-  const s = r.settings;
+  const r = (await window.cap.settings.get()) || {};
+  const s = r.settings || {};
   $('#in-theme').value = s.theme || 'nuit';
   applyTheme(s.theme || 'nuit');
   $('#in-username').value = s.username || '';
@@ -1925,7 +1949,7 @@ async function runDiag({ announce = false } = {}) {
   if (r.allOk) {
     // Tout est bon : bandeau vert éphémère si on vient d'agir, sinon on masque.
     diagDismissedMsg = ''; // l'état est redevenu bon : un futur problème pourra se réafficher
-    if (announce) { showDiagBanner('ok', 'Cap Hub est prêt ✔ — ferme complètement Minecraft puis relance-le pour voir tes capes.'); setTimeout(() => { if (diagBanner && diagBanner.classList.contains('ok')) hideDiagBanner(); }, 7000); }
+    if (announce) { showDiagBanner('ok', 'Cap Hub est prêt ✔ — ferme complètement Minecraft puis relance-le. Les capes n’apparaissent que sur un client OptiFine actif (Lunar/Badlion/Feather ont leur propre système fermé).'); setTimeout(() => { if (diagBanner && diagBanner.classList.contains('ok')) hideDiagBanner(); }, 9000); }
     else hideDiagBanner();
     return;
   }
@@ -1960,13 +1984,13 @@ if (diagBanner) {
 
 // ---------- Démarrage ----------
 (async function init() {
-  $('#ver').textContent = 'v' + (await window.cap.version());
+  try { $('#ver').textContent = 'v' + (await window.cap.version()); } catch {}
   await loadSettings();
   await loadCapes();
   await refreshStatus();
   // Si un compte Minecraft est déjà connecté, applique son skin aux aperçus 3D.
   window.cap.mc.status().then((r) => { if (r && r.connected) loadMcSkin(); }).catch(() => {});
-  const g = await window.cap.games.current();
+  const g = (await window.cap.games.current()) || {};
   if (g.games && g.games.length) {
     gameRunning = true;
     setPill('#pill-game', true, 'Minecraft');

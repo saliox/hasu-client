@@ -284,7 +284,7 @@ process.on('uncaughtException', (err) => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin' && (!tray || isQuitting || !getSettings().closeToTray)) app.quit();
 });
-app.on('before-quit', () => { isQuitting = true; try { stopWatcher(); } catch {} try { tray?.destroy(); } catch {} });
+app.on('before-quit', () => { isQuitting = true; try { stopWatcher(); } catch {} try { tray?.destroy(); } catch {} finally { tray = null; } });
 
 // ---------- Détection de Minecraft -> proposition d'appliquer Cap Hub ----------
 let lastPrompt = 0;
@@ -660,10 +660,15 @@ ipcMain.handle('proxy:enableAll', async () => {
 });
 
 ipcMain.handle('registry:refresh', async () => {
-  const r = await refreshIndex(true);
-  return { ...r, players: listPlayers() };
+  try { const r = await refreshIndex(true); return { ...r, players: listPlayers() }; }
+  catch (e) { return { ok: false, error: e.message || 'Registre illisible.', players: [] }; }
 });
-ipcMain.handle('registry:players', () => ({ ok: true, players: listPlayers() }));
+ipcMain.handle('registry:players', () => {
+  // Défense en profondeur : listPlayers est déjà tolérant, mais on ne laisse jamais une
+  // exception sur un index distant corrompu rejeter l'IPC et casser l'onglet.
+  try { return { ok: true, players: listPlayers() }; }
+  catch { return { ok: true, players: [] }; }
+});
 // Cape d'un joueur du registre en data URL, pour l'afficher dans l'onglet Joueurs.
 ipcMain.handle('registry:cape', async (_e, name) => {
   try {
@@ -769,7 +774,8 @@ ipcMain.handle('update:apply', () => applyUpdate(
 function mcView(session) {
   if (!session || !session.profile) return { connected: false };
   const p = session.profile;
-  const capes = (p.capes || []).map((c) => ({ id: c.id, alias: c.alias || c.id, state: c.state, url: c.url }));
+  // profile.capes vient d'une réponse HTTP : un non-tableau ferait throw .map -> IPC rejetée.
+  const capes = (Array.isArray(p.capes) ? p.capes : []).map((c) => ({ id: c.id, alias: c.alias || c.id, state: c.state, url: c.url }));
   return {
     connected: true,
     name: p.name,
