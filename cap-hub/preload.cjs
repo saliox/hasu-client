@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('cap', {
   capes: {
     list: () => invoke('capes:list'),
     import: () => invoke('capes:import'),
+    importUrl: (url, name) => invoke('capes:importUrl', url, name),
     remove: (id) => invoke('capes:remove', id),
     create: (name, dataUrl) => invoke('capes:create', name, dataUrl),
     rename: (id, name) => invoke('capes:rename', id, name),
@@ -44,6 +45,11 @@ contextBridge.exposeInMainWorld('cap', {
     removeRedirect: () => invoke('proxy:removeRedirect'),
     enableAll: () => invoke('proxy:enableAll'),
     selfTest: () => invoke('proxy:selfTest'),
+  },
+
+  log: {
+    get: () => invoke('log:get'),
+    export: () => invoke('log:export'),
   },
 
   registry: {

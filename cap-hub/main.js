@@ -19,7 +19,7 @@ import { isPng, firstFrameIfAnimated } from './src/png.js';
 import { initCapes, listCapes, importCapeBuffer, deleteCape, renameCape, resolveCape, readCape, readCapeOriginal, setCapeResolution, setCapeImage, capeDims, duplicateCape } from './src/capes.js';
 import { initStore, getSettings, saveSettings, setToken, getToken, setMcSession, getMcSession, clearMcSession } from './src/store.js';
 import * as mc from './src/mcaccount.js';
-import { startProxy, stopProxy, isRunning, getStats, getPort, proxyEvents, redirectHosts } from './src/proxy.js';
+import { startProxy, stopProxy, isRunning, getStats, getPort, proxyEvents, redirectHosts, isPublicIpv4 } from './src/proxy.js';
 import { isApplied, applyRedirect, removeRedirect, appliedHosts } from './src/hosts.js';
 import { initRegistry, configureRegistry, refreshIndex, listPlayers, getRegistryCape, publishCape } from './src/registry.js';
 import { startWatcher, stopWatcher, currentGames, watcherEvents } from './src/watcher.js';
@@ -41,6 +41,17 @@ if (!app.requestSingleInstanceLock()) {
 
 function send(channel, data) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, data);
+}
+
+// Journal : tampon circulaire borné (survit à la fermeture de la fenêtre et aux logs émis
+// AVANT que la fenêtre existe — précisément quand un log de support est le plus utile).
+const LOG_MAX = 1000;
+const logRing = [];
+function logLine(level, msg) {
+  const e = { level: String(level || 'info'), msg: String(msg == null ? '' : msg), t: Date.now() };
+  logRing.push(e);
+  if (logRing.length > LOG_MAX) logRing.shift();
+  send('log', e);
 }
 
 // Ouvre une URL dans le navigateur UNIQUEMENT si elle est http/https (jamais file:, javascript:,
@@ -226,7 +237,7 @@ app.whenReady().then(async () => {
   applyLoginItem(s0.launchAtStartup);
 
   // Relaie les logs du proxy vers l'UI.
-  proxyEvents.on('log', (e) => send('log', e));
+  proxyEvents.on('log', (e) => { logRing.push(e); if (logRing.length > LOG_MAX) logRing.shift(); send('log', e); });
 
   // Démarre le proxy au lancement si l'option est active OU si la redirection hosts est
   // déjà en place (elle persiste dans le fichier hosts entre deux sessions). Sinon on aurait
@@ -292,7 +303,7 @@ function wireWatcher() {
   watcherEvents.on('game-start', async (info) => {
    try {
     send('game-start', info);
-    send('log', { level: 'info', msg: `Minecraft détecté : ${info.client}${info.username ? ' (' + info.username + ')' : ''}`, t: Date.now() });
+    logLine('info', `Minecraft détecté : ${info.client}${info.username ? ' (' + info.username + ')' : ''}`);
 
     const s = getSettings();
     if (!s.autoApply) return;
@@ -325,7 +336,7 @@ function wireWatcher() {
         : 'Échec : ' + r.error);
     }
    } catch (e) {
-    send('log', { level: 'error', msg: 'Détection Minecraft : ' + (e.message || 'erreur'), t: Date.now() });
+    logLine('error', 'Détection Minecraft : ' + (e.message || 'erreur'));
    }
   });
 
@@ -542,6 +553,38 @@ ipcMain.handle('capes:create', (_e, name, dataUrl) => {
   if (!d.ok) return d;
   return importCapeBuffer(d.buf, name || 'Ma cape');
 });
+// Importe une cape depuis une URL (NameMC, optifine.net, Discord…). Garde anti-SSRF : schéma
+// http/https, l'hôte DOIT résoudre uniquement vers des IP PUBLIQUES (jamais 127.*, 10.*,
+// 192.168.*, 169.254.*… — un renderer compromis ne doit pas sonder le réseau interne), pas de
+// redirection, taille bornée en flux, et PNG obligatoire.
+const IMPORT_URL_MAX = 12 * 1024 * 1024;
+ipcMain.handle('capes:importUrl', async (_e, rawUrl, name) => {
+  let u;
+  try { u = new URL(String(rawUrl || '').trim()); } catch { return { ok: false, error: 'URL invalide.' }; }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return { ok: false, error: 'URL non autorisée (http/https uniquement).' };
+  // Résolution DNS : on refuse si une adresse n'est pas une IPv4 publique (ou est de l'IPv6,
+  // qu'on ne valide pas ici — on reste sur de l'IPv4 publique pour cette fonctionnalité).
+  let addrs;
+  try { addrs = await dns.promises.lookup(u.hostname, { all: true }); } catch { return { ok: false, error: 'Hôte introuvable.' }; }
+  if (!addrs.length || !addrs.every((a) => a.family === 4 && isPublicIpv4(a.address))) return { ok: false, error: 'Hôte non autorisé (adresse interne ou IPv6).' };
+  try {
+    const r = await fetch(u.href, { redirect: 'error', signal: AbortSignal.timeout(12000), headers: { 'User-Agent': 'CapHub' } });
+    if (!r.ok) return { ok: false, error: `Téléchargement : HTTP ${r.status}` };
+    if (Number(r.headers.get('content-length') || 0) > IMPORT_URL_MAX) return { ok: false, error: 'Image trop lourde (max 12 Mo).' };
+    // Lecture bornée en flux (content-length non fiable).
+    let buf;
+    if (r.body && typeof r.body.getReader === 'function') {
+      const reader = r.body.getReader(); const chunks = []; let n = 0;
+      for (;;) { const { done, value } = await reader.read(); if (done) break; n += value.length; if (n > IMPORT_URL_MAX) { try { await reader.cancel(); } catch {} return { ok: false, error: 'Image trop lourde (max 12 Mo).' }; } chunks.push(Buffer.from(value)); }
+      buf = Buffer.concat(chunks);
+    } else { buf = Buffer.from(await r.arrayBuffer()); if (buf.length > IMPORT_URL_MAX) return { ok: false, error: 'Image trop lourde (max 12 Mo).' }; }
+    if (!isPng(buf)) return { ok: false, error: 'L’URL ne pointe pas vers un PNG (seules les capes PNG sont acceptées).' };
+    const base = (name && String(name).trim()) || decodeURIComponent((u.pathname.split('/').pop() || 'cape').replace(/\.png$/i, '')) || 'Cape importée';
+    return importCapeBuffer(buf, base.slice(0, 40));
+  } catch (e) {
+    return { ok: false, error: /redirect/i.test(e.message || '') ? 'Redirection refusée (sécurité).' : (e.message || 'Import impossible.') };
+  }
+});
 ipcMain.handle('capes:favorite', (_e, id, on) => {
   const s = getSettings();
   const set = new Set(s.favorites);
@@ -690,6 +733,15 @@ ipcMain.handle('registry:import', async (_e, name) => {
 });
 
 ipcMain.handle('games:current', () => ({ ok: true, games: currentGames() }));
+
+// Journal : hydrate la vue à l'ouverture + export vers un fichier texte choisi par l'utilisateur.
+ipcMain.handle('log:get', () => ({ ok: true, entries: logRing.slice() }));
+ipcMain.handle('log:export', async () => {
+  const fmt = (e) => `${new Date(e.t).toISOString()}  [${e.level}]  ${e.msg}`;
+  const header = `Cap Hub ${app.getVersion()} — journal (${logRing.length} lignes) — ${new Date().toISOString()}\n\n`;
+  const buf = Buffer.from(header + logRing.map(fmt).join('\n') + '\n', 'utf8');
+  return saveBufferViaDialog(buf, { title: 'Exporter le journal', defaultName: `cap-hub-journal-${Date.now()}`, ext: 'txt' });
+});
 
 // Auto-diagnostic « pourquoi ma cape ne s'affiche pas ? » : vérifie toute la chaîne et,
 // surtout, fait une VRAIE requête à travers le proxy (comme OptiFine) pour confirmer que

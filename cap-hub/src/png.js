@@ -3,6 +3,7 @@
 // - readPngSize(buf)       : lit la taille d'un PNG sans le décoder (validation des imports)
 // - isPng(buf)             : vérifie la signature PNG
 import zlib from 'node:zlib';
+import { frameCount } from './capegeom.js';
 
 const PNG_SIG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
@@ -123,13 +124,11 @@ export function decodePNG(buf) {
   return { width, height, rgba };
 }
 
-// Nombre d'images empilées d'une cape (1 = fixe). Disposition vanilla (largeur mult. de 64).
-export function capeFrames(w, h) {
-  const s = w / 64;
-  if (!Number.isInteger(s) || s < 1) return 1;
-  const base = 32 * s;
-  return h % base === 0 ? h / base : 1;
-}
+// Nombre d'images empilées d'une cape (1 = fixe). Source unique partagée avec l'aperçu et les
+// tests : capegeom.frameCount (tolérante, gère vanilla/HD ET OptiFine). Avant, cette fonction
+// utilisait une formule EXACTE (largeur multiple de 64 seulement) qui divergeait de l'aperçu —
+// une cape pouvait être « animée » en 3D mais « fixe » au service/à la bibliothèque.
+export const capeFrames = frameCount;
 
 // Si le PNG est une cape ANIMÉE (images empilées), renvoie la 1re image (64s×32s) en
 // PNG ; sinon renvoie le buffer inchangé. Sert à donner une cape VALIDE à OptiFine
