@@ -33,7 +33,7 @@ function activateTab(tab) {
   if (t === 'official') loadMc();
   // Stats proxy : rafraîchissement léger tant que l'onglet État est ouvert (sinon figées).
   if (statusPoll) { clearInterval(statusPoll); statusPoll = 0; }
-  if (t === 'status') { refreshStatus(); statusPoll = setInterval(refreshStatus, 3000); }
+  if (t === 'status') { refreshStatus(); hydrateLog(); statusPoll = setInterval(refreshStatus, 3000); }
   if (t === 'capes') { previewState.canvas = null; renderPreview(capeActive, (capeCache.find((c) => c.id === capeActive) || {}).name || ''); }
   else if (t === 'creator') { previewState.canvas = null; updateCreator(); }
   else if (t === 'editor') { previewState.canvas = null; edActivate(); }
@@ -682,6 +682,17 @@ $('#btn-import').addEventListener('click', () => guard('#btn-import', async () =
   if (!r.ok) { if (!r.canceled) toast(r.error || 'Import impossible', 'err'); return; }
   await importCapeFiles(r.files);
 }));
+
+// Import d'une cape depuis une URL (téléchargée + validée côté main, anti-SSRF).
+$('#btn-import-url').addEventListener('click', () => guard('#btn-import-url', async () => {
+  const url = $('#import-url').value.trim();
+  if (!url) return toast('Colle l’URL d’une image PNG.', 'err');
+  toast('Téléchargement de l’image…');
+  const r = await window.cap.capes.importUrl(url);
+  if (r && r.ok) { toast('Cape importée depuis l’URL ✔', 'ok'); $('#import-url').value = ''; loadCapes(); }
+  else toast((r && r.error) || 'Import impossible.', 'err');
+}));
+$('#import-url').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btn-import-url').click(); });
 
 // ---------- Glisser-déposer des fichiers image/GIF sur la fenêtre ----------
 const DROP_MAX = 12 * 1024 * 1024; // même plafond que l'import natif
@@ -1874,6 +1885,29 @@ function pushLog(e) {
 }
 
 window.cap.on('log', pushLog);
+
+// Hydrate le journal depuis le tampon main (inclut les lignes émises avant l'ouverture de la
+// fenêtre). Appelé à l'ouverture de l'onglet État.
+async function hydrateLog() {
+  try {
+    const r = await window.cap.log.get();
+    if (!r || !r.ok) return;
+    const box = $('#log'); box.innerHTML = '';
+    for (const e of r.entries) pushLog(e);
+  } catch {}
+}
+$('#btn-log-copy').addEventListener('click', () => guard('#btn-log-copy', async () => {
+  const r = await window.cap.log.get();
+  const text = ((r && r.entries) || []).map((e) => `${new Date(e.t).toISOString()} [${e.level}] ${e.msg}`).join('\n');
+  if (!text) return toast('Journal vide.', 'err');
+  try { await navigator.clipboard.writeText(text); toast('Journal copié ✔', 'ok'); }
+  catch { toast('Copie impossible.', 'err'); }
+}));
+$('#btn-log-export').addEventListener('click', () => guard('#btn-log-export', async () => {
+  const r = await window.cap.log.export();
+  if (r && r.ok) toast('Journal exporté ✔', 'ok');
+  else if (!(r && r.canceled)) toast((r && r.error) || 'Export impossible.', 'err');
+}));
 window.cap.on('proxy-changed', () => { refreshStatus(); runDiag(); });
 // Clients à système de capes FERMÉ : ils n'affichent pas les capes Cap Hub (canal OptiFine
 // non exploitable — cosmétiques propres / capes servies côté serveur). On le signale.

@@ -46,6 +46,7 @@ ok('rejette une surface démesurée (aligné sur decodePNG)', (() => {
   return validateCape(png).ok === false;
 })());
 ok('capeFrames 64x64=2, 128x64=1', capeFrames(64, 64) === 2 && capeFrames(128, 64) === 1);
+ok('capeFrames == capegeom.frameCount (source unique)', [[64, 32], [64, 64], [64, 96], [128, 64], [46, 22], [256, 128], [64, 48], [100, 50]].every(([w, h]) => capeFrames(w, h) === geom.frameCount(w, h)));
 // F3 : validateCape rejette les PNG indécodables (sinon stockés puis servis bruts/cassés à
 // OptiFine). On part d'un PNG valide et on patche l'octet IHDR concerné (24=bitDepth, 28=interlace).
 ok('rejette un PNG 16 bits (non décodable)', (() => { const p = Buffer.from(mkPng(64, 32)); p[24] = 16; return validateCape(p).ok === false; })());
@@ -167,6 +168,12 @@ ok('previewWind hors bornes ignoré', store.saveSettings({ previewWind: 9 }).set
 
 console.log('\n# Fournisseur OptiFine (seul canal)');
 ok('un seul fournisseur : optifine', providers.PROVIDERS.length === 1 && providers.PROVIDERS[0].id === 'optifine');
+// Garde anti-SSRF (import depuis URL + relais) : rejette les IP internes, accepte le public.
+ok('isPublicIpv4 : rejette loopback/privé/link-local/CGNAT, accepte public', (() => {
+  const priv = ['127.0.0.1', '10.1.2.3', '192.168.0.1', '172.16.0.1', '172.31.255.1', '169.254.1.1', '100.64.0.1', '0.0.0.0', '224.0.0.1', 'pas une ip', ''];
+  const pub = ['8.8.8.8', '1.1.1.1', '140.82.112.3'];
+  return priv.every((ip) => proxy.isPublicIpv4(ip) === false) && pub.every((ip) => proxy.isPublicIpv4(ip) === true);
+})());
 ok('parse /capes/Notch.png', providers.byId('optifine').parse('/capes/Notch.png')?.key === 'Notch');
 ok('ignore autre URL', providers.byId('optifine').parse('/x') === null);
 ok('enabledHosts = s.optifine.net', JSON.stringify(providers.enabledHosts()) === '["s.optifine.net"]');

@@ -55,6 +55,10 @@
           <button id="btn-apply" class="btn primary">⚡ Appliquer Cap Hub</button>
         </div>
       </div>
+      <div class="import-url-row">
+        <input id="import-url" type="url" placeholder="https://…/cape.png — importer depuis une URL (NameMC, OptiFine…)" autocomplete="off" />
+        <button id="btn-import-url" class="btn small">⬇️ Importer l'URL</button>
+      </div>
       <div id="active-banner" class="banner hidden"></div>
 
       <div class="lib-toolbar">
@@ -438,7 +442,13 @@
         <div id="selftest-result" class="diag-steps"></div>
       </div>
 
-      <h3>Journal</h3>
+      <div class="row between log-head">
+        <h3>Journal</h3>
+        <div class="actions">
+          <button id="btn-log-copy" class="btn small" title="Copier tout le journal">📋 Copier</button>
+          <button id="btn-log-export" class="btn small" title="Enregistrer le journal dans un fichier .txt">💾 Exporter</button>
+        </div>
+      </div>
       <div id="log" class="log"></div>
     </section>
 

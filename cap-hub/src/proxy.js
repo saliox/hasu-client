@@ -25,7 +25,7 @@ const IP_TTL = 60 * 60 * 1000;
 // Rejette les IPv4 loopback / privées / link-local (RFC1918, 169.254/16, 100.64/10 CGNAT,
 // 0.0.0.0/8) : le relais ne doit JAMAIS sortir vers une adresse interne, même si la résolution
 // DNS du fournisseur était détournée (défense en profondeur contre le SSRF).
-function isPublicIpv4(ip) {
+export function isPublicIpv4(ip) {
   const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(String(ip || ''));
   if (!m) return false;
   const o = m.slice(1).map(Number);
