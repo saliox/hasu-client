@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "version": "0.12.29",
+  "url": "https://github.com/saliox/hasu-client/releases/download/cap-hub-v0.12.29/Cap.Hub.Setup.0.12.29.exe",
+  "sha256": "efbf0ad63dd42c0668006da2db48728d81450c40a02434eed2e1fbbfddb8cac3",
+  "size": 71499121,
+  "notes": "Cap Hub 0.12.29 : les mises à jour sont désormais signées (Ed25519) ; une mise à jour sans signature valide est refusée.",
+  "pubDate": "2026-11-15T00:11:32.973Z",
+  "signature": "D0xII2SSjy/Kv7UmoI2n+/lfARBqAC1U5dSqOrLuBvRC5rtIkULtMDaDWeaeQ11BiRmbEkYU36Y3fSEAlxGpCg=="
+}
