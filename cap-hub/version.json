@@ -1,10 +1,10 @@
 {
   "schema": 1,
-  "version": "0.12.30",
-  "url": "https://github.com/saliox/hasu-client/releases/download/cap-hub-v0.12.30/Cap.Hub.Setup.0.12.30.exe",
-  "sha256": "3358c4e25aaa38396709acd2699e7a1dafb8aff3b41042f9529eec0fa697b403",
-  "size": 71613896,
-  "notes": "Cap Hub 0.12.30 : le code de l'application est desormais protege contre la lecture (obfuscation) ; aucun changement de fonctionnement.",
-  "pubDate": "2026-11-15T03:34:49.522Z",
-  "signature": "7j9c8NRI8vTJZqyXCsuSN1lVwK3dW3wRSAn+cPAwmV+qVezMlXKxnxSFoDjUk++KEPqWU/NOw2ui+qnF87fOAw=="
+  "version": "0.12.31",
+  "url": "https://github.com/saliox/hasu-client/releases/download/cap-hub-v0.12.31/Cap.Hub.Setup.0.12.31.exe",
+  "sha256": "f4fd0954b7b505943b46f6dff369bea0d9832bb9f536d186110f5ffd85d008b5",
+  "size": 71616034,
+  "notes": "Journal persistant de mise à jour et détection fiable des échecs de lancement.",
+  "pubDate": "2026-11-27T09:32:15.292Z",
+  "signature": "VuBkSuT4IAqEiaP/iuxXDJvnxvynaoC0EeGxaiKNg9/FMxdzcjQ+y+orZVZWcdnCuBUvSFZgCWjUAnqFZ2G7Bg=="
 }
